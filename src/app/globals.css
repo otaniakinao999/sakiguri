@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/* ============================================================
+   Tailwind をデザイントークンに束縛する
+   ------------------------------------------------------------
+   Tailwind の既定スケール（p-4 = 16px、bg-red-500 など）を消し、
+   docs/designsystem.md のトークンだけを通す。
+   これにより CLAUDE.md §2.6「トークンから引く／スケール外の値を
+   作らない」を、規約ではなくビルドで担保する。
+   スケール外を書くとクラスが生成されず、目で見て気づける。
+
+   判断の経緯は docs/adr/0004 を参照。
+   ============================================================ */
+
+/* --- 既定スケールを消す --- */
+@theme {
+  --color-*: initial;
+  --spacing: initial;
+  --spacing-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --tracking-*: initial;
+  --font-weight-*: initial;
+}
+
+/* --- トークンを割り当てる --- */
+@theme inline {
+  /* 色 ── セマンティックのみを公開する。
+     プリミティブ（blue-100 等）は Tailwind から引けない。 */
+
+  /* object → text-* / fill-* */
+  --color-object-base-high: var(--object-base-high);
+  --color-object-base-mid: var(--object-base-mid);
+  --color-object-base-low: var(--object-base-low);
+  --color-object-base-high-inverse: var(--object-base-high-inverse);
+  --color-object-base-mid-inverse: var(--object-base-mid-inverse);
+  --color-object-accent-dim: var(--object-accent-dim);
+  --color-object-accent-bright: var(--object-accent-bright);
+  --color-object-error-dim: var(--object-error-dim);
+  --color-object-error-bright: var(--object-error-bright);
+  --color-object-caution-dim: var(--object-caution-dim);
+  --color-object-caution-bright: var(--object-caution-bright);
+  --color-object-success-dim: var(--object-success-dim);
+  --color-object-success-bright: var(--object-success-bright);
+
+  /* surface → bg-* */
+  --color-surface-base-primary: var(--surface-base-primary);
+  --color-surface-base-secondary: var(--surface-base-secondary);
+  --color-surface-base-primary-inverse: var(--surface-base-primary-inverse);
+  --color-surface-overlay-hoverd: var(--surface-overlay-hoverd);
+  --color-surface-overlay-selected: var(--surface-overlay-selected);
+  --color-surface-accent-thin: var(--surface-accent-thin);
+  --color-surface-accent-subtle: var(--surface-accent-subtle);
+  --color-surface-success-subtle: var(--surface-success-subtle);
+  --color-surface-caution-subtle: var(--surface-caution-subtle);
+  --color-surface-error-subtle: var(--surface-error-subtle);
+
+  /* border → border-* */
+  --color-border-base-high: var(--border-base-high);
+  --color-border-base-low: var(--border-base-low);
+  --color-border-accent-high: var(--border-accent-high);
+  --color-border-error-high: var(--border-error-high);
+  --color-border-caution-high: var(--border-caution-high);
+  --color-border-success-high: var(--border-success-high);
+
+  /* 余白 → p-* / m-* / gap-* / w-* / h-*
+     数値はトークン名（＝px値）と一致する。p-16 は 16px。
+     Tailwind 既定の p-16（64px）とは意味が違うので注意。 */
+  --spacing-0: 0px;
+  --spacing-4: var(--sp-4);
+  --spacing-8: var(--sp-8);
+  --spacing-12: var(--sp-12);
+  --spacing-16: var(--sp-16);
+  --spacing-24: var(--sp-24);
+  --spacing-32: var(--sp-32);
+  --spacing-40: var(--sp-40);
+  --spacing-48: var(--sp-48);
+  --spacing-56: var(--sp-56);
+  --spacing-64: var(--sp-64);
+  --spacing-72: var(--sp-72);
+
+  /* 文字サイズ → text-* */
+  --text-display-lg: var(--size-display-lg);
+  --text-display-md: var(--size-display-md);
+  --text-display-sm: var(--size-display-sm);
+  --text-headline-xlg: var(--size-headline-xlg);
+  --text-headline-lg: var(--size-headline-lg);
+  --text-headline-md: var(--size-headline-md);
+  --text-headline-sm: var(--size-headline-sm);
+  --text-headline-xs: var(--size-headline-xs);
+  --text-body-xlg: var(--size-body-xlg);
+  --text-body-lg: var(--size-body-lg);
+  --text-body-md: var(--size-body-md);
+  --text-body-xmd: var(--size-body-xmd);
+  --text-body-sm: var(--size-body-sm);
+  --text-body-xs: var(--size-body-xs);
+  --text-body-xxs: var(--size-body-xxs);
+
+  /* 書体 → font-* */
+  --font-ui: var(--family-ui);
+  --font-display-en: var(--family-display-en);
+  --font-display-jp: var(--family-display-jp);
+
+  /* ウェイト → font-* */
+  --font-weight-light: var(--w-light);
+  --font-weight-normal: var(--w-normal);
+  --font-weight-semibold: var(--w-semibold);
+  --font-weight-bold: var(--w-bold);
+
+  /* 字間 → tracking-* */
+  --tracking-wide: var(--tracking-wide);
+  --tracking-normal: var(--tracking-normal);
+  --tracking-tight: var(--tracking-tight);
+
+  /* 角丸 → rounded-base
+     designsystem.md §3「カードもボタンもタグも同じ値」。1種類しかないので
+     サイズ名を付けない。Tailwind v4 は素の rounded（--radius-DEFAULT）を
+     解釈しないため、明示的な名前で公開する。 */
+  --radius-base: var(--radius);
+}
+
+/* ============================================================
+   ベース
+   ============================================================ */
+@layer base {
+  body {
+    background: var(--surface-base-secondary);
+    color: var(--object-base-high);
+    font-family: var(--family-ui);
+    font-size: var(--size-body-sm);
+    font-weight: var(--w-normal);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* designsystem.md §2.4
+     金額・件数・日付を含むすべての数値は等幅数字にする。
+     桁が揃わないと資金繰り表が読めなくなる。 */
+  .num,
+  td.n,
+  th.n,
+  input.n {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* designsystem.md §4 TextInput ほか */
+  :focus-visible {
+    outline: 2px solid var(--object-accent-bright);
+    outline-offset: 1px;
+  }
+}

@@ -1,0 +1,6 @@
+# pnpm 10 以降、インストール時のビルドスクリプトは既定でブロックされる。
+# 実行を許可する依存だけをここに列挙する。増やすときは何のためのスクリプトかを確認すること。
+#
+# unrs-resolver: eslint-config-next が使うモジュール解決のネイティブバインディング
+allowBuilds:
+  unrs-resolver: true

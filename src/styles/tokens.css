@@ -1,0 +1,202 @@
+/* ============================================================
+   デザイントークン ── Vastra Design System
+   一次情報：docs/designsystem.md
+   ------------------------------------------------------------
+   このファイルは docs/designsystem.md の §1.1 / §1.2 / §2.1 /
+   §2.2 / §3 の逐語転記である。値をここで発明しない。
+   変更するときは docs/designsystem.md を先に直すこと。
+
+   UI から参照してよいのは §1.2 セマンティックのみ。
+   プリミティブ（§1.1）はセマンティックのエイリアス先としてだけ使う。
+   ============================================================ */
+
+:root {
+  /* ==========================================================
+     1.1 プリミティブ
+     ---------------------------------------------------------
+     注：lightgreen と lightpurple には 050 が存在しない。
+     designsystem.md・プロトタイプの双方で欠けているため、
+     意図的な欠番と判断してそのままにしている。補完しないこと。
+     ========================================================== */
+
+  /* blue */
+  --blue-100: #065d63;
+  --blue-090: #1f6e73;
+  --blue-070: #518e92;
+  --blue-050: #82aeb1;
+  --blue-030: #b4ced0;
+  --blue-015: #dae7e8;
+  --blue-010: #e6eeef;
+
+  /* green */
+  --green-100: #06631e;
+  --green-090: #1f7335;
+  --green-070: #519262;
+  --green-050: #82b18e;
+  --green-030: #b4d0bb;
+  --green-015: #dae8de;
+  --green-010: #e6efe8;
+
+  /* purple */
+  --purple-100: #63063e;
+  --purple-090: #731f52;
+  --purple-070: #925178;
+  --purple-050: #b1829e;
+  --purple-030: #d0b4c5;
+  --purple-015: #e8dae2;
+  --purple-010: #efe6eb;
+
+  /* lightblue */
+  --lightblue-100: #068891;
+  --lightblue-090: #1f949c;
+  --lightblue-070: #51acb3;
+  --lightblue-050: #82c3c8;
+  --lightblue-030: #b4dbde;
+  --lightblue-015: #daedef;
+  --lightblue-010: #e6f3f4;
+
+  /* lightgreen（050 は欠番） */
+  --lightgreen-100: #069149;
+  --lightgreen-090: #1f9c5c;
+  --lightgreen-070: #51b380;
+  --lightgreen-030: #b4dec8;
+  --lightgreen-015: #daefe4;
+  --lightgreen-010: #e6f4ec;
+
+  /* lightpurple（050 は欠番。030 は他色相の生成規則から外れるが原典どおり） */
+  --lightpurple-100: #91066e;
+  --lightpurple-090: #9c1f7d;
+  --lightpurple-070: #b3519a;
+  --lightpurple-030: #d3a7c8;
+  --lightpurple-015: #efdaea;
+  --lightpurple-010: #f4e6f0;
+
+  /* graytone */
+  --gray-100: #333333;
+  --gray-090: #484848;
+  --gray-070: #717171;
+  --gray-050: #999999;
+  --gray-030: #c1c1c1;
+  --gray-015: #e1e1e1;
+  --gray-010: #eaeaea;
+
+  /* base */
+  --base-black: #111111;
+  --base-white: #ffffff;
+  --thin-gray: #eeeeee;
+
+  /* ==========================================================
+     1.2 セマンティック ── UI からはこちらを参照する
+     ---------------------------------------------------------
+     注意（designsystem.md §1.3）：
+       error   は赤ではなく purple
+       caution は黄ではなく green
+       success と accent は同じ blue 系を指す
+     「エラーだから赤」と推測して色を選ばないこと。
+     ========================================================== */
+
+  /* object — 文字・アイコン */
+  --object-base-high: var(--gray-100);
+  --object-base-mid: var(--gray-070);
+  --object-base-low: var(--gray-030);
+  --object-base-high-inverse: var(--base-white);
+  --object-base-mid-inverse: var(--blue-030);
+  --object-accent-dim: var(--blue-100);
+  --object-accent-bright: var(--lightblue-100);
+  --object-error-dim: var(--purple-100);
+  --object-error-bright: var(--lightpurple-100);
+  --object-caution-dim: var(--green-100);
+  --object-caution-bright: var(--lightgreen-100);
+  --object-success-dim: var(--blue-100);
+  --object-success-bright: var(--lightblue-100);
+
+  /* surface — 背景 */
+  --surface-base-primary: var(--base-white);
+  --surface-base-secondary: var(--thin-gray);
+  --surface-base-primary-inverse: var(--blue-100);
+  --surface-overlay-hoverd: var(--gray-010);
+  --surface-overlay-selected: var(--blue-010);
+  --surface-accent-thin: var(--blue-015);
+  --surface-accent-subtle: var(--blue-010);
+  --surface-success-subtle: var(--lightblue-010);
+  --surface-caution-subtle: var(--green-010);
+  --surface-error-subtle: var(--purple-010);
+
+  /* border */
+  --border-base-high: var(--gray-030);
+  --border-base-low: var(--gray-015);
+  --border-accent-high: var(--blue-030);
+  --border-error-high: var(--purple-030);
+  --border-caution-high: var(--green-030);
+  --border-success-high: var(--lightblue-030);
+
+  /* ==========================================================
+     2.1 書体
+     ---------------------------------------------------------
+     Inter と Cormorant Garamond は next/font 経由で読み込み、
+     生成されたフォント名を var(--font-*) で受け取る。
+     Web フォントが無い環境でも壊れないよう、第2引数に原典の
+     ファミリ名を残してある。詳細は docs/adr/0005 を参照。
+
+     Noto Serif JP は Web フォントとして読み込んでいない。
+     日本語サブセットが数MBあり、非機能要件 5.1（初回表示3秒
+     以内・4G想定）と衝突するため。端末にある場合のみ効く。
+     ========================================================== */
+  --family-ui: var(--font-inter, "Inter"), "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --family-display-en: var(--font-cormorant, "Cormorant Garamond"),
+    "Times New Roman", serif;
+  --family-display-jp: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho",
+    serif;
+
+  /* 2.2 ウェイト */
+  --w-light: 300;
+  --w-normal: 400;
+  --w-semibold: 600;
+  --w-bold: 700;
+
+  /* 2.2 サイズ */
+  --size-display-lg: 56px;
+  --size-display-md: 48px;
+  --size-display-sm: 36px;
+
+  --size-headline-xlg: 34px;
+  --size-headline-lg: 28px;
+  --size-headline-md: 24px;
+  --size-headline-sm: 20px;
+  --size-headline-xs: 18px;
+
+  --size-body-xlg: 20px;
+  --size-body-lg: 18px;
+  --size-body-md: 16px;
+  --size-body-xmd: 15px;
+  --size-body-sm: 14px;
+  --size-body-xs: 13px;
+  --size-body-xxs: 12px;
+
+  /* 2.2 字間 */
+  --tracking-wide: 0.025em;
+  --tracking-normal: 0;
+  --tracking-tight: -0.025em;
+
+  /* ==========================================================
+     3 スペーシング
+     ---------------------------------------------------------
+     このスケール以外の値を書かない。5px / 9px / 15px のような
+     中間値を作らないこと。
+     ========================================================== */
+  --sp-4: 4px;
+  --sp-8: 8px;
+  --sp-12: 12px;
+  --sp-16: 16px;
+  --sp-24: 24px;
+  --sp-32: 32px;
+  --sp-40: 40px;
+  --sp-48: 48px;
+  --sp-56: 56px;
+  --sp-64: 64px;
+  --sp-72: 72px;
+
+  /* 角丸はカードもボタンもタグも同じ値を使う */
+  --radius: 4px;
+}
