@@ -10,6 +10,7 @@
  * 引落日に1件の出金として現れる。
  */
 
+import { CATEGORY_CARD_SETTLEMENT } from "./categories";
 import {
   compareDate,
   compareString,
@@ -41,7 +42,7 @@ export function actualToEvent(actual: Actual): LedgerEvent {
     name: actual.name,
     type: actual.type,
     costType: actual.costType,
-    category: actual.category,
+    categoryCode: actual.categoryCode,
     amount: actual.amount,
     bizRatio: actual.bizRatio,
     accountId: actual.accountId,
@@ -171,7 +172,9 @@ export function toCashEvents(
       name: `${card.name} 引落`,
       type: total > 0 ? "expense" : "income",
       costType: null,
-      category: null,
+      /* TRF-04 カード引落。費目マスタが「CL-2 が生成する」としている
+         （要件定義書 §3.1.2）。TRF なので CL-5 の損益集計から外れる。 */
+      categoryCode: CATEGORY_CARD_SETTLEMENT,
       amount: Math.abs(total),
       bizRatio: 0,
       accountId: card.settleAccountId,

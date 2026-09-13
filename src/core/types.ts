@@ -87,10 +87,14 @@ interface EntryBase {
   /** 内容 */
   name: string;
   type: EntryType;
-  /** expense のとき必須。それ以外は null */
+  /** 費用のとき必須。それ以外は null（要件定義書 §3.1.2 適用規則6） */
   costType: CostType | null;
-  /** 費目。transfer 以外は必須。マスタは要件定義書に定義がないため string */
-  category: string | null;
+  /**
+   * 費目コード（要件定義書 §3.1.2）。名称ではなくコードで保持する。
+   * 表示名は将来変更されうるため、名称で突き合わせない。
+   * 定義とグループ判定は categories.ts。
+   */
+  categoryCode: string;
   /** 金額（絶対値） */
   amount: Yen;
   /** 事業割合 0〜100。損益集計時のみ適用する（CL-4） */
@@ -162,7 +166,7 @@ export interface ForecastInstance {
   name: string;
   type: EntryType;
   costType: CostType | null;
-  category: string | null;
+  categoryCode: string;
   /** オーバーライド適用後の金額 */
   amount: Yen;
   bizRatio: number;
@@ -194,7 +198,7 @@ export interface LedgerEvent {
   name: string;
   type: EntryType;
   costType: CostType | null;
-  category: string | null;
+  categoryCode: string;
   amount: Yen;
   bizRatio: number;
   accountId: string;

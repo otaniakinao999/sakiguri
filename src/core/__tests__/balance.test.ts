@@ -54,7 +54,7 @@ function plan(
     name: "家賃",
     type: "expense",
     costType: "fixed",
-    category: "住居費",
+    categoryCode: "EXP-01",
     amount: 120_000,
     bizRatio: 0,
     accountId: "a1",
@@ -72,7 +72,7 @@ function actual(
     name: "家賃",
     type: "expense",
     costType: "fixed",
-    category: "住居費",
+    categoryCode: "EXP-01",
     amount: 120_000,
     bizRatio: 0,
     accountId: "a1",
@@ -376,7 +376,7 @@ describe("CL-3 振替", () => {
             amount: 380_000,
             type: "transfer",
             costType: null,
-            category: null,
+            categoryCode: "TRF-01",
             accountId: "a2",
             toAccountId: "a1",
           }),
@@ -400,8 +400,8 @@ describe("accountDelta", () => {
     date: "2026-04-10",
     name: "x",
     type: "expense",
-    costType: null,
-    category: null,
+    costType: "variable",
+    categoryCode: "EXP-20",
     amount: 1_000,
     bizRatio: 0,
     accountId: "a1",
@@ -422,6 +422,80 @@ describe("accountDelta", () => {
     expect(accountDelta(t, "a1")).toBe(-1_000);
     expect(accountDelta(t, "a2")).toBe(1_000);
     expect(accountDelta(t, "a3")).toBe(0);
+  });
+});
+
+/* ========================= AC-20 資金繰り側 ========================= */
+
+describe("AC-20 TRF グループは資金繰りには含まれる", () => {
+  /* AC-20 の後半「月次資金繰り表の出金には含まれる」のうち、
+     CL-3 の残高に効くことをここで確かめる。
+     月次資金繰り表そのもの（CL-6）はフェーズ1・タスク#5。 */
+
+  it("借入返済の元金（TRF-06）は現預金を減らす", () => {
+    const got = buildBalanceSeries(
+      input({
+        forecast: [
+          plan({
+            key: "l:loan1:2026-04-27#p",
+            date: "2026-04-27",
+            name: "公庫 運転資金 返済（元金）",
+            categoryCode: "TRF-06",
+            costType: null,
+            type: "expense",
+            amount: 82_000,
+          }),
+          plan({
+            key: "l:loan1:2026-04-27#i",
+            date: "2026-04-27",
+            name: "公庫 運転資金 返済（利息）",
+            categoryCode: "EXP-15",
+            costType: "fixed",
+            type: "expense",
+            amount: 8_300,
+          }),
+        ],
+      }),
+      "2026-04-30",
+      "2026-04-30",
+    );
+
+    // 元金と利息の両方が現金として出ていく
+    expect(at(got, "2026-04-27").proj).toBe(380_000 - 82_000 - 8_300);
+  });
+
+  it("借入実行（TRF-05）は現預金を増やす", () => {
+    const got = buildBalanceSeries(
+      input({
+        forecast: [
+          plan({
+            key: "o:loan-in",
+            date: "2026-04-01",
+            name: "公庫 運転資金 実行",
+            categoryCode: "TRF-05",
+            costType: null,
+            type: "income",
+            amount: 5_000_000,
+          }),
+        ],
+      }),
+      "2026-04-30",
+      "2026-04-30",
+    );
+
+    expect(at(got, "2026-04-01").proj).toBe(380_000 + 5_000_000);
+  });
+
+  it("カード引落の費目コードが TRF-04 になる", () => {
+    const got = buildBalanceSeries(
+      input({ accounts: [seikatsu, card({ balance: 142_000 })] }),
+      "2026-04-30",
+      "2026-04-01",
+    );
+
+    const settlements = got.projectedCash.filter((e) => e.src === "settle");
+    expect(settlements).toHaveLength(1);
+    expect(settlements[0].categoryCode).toBe("TRF-04");
   });
 });
 
