@@ -75,6 +75,18 @@ describe("費目マスタの整合性", () => {
     }
   });
 
+  it("マスタは事業割合を持たない（適用規則7）", () => {
+    /* 固定／変動には推奨値があるのに事業割合には無いのは、非対称だが意図的。
+       事業割合を決めているのは費目ではなく利用者の事業形態であり、
+       マスタに持たせると全員に同じ値を押し付けることになる。
+       全費目の初期値は 0。UI 側（タスク#10）で利用者が項目ごとに設定する。
+       揃えるために bizRatio を足さないこと。 */
+    for (const c of CATEGORIES) {
+      expect(c).not.toHaveProperty("bizRatio");
+      expect(c).not.toHaveProperty("defaultBizRatio");
+    }
+  });
+
   it("EXP-01〜EXP-20 は青色申告決算書の科目に対応する", () => {
     for (const c of categoriesInGroup("EXP")) {
       const n = Number(c.code.slice(4));

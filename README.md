@@ -37,6 +37,14 @@ pnpm lint         # eslint
 
 PR を出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認する。
 
+## 受入基準とテスト
+
+`src/core/__tests__/` のテストは要件定義書 §9 の受入基準 AC-01〜AC-20 に対応する。
+
+**（v2.0）と付いた AC-11〜AC-17・AC-19 は PoC で作らない機能**（借入返済スケジュール、売掛金の入金予定、税理士の代理操作）に対応する。[v2-acceptance.test.ts](./src/core/__tests__/v2-acceptance.test.ts) に `it.todo` として置いてあり、必要な素材と期待値をコメントに書いてある。**削除しないこと。** 実装時に通常の `it` へ書き換えて有効化する。
+
+PoC での代替手段は [PoC開発計画 §4](./docs/PoC開発計画.md) を参照。
+
 ## 構成
 
 ```
