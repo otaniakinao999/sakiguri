@@ -150,11 +150,20 @@ export function isWithin(date: DateStr, from: DateStr, to: DateStr): boolean {
 }
 
 /**
- * 日付の昇順比較。localeCompare を使わない。
+ * 符号位置による文字列の昇順比較。**localeCompare を使わない。**
  *
  * localeCompare は実行環境の既定ロケールに依存し、同じ入力で同じ順序が
  * 返る保証がない。core は純関数でなければならない（CLAUDE.md §2.3）。
  */
-export function compareDate(a: DateStr, b: DateStr): number {
+export function compareString(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * 日付の昇順比較。
+ *
+ * 'YYYY-MM-DD' は辞書順が時系列順と一致するため、文字列比較でよい。
+ */
+export function compareDate(a: DateStr, b: DateStr): number {
+  return compareString(a, b);
 }

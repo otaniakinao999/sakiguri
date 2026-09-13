@@ -11,6 +11,7 @@
 
 import {
   compareDate,
+  compareString,
   dayInMonth,
   eachMonth,
   isWithin,
@@ -46,11 +47,6 @@ export function recurringKey(recurringId: string, date: DateStr): string {
 /** 単発予定の予定インスタンスキー。 */
 export function oneoffKey(oneoffId: string): string {
   return `o:${oneoffId}`;
-}
-
-/** ロケール非依存の文字列比較。並びを実行環境に依存させない。 */
-function compareString(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**

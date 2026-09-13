@@ -37,21 +37,45 @@ export type EntryType = "income" | "expense" | "transfer";
 /** 費用の区分。income と transfer では null。 */
 export type CostType = "fixed" | "variable";
 
-/** 口座・カード（要件定義書 §3.2 Account） */
-export interface Account {
+interface AccountBase {
   id: string;
   name: string;
-  kind: AccountKind;
-  /** 基準日時点の残高。card の場合は未払残高（正の値） */
+  /** 基準日時点の残高 */
   balance: Yen;
-  /** 締日（1〜31。31は月末）。card のとき必須 */
-  closingDay?: number;
-  /** 締め月から何ヶ月後に支払うか（0=当月／1=翌月／2=翌々月）。card のとき必須 */
-  payMonthOffset?: number;
-  /** 支払日（1〜31。月末超過は月末に丸める）。card のとき必須 */
-  payDay?: number;
-  /** 引落元口座の id。card のとき必須 */
-  settleAccountId?: string;
+}
+
+/** 銀行口座・現金（要件定義書 §3.2 Account の kind = bank / cash） */
+export interface DepositAccount extends AccountBase {
+  kind: "bank" | "cash";
+}
+
+/**
+ * クレジットカード（要件定義書 §3.2 Account の kind = card）
+ *
+ * 締日・支払月・支払日・引落元口座は要件定義書で「card時○」とされている。
+ * 判別可能なユニオンにして、カードなら必ず揃っていることを型で保証する。
+ * 揃っていないカードを実行時に検査する必要がなくなる。
+ */
+export interface CardAccount extends AccountBase {
+  kind: "card";
+  /** 未払残高（正の値） */
+  balance: Yen;
+  /** 締日（1〜31。31は月末） */
+  closingDay: number;
+  /** 締め月から何ヶ月後に支払うか（0=当月／1=翌月／2=翌々月） */
+  payMonthOffset: number;
+  /** 支払日（1〜31。月末超過は月末に丸める） */
+  payDay: number;
+  /** 引落元口座の id */
+  settleAccountId: string;
+}
+
+/** 口座・カード（要件定義書 §3.2 Account） */
+export type Account = DepositAccount | CardAccount;
+
+/** カードかどうか。CL-2 はこの判定で残高を動かすかを分ける。 */
+export function isCard(account: Account): account is CardAccount {
+  return account.kind === "card";
 }
 
 /**
@@ -149,4 +173,42 @@ export interface ForecastInstance {
   srcId: string;
   /** 適用されたオーバーライド。無ければ undefined */
   override?: Override;
+}
+
+/**
+ * イベントの出どころ。
+ * `settle` は CL-2 が生成するカード引落で、元データには存在しない。
+ */
+export type EventSource = ForecastSource | "actual" | "settle";
+
+/**
+ * CL-2 の入力となる1件。予定インスタンスと実績の共通形。
+ *
+ * `ForecastInstance` はそのまま代入できる。`Actual` は `src: 'actual'` を
+ * 付けて変換する（cash.ts の `actualToEvent`）。
+ */
+export interface LedgerEvent {
+  /** 実績は紐づく予定が無ければ null */
+  key: string | null;
+  date: DateStr;
+  name: string;
+  type: EntryType;
+  costType: CostType | null;
+  category: string | null;
+  amount: Yen;
+  bizRatio: number;
+  accountId: string;
+  toAccountId?: string;
+  src: EventSource;
+}
+
+/**
+ * CL-2 の出力。**口座残高を動かす**イベント。
+ *
+ * カード利用は残高を動かさないためここには現れず、代わりに締め期間ごとに
+ * 合算された `src: 'settle'` の引落イベントが現れる。
+ */
+export interface CashEvent extends LedgerEvent {
+  /** `src === 'settle'` のとき、引落元のカード id */
+  cardId?: string;
 }
