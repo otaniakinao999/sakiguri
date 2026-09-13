@@ -141,6 +141,33 @@ export function eachMonth(from: DateStr, to: DateStr): YM[] {
 }
 
 /**
+ * 1970-01-01 からの通算日数。
+ *
+ * Howard Hinnant の civil_from_days の逆算。Date を使わずに求める
+ * （docs/adr/0006-coreの日付計算にDateオブジェクトを使わない.md）。
+ * 3月始まりの暦に置き換えて閏日を年末に寄せることで、割り算だけで解ける。
+ */
+export function toDayNumber(date: DateStr): number {
+  const { year, month, day } = parseDate(date);
+  const y = year - (month <= 2 ? 1 : 0);
+  const era = Math.floor(y / 400);
+  const yearOfEra = y - era * 400;
+  const dayOfYear =
+    Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 +
+    Math.floor(yearOfEra / 4) -
+    Math.floor(yearOfEra / 100) +
+    dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/** 2つの日付の隔たり（日数）。順序によらず0以上を返す。 */
+export function daysBetween(a: DateStr, b: DateStr): number {
+  return Math.abs(toDayNumber(a) - toDayNumber(b));
+}
+
+/**
  * 日付が [from, to] の範囲内か（両端を含む）。
  *
  * 'YYYY-MM-DD' は辞書順が時系列順と一致するため、文字列比較でよい。
