@@ -27,13 +27,15 @@ pnpm install
 ```bash
 pnpm dev          # 開発サーバー
 pnpm build        # 本番ビルド
+pnpm test         # Vitest（src/core のテスト）
+pnpm test:watch
 pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 ```
 
-`pnpm test` / `pnpm test:watch`（Vitest）はフェーズ1・タスク#2 で、`pnpm db:migrate`（Supabase）はフェーズ3・タスク#12 で追加する。
+`pnpm db:migrate`（Supabase）はフェーズ3・タスク#12 で追加する。
 
-PR を出す前に `pnpm typecheck && pnpm lint` が通っていることを確認する。テストが入り次第 `pnpm test` を加える。
+PR を出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認する。
 
 ## 構成
 
