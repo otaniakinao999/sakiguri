@@ -16,6 +16,7 @@ import { toYearMonth } from "@/core/date";
 import type { Scope } from "@/core/proration";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Card } from "@/components/ui/Card";
+import { Notification } from "@/components/ui/Notification";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { isEmpty } from "@/lib/app-data";
 import { forecastEnd } from "@/lib/period";
@@ -121,13 +122,13 @@ export function ProfitLossScreen() {
       </div>
 
       {scope !== "all" && (
-        <div className="border-l-object-accent-dim bg-surface-accent-subtle text-object-base-high rounded-base border-l-4 p-12 text-body-xs leading-normal">
+        <Notification>
           家事按分を反映しています。
           {scope === "business"
             ? "事業割合ぶんだけを経費として"
             : "事業割合を差し引いた残りを"}
           集計しています。
-        </div>
+        </Notification>
       )}
 
       <Card title={`年月別 収支（${SCOPE_TITLES[scope]}）`}>

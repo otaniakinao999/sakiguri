@@ -222,6 +222,12 @@
   /* 設定の表で、名前や内容を入れる列の最小幅 */
   --layout-field-width: 160px;
 
+  /* 事業割合の入力欄の幅。2桁＋%で足りる */
+  --layout-ratio-width: 72px;
+
+  /* CSV を貼り付ける欄の高さ */
+  --layout-paste-height: 104px;
+
   /* 900px 未満で上部の横並びに切り替える（designsystem.md §5）。
      ブレークポイントはここに置けない。メディアクエリの条件に
      CSS カスタムプロパティを書けないため、globals.css の @theme に

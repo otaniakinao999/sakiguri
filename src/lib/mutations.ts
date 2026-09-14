@@ -164,6 +164,11 @@ export function addActual(data: AppData, actual: Actual): AppData {
   return { ...data, actuals: [...data.actuals, actual] };
 }
 
+/** CSV取込のように、まとめて登録する（FR-16）。 */
+export function addActuals(data: AppData, actuals: Actual[]): AppData {
+  return { ...data, actuals: [...data.actuals, ...actuals] };
+}
+
 export function removeActual(data: AppData, id: string): AppData {
   return { ...data, actuals: data.actuals.filter((a) => a.id !== id) };
 }
