@@ -11,6 +11,7 @@
 import { useMemo } from "react";
 
 import { useAppData } from "./AppDataProvider";
+import { SaveIndicator } from "./SaveIndicator";
 import { formatMonthDay, formatYen } from "@/lib/format";
 import { computeBalanceSummary } from "@/lib/summary";
 
@@ -79,6 +80,10 @@ export function BalanceHeader() {
           tone="card"
         />
       )}
+
+      <span className="ml-auto self-center">
+        <SaveIndicator />
+      </span>
     </header>
   );
 }

@@ -228,6 +228,9 @@
   /* CSV を貼り付ける欄の高さ */
   --layout-paste-height: 104px;
 
+  /* サインイン画面のカード幅 */
+  --layout-signin-width: 384px;
+
   /* 900px 未満で上部の横並びに切り替える（designsystem.md §5）。
      ブレークポイントはここに置けない。メディアクエリの条件に
      CSS カスタムプロパティを書けないため、globals.css の @theme に

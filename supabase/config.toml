@@ -1,0 +1,5 @@
+# Supabase CLI の設定
+# project_id はダッシュボードの URL に出るプロジェクト参照。
+# 秘密は入れない（DBのパスワードもアクセストークンも環境変数で渡す）。
+
+project_id = "lrgzczqnbwykqkvjxyza"

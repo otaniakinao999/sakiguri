@@ -19,7 +19,7 @@ import { NAV_ITEMS } from "./navigation";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data } = useAppData();
+  const { data, session, signOut } = useAppData();
 
   return (
     <aside
@@ -78,6 +78,21 @@ export function Sidebar() {
         基準日 {data.asOf}
         <br />
         防衛ライン {formatYen(data.reserveLine)}
+        {session && (
+          <>
+            <br />
+            <span className="block truncate" title={session.user.email ?? ""}>
+              {session.user.email}
+            </span>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="text-object-base-high-inverse mt-4 underline focus-visible:outline-object-base-high-inverse"
+            >
+              サインアウト
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );
