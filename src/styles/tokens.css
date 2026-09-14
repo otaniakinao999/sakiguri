@@ -210,6 +210,12 @@
   /* デスクトップのサイドバー幅。固定 */
   --layout-sidebar-width: 216px;
 
+  /* グラフの高さ。designsystem.md §5「グラフは高さ固定で縮退する」 */
+  --layout-chart-height: 330px;
+
+  /* 入出金予定表のスクロール領域の高さ。長い明細を画面内に収める */
+  --layout-ledger-height: 520px;
+
   /* 900px 未満で上部の横並びに切り替える（designsystem.md §5）。
      ブレークポイントはここに置けない。メディアクエリの条件に
      CSS カスタムプロパティを書けないため、globals.css の @theme に
