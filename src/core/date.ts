@@ -162,6 +162,28 @@ export function toDayNumber(date: DateStr): number {
   return era * 146097 + dayOfEra - 719468;
 }
 
+/** 通算日数から 'YYYY-MM-DD' に戻す。`toDayNumber` の逆。 */
+export function fromDayNumber(days: number): DateStr {
+  const z = days + 719468;
+  const era = Math.floor(z / 146097);
+  const dayOfEra = z - era * 146097;
+  const yearOfEra = Math.floor(
+    (dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) / 365,
+  );
+  const year = yearOfEra + era * 400;
+  const dayOfYear =
+    dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+  const mp = Math.floor((5 * dayOfYear + 2) / 153);
+  const day = dayOfYear - Math.floor((153 * mp + 2) / 5) + 1;
+  const month = mp + (mp < 10 ? 3 : -9);
+  return formatDate(year + (month <= 2 ? 1 : 0), month, day);
+}
+
+/** n 日進める。n は負でもよい。 */
+export function addDays(date: DateStr, n: number): DateStr {
+  return fromDayNumber(toDayNumber(date) + n);
+}
+
 /** 2つの日付の隔たり（日数）。順序によらず0以上を返す。 */
 export function daysBetween(a: DateStr, b: DateStr): number {
   return Math.abs(toDayNumber(a) - toDayNumber(b));

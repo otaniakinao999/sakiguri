@@ -10,7 +10,7 @@
  */
 
 import { actualToEvent, signedAmount, toCashEvents } from "./cash";
-import { formatDate, lastDayOfMonth, parseDate } from "./date";
+import { addDays } from "./date";
 import { isCard } from "./types";
 import type {
   Account,
@@ -60,14 +60,6 @@ export interface BalanceSeries {
   projectedCash: CashEvent[];
   /** 実績のみの現金イベント */
   actualCash: CashEvent[];
-}
-
-/** 翌日。'YYYY-MM-DD' のまま1日進める。 */
-function nextDay(date: DateStr): DateStr {
-  const { year, month, day } = parseDate(date);
-  if (day < lastDayOfMonth(year, month)) return formatDate(year, month, day + 1);
-  if (month < 12) return formatDate(year, month + 1, 1);
-  return formatDate(year + 1, 1, 1);
 }
 
 /**
@@ -213,7 +205,7 @@ export function buildBalanceSeries(
   let act = opening;
 
   const rows: BalanceRow[] = [];
-  for (let date = asOf; date <= to; date = nextDay(date)) {
+  for (let date = asOf; date <= to; date = addDays(date, 1)) {
     const d = deltas.get(date);
     if (d) {
       proj += d.proj;

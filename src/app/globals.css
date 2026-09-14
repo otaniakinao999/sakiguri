@@ -22,6 +22,7 @@
   --radius-*: initial;
   --tracking-*: initial;
   --font-weight-*: initial;
+  --breakpoint-*: initial;
 }
 
 /* --- トークンを割り当てる --- */
@@ -113,6 +114,16 @@
   --tracking-normal: var(--tracking-normal);
   --tracking-tight: var(--tracking-tight);
 
+  /* ブレークポイント → wide:
+     designsystem.md §5 が定めるのは1つだけ（900px 未満で上部の横並びに
+     切り替える）。Tailwind の既定（sm/md/lg/xl/2xl）は無効化し、
+     デザインシステムにある1点だけを公開する。
+     モバイル先行で書き、900px 以上を wide: で上書きする。
+
+     ここだけリテラルで書く。メディアクエリの条件に CSS カスタム
+     プロパティを書けないため、tokens.css の変数を参照できない。 */
+  --breakpoint-wide: 900px;
+
   /* 角丸 → rounded-base
      designsystem.md §3「カードもボタンもタグも同じ値」。1種類しかないので
      サイズ名を付けない。Tailwind v4 は素の rounded（--radius-DEFAULT）を
@@ -145,7 +156,9 @@
     font-feature-settings: "tnum" 1;
   }
 
-  /* designsystem.md §4 TextInput ほか */
+  /* designsystem.md §4 TextInput ほか。
+     濃色の面の上ではこの色が見えない（accent-bright と blue-100 の
+     コントラストは約1.8:1）。サイドバーのリンクは白い枠に上書きしている。 */
   :focus-visible {
     outline: 2px solid var(--object-accent-bright);
     outline-offset: 1px;

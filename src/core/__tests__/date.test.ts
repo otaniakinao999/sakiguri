@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addDays,
   compareDate,
   dayInMonth,
+  daysBetween,
   eachMonth,
   formatYearMonth,
+  fromDayNumber,
   isLeapYear,
   isWithin,
   lastDayOfMonth,
   parseDate,
   shiftMonth,
+  toDayNumber,
   toYearMonth,
 } from "../date";
 
@@ -167,6 +171,68 @@ describe("eachMonth", () => {
 
   it("from が to より後なら空", () => {
     expect(eachMonth("2026-07-01", "2026-04-01")).toEqual([]);
+  });
+});
+
+describe("toDayNumber / fromDayNumber / addDays / daysBetween", () => {
+  it("1970-01-01 が 0 になる", () => {
+    expect(toDayNumber("1970-01-01")).toBe(0);
+    expect(fromDayNumber(0)).toBe("1970-01-01");
+  });
+
+  it("往復して元に戻る", () => {
+    for (const date of [
+      "1900-01-01",
+      "1970-01-01",
+      "2000-02-29",
+      "2026-09-14",
+      "2028-02-29",
+      "2100-03-01",
+    ]) {
+      expect(fromDayNumber(toDayNumber(date))).toBe(date);
+    }
+  });
+
+  it("月末・年末・閏日をまたいで1日進む", () => {
+    expect(addDays("2026-04-30", 1)).toBe("2026-05-01");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-02-28", 1)).toBe("2026-03-01");
+    expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDays("2028-02-29", 1)).toBe("2028-03-01");
+  });
+
+  it("戻ることもできる", () => {
+    expect(addDays("2026-01-01", -1)).toBe("2025-12-31");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(addDays("2028-03-01", -1)).toBe("2028-02-29");
+  });
+
+  it("30日後・90日後", () => {
+    expect(addDays("2026-09-14", 30)).toBe("2026-10-14");
+    expect(addDays("2026-09-14", 90)).toBe("2026-12-13");
+  });
+
+  it("0 は動かさない", () => {
+    expect(addDays("2026-09-14", 0)).toBe("2026-09-14");
+  });
+
+  it("1日ずつ進めた結果と一致する", () => {
+    let cursor = "2026-01-01";
+    for (let i = 0; i < 800; i++) {
+      expect(addDays("2026-01-01", i)).toBe(cursor);
+      cursor = addDays(cursor, 1);
+    }
+  });
+
+  it("日数の差は順序によらない", () => {
+    expect(daysBetween("2026-04-27", "2026-05-09")).toBe(12);
+    expect(daysBetween("2026-05-09", "2026-04-27")).toBe(12);
+    expect(daysBetween("2026-04-27", "2026-04-27")).toBe(0);
+  });
+
+  it("閏日をまたぐ差", () => {
+    expect(daysBetween("2028-02-28", "2028-03-01")).toBe(2);
+    expect(daysBetween("2026-02-28", "2026-03-01")).toBe(1);
   });
 });
 
