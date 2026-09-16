@@ -20,6 +20,7 @@ Node.js 20 以上（開発は 24 で確認）、pnpm。
 ```bash
 corepack enable --install-directory ~/Library/pnpm pnpm
 pnpm install
+cp .env.example .env.local   # Supabase の URL と publishable キーを入れる
 ```
 
 ## コマンド
@@ -33,9 +34,34 @@ pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 ```
 
-`pnpm db:migrate`（Supabase）はフェーズ3・タスク#12 で追加する。
-
 PR を出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認する。
+
+## データベース
+
+スキーマは [supabase/migrations/](./supabase/migrations/) にある。**0001 → 0002 の順で適用する。**
+0002 は RLS の漏れを検査し、1件でもあればマイグレーションごと失敗させる。
+
+```bash
+npx --yes supabase@latest link --project-ref <プロジェクト参照>
+pnpm db:migrate
+```
+
+CLI を使わない場合は、Supabase ダッシュボードの SQL Editor に2ファイルを順に貼る。
+
+### RLS
+
+**テーブルを作ったら必ず RLS を有効化し、ポリシーを書く**（CLAUDE.md §2.5）。
+`using` だけでなく `with check` も書くこと。無いと他人の `user_id` を入れた行を作れてしまう。
+
+効いていることは実際に確かめる。2人のユーザーを作り、読み・更新・削除・
+他人名義での作成を試す。
+
+```bash
+node scripts/verify-rls.mjs
+```
+
+検証には Authentication → Sign In / Providers の「Confirm email」を一時的に切る必要がある
+（登録直後にセッションが返らないと2人目を作れないため）。
 
 ## 受入基準とテスト
 
