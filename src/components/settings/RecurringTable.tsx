@@ -10,6 +10,7 @@
  */
 
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { NumberInput, TextInput } from "@/components/ui/inputs";
@@ -39,7 +40,7 @@ function parseMonths(text: string): number[] | null {
 }
 
 export function RecurringTable() {
-  const { data, setData } = useAppData();
+  const { data, setData, session } = useAppData();
 
   return (
     <Card
@@ -48,11 +49,10 @@ export function RecurringTable() {
         <Button
           size="sm"
           disabled={data.accounts.length === 0}
-          onClick={() =>
-            setData((d) =>
-              addRecurring(d, blankRecurring(newId(), d.accounts[0].id)),
-            )
-          }
+          onClick={() => {
+            setData((d) => addRecurring(d, blankRecurring(newId(), d.accounts[0].id)));
+            track(session?.user.id, "plan_created", { recurring: true });
+          }}
         >
           ＋ 追加
         </Button>

@@ -28,6 +28,7 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { diffAppData } from "@/lib/supabase/diff";
 import { loadAppData, saveDiff } from "@/lib/supabase/storage";
 import { todayStr } from "@/lib/today";
+import { track } from "@/lib/analytics/track";
 
 /** 保存のデバウンス（要件定義書 §5.2）。 */
 const SAVE_DEBOUNCE_MS = 400;
@@ -108,8 +109,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (!got.session) setReady(true);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((authEvent, next) => {
       setSession(next);
+      if (authEvent === "SIGNED_IN" && next) {
+        track(next.user.id, "signed_in", {});
+      }
       if (!next) {
         /* サインアウト。この端末から消す */
         loadedRef.current = false;

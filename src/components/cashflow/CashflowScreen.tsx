@@ -7,13 +7,14 @@
  *   残高推移グラフ（日次／月次切替）、月次資金繰り表、入出金予定表。
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import { buildMonthlyCashflow } from "@/core/monthly";
-import { toYearMonth } from "@/core/date";
+import { daysBetween, toYearMonth } from "@/core/date";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { formatAmount, formatYearMonthLabel, MINUS } from "@/lib/format";
@@ -43,7 +44,7 @@ const GRAINS: readonly { value: ChartGrain; label: string }[] = [
 ];
 
 export function CashflowScreen() {
-  const { data, today } = useAppData();
+  const { data, today, session } = useAppData();
 
   const [grain, setGrain] = useState<ChartGrain>("day");
   const [preset, setPreset] = useState<PeriodPreset>(3);
@@ -121,6 +122,32 @@ export function CashflowScreen() {
       ),
     };
   }, [computed, range]);
+
+  /* ---------- 指標（PoC開発計画 §4） ----------
+     警告を見せたこと、予定がどこまで先にあるかを記録する。
+     金額も日付も送らない。送るのは種別と「何日先か」「何ヶ月ぶんか」だけ
+     （docs/adr/0013）。画面を開くたびに1回だけ。 */
+  const reportedRef = useRef(false);
+  useEffect(() => {
+    if (!computed || !today || reportedRef.current) return;
+    reportedRef.current = true;
+
+    const firstWarning = computed.monthly.find((m) => m.warning);
+    if (firstWarning?.warning) {
+      track(session?.user.id, "shortfall_warned", {
+        shortfall: firstWarning.warning.kind === "shortfall",
+        daysAhead: daysBetween(today, firstWarning.warning.date),
+      });
+    }
+
+    const lastPlan = computed.series.unmatchedForecast.at(-1)?.date;
+    track(session?.user.id, "forecast_horizon", {
+      months: lastPlan
+        ? Math.round(daysBetween(today, lastPlan) / 30)
+        : 0,
+      accounts: data.accounts.length,
+    });
+  }, [computed, today, session, data.accounts.length]);
 
   if (!today) {
     return <Card title="キャッシュフロー">読み込み中…</Card>;

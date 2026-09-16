@@ -172,18 +172,57 @@ async function main() {
     after.data[0].balance === 1234567;
   record("A の行は書き換えも削除もされていない", intact);
 
-  console.log("\n── RLS の設定漏れ ──");
+  console.log("\n── 利用イベント（ADR-0013）──");
+  const inserted = await b.supabase
+    .from("usage_events")
+    .insert({ user_id: b.userId, event: "signed_in", props: {} });
+  record("自分のイベントは書ける", inserted.error === null, inserted.error?.message ?? "");
+
+  const readEvents = await b.supabase.from("usage_events").select("*");
+  record(
+    "自分のイベントも読めない（select のポリシーが無い）",
+    (readEvents.data ?? []).length === 0,
+    readEvents.error ? readEvents.error.message : `${(readEvents.data ?? []).length}件`,
+  );
+
+  const spoofEvent = await b.supabase
+    .from("usage_events")
+    .insert({ user_id: a.userId, event: "signed_in", props: {} });
+  record(
+    "他人の user_id でイベントを書けない",
+    spoofEvent.error !== null,
+    spoofEvent.error?.message ?? "書けてしまった",
+  );
+
+  const updEvent = await b.supabase
+    .from("usage_events")
+    .update({ event: "tampered" })
+    .eq("user_id", b.userId)
+    .select();
+  record(
+    "イベントを書き換えられない（update のポリシーが無い）",
+    (updEvent.data ?? []).length === 0,
+    `${(updEvent.data ?? []).length}件が更新された`,
+  );
+
+  const delEvent = await b.supabase
+    .from("usage_events")
+    .delete()
+    .eq("user_id", b.userId)
+    .select();
+  record(
+    "イベントを消せない（delete のポリシーが無い）",
+    (delEvent.data ?? []).length === 0,
+    `${(delEvent.data ?? []).length}件が削除された`,
+  );
+
+  console.log("\n── RLS の点検ビュー ──");
   const guard = await a.supabase.from("rls_guard").select("*");
-  if (guard.error) {
-    record("rls_guard ビューを読める", false, guard.error.message);
-  } else {
-    record(
-      "RLS が無効・ポリシー無しのテーブルが無い",
-      (guard.data ?? []).length === 0,
-      (guard.data ?? []).map((r) => `${r.table_name}（${r.problem}）`).join("、") ||
-        "0件",
-    );
-  }
+  record(
+    "rls_guard は外から読めない（どのテーブルが漏れているかを教えない）",
+    guard.error !== null || (guard.data ?? []).length === 0,
+    guard.error ? guard.error.message : `${(guard.data ?? []).length}件返った`,
+  );
 
   const failed = results.filter((r) => !r.ok);
   console.log(

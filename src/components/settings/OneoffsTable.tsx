@@ -9,6 +9,7 @@
 
 import { compareDate } from "@/core/date";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DateInput, TextInput } from "@/components/ui/inputs";
@@ -27,7 +28,7 @@ const HEAD =
   "bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-8 py-8 text-left text-body-xxs font-semibold tracking-wide whitespace-nowrap";
 
 export function OneoffsTable() {
-  const { data, setData, today } = useAppData();
+  const { data, setData, today, session } = useAppData();
   const sorted = [...data.oneoffs].sort((a, b) => compareDate(a.date, b.date));
 
   return (
@@ -37,11 +38,12 @@ export function OneoffsTable() {
         <Button
           size="sm"
           disabled={data.accounts.length === 0 || !today}
-          onClick={() =>
+          onClick={() => {
             setData((d) =>
               addOneoff(d, blankOneoff(newId(), d.accounts[0].id, today ?? d.asOf)),
-            )
-          }
+            );
+            track(session?.user.id, "plan_created", { recurring: false });
+          }}
         >
           ＋ 追加
         </Button>

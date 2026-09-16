@@ -17,6 +17,7 @@ import { addDays } from "@/core/date";
 import { buildForecast } from "@/core/forecast";
 import type { Actual, EntryType, ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -45,7 +46,7 @@ import { DeferralEditor } from "./DeferralEditor";
 const PENDING_LOOKAHEAD_DAYS = 7;
 
 export function EntryScreen() {
-  const { data, setData, today } = useAppData();
+  const { data, setData, today, session } = useAppData();
   const [form, setForm] = useState<Actual | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
 
@@ -113,6 +114,10 @@ export function EntryScreen() {
   const submit = () => {
     if (!form || !form.name.trim() || form.amount === 0) return;
     setData((d) => addActual(d, { ...form, name: form.name.trim() }));
+    track(session?.user.id, "actual_recorded", {
+      settled: form.key !== null,
+      fromCsv: false,
+    });
     setForm(null);
   };
 
@@ -153,11 +158,13 @@ export function EntryScreen() {
                         <Button
                           size="sm"
                           color="black"
-                          onClick={() =>
-                            setData((d) =>
-                              settleAsPlanned(d, plan, newId()),
-                            )
-                          }
+                          onClick={() => {
+                            setData((d) => settleAsPlanned(d, plan, newId()));
+                            track(session?.user.id, "actual_recorded", {
+                              settled: true,
+                              fromCsv: false,
+                            });
+                          }}
                         >
                           予定どおり
                         </Button>

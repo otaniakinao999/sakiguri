@@ -18,6 +18,7 @@ import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import type { Actual, ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Select } from "@/components/ui/inputs";
@@ -46,7 +47,7 @@ const PLACEHOLDER = `日付,摘要,入金,出金
 2026/09/25,ｶ)ｴｰｼﾔ ｷﾞﾖｳﾑｲﾀｸ,450000,`;
 
 export function ImportScreen() {
-  const { data, setData, today } = useAppData();
+  const { data, setData, today, session } = useAppData();
 
   const [accountId, setAccountId] = useState<string>("");
   const [rows, setRows] = useState<string[][] | null>(null);
@@ -159,6 +160,15 @@ export function ImportScreen() {
       accountId: r.accountId,
     }));
     setData((d) => addActuals(d, actuals));
+    /* 件数だけを送る。金額・摘要・ファイル名は入れない（ADR-0013） */
+    track(session?.user.id, "csv_imported", {
+      rows: chosen.length,
+      matched: chosen.filter((r) => r.matchedKey).length,
+    });
+    track(session?.user.id, "actual_recorded", {
+      settled: chosen.some((r) => r.matchedKey),
+      fromCsv: true,
+    });
     setNotice(
       `${chosen.length}件を登録しました。うち${chosen.filter((r) => r.matchedKey).length}件が予定と紐づいています。`,
     );

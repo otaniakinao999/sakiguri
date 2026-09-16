@@ -13,6 +13,7 @@ import { useState } from "react";
 
 import type { ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DateInput, Field, NumberInput, TextInput } from "@/components/ui/inputs";
@@ -25,7 +26,7 @@ export function DeferralEditor({
   plan: ForecastInstance;
   onClose: () => void;
 }) {
-  const { data, setData } = useAppData();
+  const { data, setData, session } = useAppData();
   const existing = data.overrides[plan.key];
 
   const [date, setDate] = useState(plan.date);
@@ -36,6 +37,11 @@ export function DeferralEditor({
     setData((d) =>
       patch === null ? clearOverride(d, plan.key) : setOverride(d, plan.key, patch),
     );
+    if (patch !== null) {
+      track(session?.user.id, "plan_deferred", {
+        skipped: patch.skipped === true,
+      });
+    }
     onClose();
   };
 
