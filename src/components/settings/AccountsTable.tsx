@@ -111,8 +111,12 @@ export function AccountsTable() {
                   </td>
                   <td className={CELL}>
                     <NumberInput
-                      aria-label="残高"
+                      aria-label={isCard(account) ? "未払残高" : "残高"}
                       value={account.balance}
+                      /* 口座はマイナスを許す（当座借越・残高マイナス）。
+                         カードの未払残高は「正の値」と決まっている（§3.2）。
+                         返金はカードの未払ではなく口座側で処理する */
+                      allowNegative={!isCard(account)}
                       onValueChange={(balance) => patch(account.id, { balance })}
                     />
                   </td>

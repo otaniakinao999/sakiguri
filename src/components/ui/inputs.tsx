@@ -8,7 +8,7 @@
  *   金額・件数・日付を含む数値は等幅（tabular-nums）にする。
  */
 
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import {
   CATEGORIES,
@@ -16,6 +16,7 @@ import {
   type CategoryGroup,
 } from "@/core/categories";
 import type { EntryType } from "@/core/types";
+import { parseNumberField } from "@/lib/number-field";
 
 const CONTROL =
   "border-border-base-high bg-surface-base-primary text-object-base-high w-full rounded-base border px-8 py-4 text-body-xs leading-normal disabled:bg-surface-overlay-hoverd disabled:text-object-base-low";
@@ -60,27 +61,48 @@ export function DateInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
  *
  * 数字以外を弾き、右寄せの等幅で出す。金額は円単位の整数で持つ
  * （ADR-0001）ので、小数点も指数も受け付けない。
+ * 解析の規則と根拠は `@/lib/number-field` にある。
+ *
+ * **入力途中の文字列を自前で持つ。** 値（number）から表示を作り直すと、
+ * 空文字が 0 に戻ってしまい、既存の値を消して入れ直せなくなる。
+ * 欄を離れたら下書きを捨て、正規化した値を出す。
  */
 export function NumberInput({
   value,
   onValueChange,
+  allowNegative = false,
   max,
+  onBlur,
   ...props
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
   value: number;
   onValueChange: (value: number) => void;
+  /** 負の値を受け付けるか。既定は false（要件定義書 §3.2「絶対値」） */
+  allowNegative?: boolean;
   max?: number;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+
   return (
     <input
       {...props}
       type="text"
-      inputMode="numeric"
-      value={value}
+      /* マイナスを打てる必要がある欄では数字キーパッドに符号が無いため text
+         にする。それ以外は numeric のままにして入力を楽にする */
+      inputMode={allowNegative ? "text" : "numeric"}
+      value={draft ?? String(value)}
       onChange={(e) => {
-        const digits = e.target.value.replace(/[^\d]/g, "");
-        const parsed = digits === "" ? 0 : Number(digits);
-        onValueChange(max === undefined ? parsed : Math.min(parsed, max));
+        const { text, value: parsed, clamped } = parseNumberField(e.target.value, {
+          allowNegative,
+          max,
+        });
+        /* 上限で丸めたときは下書きを捨て、丸めた値を見せる */
+        setDraft(clamped ? null : text);
+        onValueChange(parsed);
+      }}
+      onBlur={(e) => {
+        setDraft(null);
+        onBlur?.(e);
       }}
       className={`${CONTROL} num text-right`}
     />
