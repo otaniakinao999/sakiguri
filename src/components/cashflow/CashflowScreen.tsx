@@ -124,22 +124,15 @@ export function CashflowScreen() {
   }, [computed, range]);
 
   /* ---------- 指標（PoC開発計画 §4） ----------
-     警告を見せたこと、予定がどこまで先にあるかを記録する。
-     金額も日付も送らない。送るのは種別と「何日先か」「何ヶ月ぶんか」だけ
+     予定がどこまで先にあるかを記録する。金額も日付も送らない
      （docs/adr/0013）。画面を開くたびに1回だけ。 */
   const reportedRef = useRef(false);
   useEffect(() => {
     if (!computed || !today || reportedRef.current) return;
     reportedRef.current = true;
 
-    const firstWarning = computed.monthly.find((m) => m.warning);
-    if (firstWarning?.warning) {
-      track(session?.user.id, "shortfall_warned", {
-        shortfall: firstWarning.warning.kind === "shortfall",
-        daysAhead: daysBetween(today, firstWarning.warning.date),
-      });
-    }
-
+    /* 警告の記録はダッシュボード（SC-02）に一本化してある。
+       ここでも出すと、同じ警告が2回数えられて指標の分母がふくらむ。 */
     const lastPlan = computed.series.unmatchedForecast.at(-1)?.date;
     track(session?.user.id, "forecast_horizon", {
       months: lastPlan

@@ -65,6 +65,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       actual_recorded: { settled: true, fromCsv: false },
       csv_imported: { rows: 12, matched: 3 },
       shortfall_warned: { shortfall: false, daysAhead: 41 },
+      shortfall_acted: { toEntry: true },
       plan_deferred: { skipped: false },
       forecast_horizon: { months: 8, accounts: 3 },
     };
@@ -84,6 +85,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       "actual_recorded",
       "csv_imported",
       "shortfall_warned",
+      "shortfall_acted",
       "plan_deferred",
       "forecast_horizon",
     ];

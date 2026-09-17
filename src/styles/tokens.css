@@ -231,6 +231,9 @@
   /* サインイン画面のカード幅 */
   --layout-signin-width: 384px;
 
+  /* ダッシュボードの一覧の高さ */
+  --layout-dashboard-list-height: 240px;
+
   /* 900px 未満で上部の横並びに切り替える（designsystem.md §5）。
      ブレークポイントはここに置けない。メディアクエリの条件に
      CSS カスタムプロパティを書けないため、globals.css の @theme に
