@@ -14,6 +14,7 @@ import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { NumberInput, TextInput } from "@/components/ui/inputs";
+import { parseMonthsField } from "@/lib/number-field";
 import {
   addRecurring,
   blankRecurring,
@@ -28,16 +29,6 @@ import { EntryFieldCells } from "./EntryFields";
 const CELL = "border-b-border-base-low border-b px-8 py-8 align-top";
 const HEAD =
   "bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-8 py-8 text-left text-body-xxs font-semibold tracking-wide whitespace-nowrap";
-
-/** "6,8,10,1" のような入力を月の配列にする。空なら毎月（null）。 */
-function parseMonths(text: string): number[] | null {
-  const trimmed = text.trim();
-  if (trimmed === "") return null;
-  return trimmed
-    .split(/[,、\s]+/)
-    .map(Number)
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 12);
-}
 
 export function RecurringTable() {
   const { data, setData, session } = useAppData();
@@ -118,7 +109,7 @@ export function RecurringTable() {
                       onChange={(e) =>
                         setData((d) =>
                           updateRecurring(d, item.id, {
-                            months: parseMonths(e.target.value),
+                            months: parseMonthsField(e.target.value),
                           }),
                         )
                       }

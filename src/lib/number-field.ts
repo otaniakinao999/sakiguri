@@ -19,6 +19,18 @@
 const FULLWIDTH_DIGITS = /[０-９]/g;
 
 /**
+ * 全角数字を半角にする。
+ *
+ * 数字を読む入口すべてで使う。落とすと値が黙って 0 や空になり、
+ * 画面上は正常に見えるまま結果だけが変わる。
+ */
+export function normalizeDigits(text: string): string {
+  return text.replace(FULLWIDTH_DIGITS, (c) =>
+    String.fromCharCode(c.charCodeAt(0) - 0xfee0),
+  );
+}
+
+/**
  * マイナスとして扱う文字。
  *
  * `-` のほか、表示に使っている U+2212（format.ts の MINUS）と、
@@ -69,9 +81,7 @@ export function parseNumberField(
   raw: string,
   { allowNegative = false, max }: NumberFieldOptions = {},
 ): NumberFieldResult {
-  const normalized = raw.replace(FULLWIDTH_DIGITS, (c) =>
-    String.fromCharCode(c.charCodeAt(0) - 0xfee0),
-  );
+  const normalized = normalizeDigits(raw);
 
   /* 符号は先頭のものだけを見る。途中の `-` は区切り文字とみなして落とす */
   const negative = allowNegative && MINUS_CHARS.test(normalized.trimStart()[0] ?? "");
@@ -89,4 +99,32 @@ export function parseNumberField(
 
   const sign = negative ? "-" : "";
   return { text: clamped ? String(value) : `${sign}${trimmed}`, value, clamped };
+}
+
+/**
+ * 定期項目の「対象月」欄を月の配列にする。
+ *
+ * 一次情報：docs/要件定義書.md §3.2「months … 発生月の配列。null は毎月」
+ * 対応する受入基準：AC-21
+ *
+ * `"6,8,10,1"` のような入力を受ける。区切りはカンマ・読点・空白。
+ *
+ * **有効な月が1つも取れないときは null（毎月）を返す。空配列を返さない。**
+ * 空配列は CL-1 で1件も展開されない一方、画面は
+ * `months ? months.join(",") : ""` で描くため空欄＝「毎月」に見える。
+ * 停止していない定期項目が、原因の見えないまま消える。
+ *
+ * 全角数字を半角に直してから読む。日本語IMEで「６」と打たれたものを
+ * 落とすと、やはり黙って毎月でなくなる。
+ */
+export function parseMonthsField(text: string): number[] | null {
+  const trimmed = normalizeDigits(text).trim();
+  if (trimmed === "") return null;
+
+  const months = trimmed
+    .split(/[,、\s]+/)
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 12);
+
+  return months.length > 0 ? [...new Set(months)].sort((a, b) => a - b) : null;
 }

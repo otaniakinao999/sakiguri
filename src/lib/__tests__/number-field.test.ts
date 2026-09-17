@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseNumberField } from "../number-field";
+import { parseMonthsField, parseNumberField } from "../number-field";
 
 /**
  * 一次情報：docs/要件定義書.md §3.2、§4.3
@@ -107,6 +107,51 @@ describe("上限", () => {
   });
 });
 
+/* ========================= 対象月（AC-21） ========================= */
+
+describe("対象月の解析（AC-21）", () => {
+  it("指定した月を配列にする", () => {
+    expect(parseMonthsField("6,8,10,1")).toEqual([1, 6, 8, 10]);
+  });
+
+  it("読点・空白でも区切れる", () => {
+    expect(parseMonthsField("6、8 10")).toEqual([6, 8, 10]);
+  });
+
+  it("空なら毎月（null）", () => {
+    expect(parseMonthsField("")).toBeNull();
+    expect(parseMonthsField("   ")).toBeNull();
+  });
+
+  /**
+   * ここが AC-21 の本体。
+   *
+   * 空配列を返すと CL-1 が1件も展開しない一方、画面は空欄＝「毎月」に
+   * 見える。停止していない定期項目が原因の見えないまま消えるため、
+   * **有効な月が1つも無い入力は null（毎月）に倒す。**
+   */
+  it("有効な月が1つも無ければ null。空配列を返さない", () => {
+    expect(parseMonthsField("13")).toBeNull();
+    expect(parseMonthsField("0")).toBeNull();
+    expect(parseMonthsField("毎月")).toBeNull();
+    expect(parseMonthsField(",,,")).toBeNull();
+  });
+
+  it("全角数字を受ける", () => {
+    /* 日本語IMEでそのまま打たれる。落とすと空配列になり項目が消えていた */
+    expect(parseMonthsField("６")).toEqual([6]);
+    expect(parseMonthsField("６、８、１０")).toEqual([6, 8, 10]);
+  });
+
+  it("範囲外の月だけを落とす", () => {
+    expect(parseMonthsField("0,6,13,12")).toEqual([6, 12]);
+  });
+
+  it("重複を畳んで昇順にする", () => {
+    expect(parseMonthsField("10,6,6,1")).toEqual([1, 6, 10]);
+  });
+});
+
 /* ========================= 純関数であること ========================= */
 
 describe("純関数であること", () => {
@@ -114,5 +159,6 @@ describe("純関数であること", () => {
     expect(parseNumberField("１,２３４", { allowNegative: true })).toEqual(
       parseNumberField("１,２３４", { allowNegative: true }),
     );
+    expect(parseMonthsField("６、８")).toEqual(parseMonthsField("６、８"));
   });
 });

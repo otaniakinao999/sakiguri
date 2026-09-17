@@ -117,10 +117,41 @@ describe("CL-1 定期項目の展開", () => {
     ]);
   });
 
-  it("months が空配列なら発生しない", () => {
+  /**
+   * AC-21。
+   *
+   * 以前はここで「空配列なら発生しない」と固定していた。要件定義書 §3.2 は
+   * `months` を「発生月の配列。null は毎月」としか定めておらず、空配列の
+   * 意味を決めていない。実装の挙動をそのまま書き写したテストだった。
+   *
+   * 実際には画面が `months ? months.join(",") : ""` で描くため、空配列は
+   * 空欄＝「毎月」に見える。表示と計算が食い違い、停止もしていない定期項目
+   * が1件も出ない状態になっていた。表示側に合わせて毎月とする。
+   */
+  it("AC-21: months が空配列なら毎月発生する（画面の空欄と一致させる）", () => {
     const item = recurring({ id: "r1", day: 10, months: [] });
 
+    expect(dates(expandRecurring(item, "2026-01-01", "2026-03-31"))).toEqual([
+      "2026-01-10",
+      "2026-02-10",
+      "2026-03-10",
+    ]);
+  });
+
+  it("AC-21: months が空配列でも、停止していれば展開しない", () => {
+    /* 「発生しない定期項目」は active: false で表す。[] に別の意味は持たせない */
+    const item = recurring({ id: "r1", day: 10, months: [], active: false });
+
     expect(expandRecurring(item, "2026-01-01", "2026-12-31")).toEqual([]);
+  });
+
+  it("AC-21: 空配列と null が同じ結果になる", () => {
+    const empty = recurring({ id: "r1", day: 10, months: [] });
+    const none = recurring({ id: "r1", day: 10, months: null });
+
+    expect(expandRecurring(empty, "2026-01-01", "2026-12-31")).toEqual(
+      expandRecurring(none, "2026-01-01", "2026-12-31"),
+    );
   });
 
   it("active が false の項目は展開しない", () => {
