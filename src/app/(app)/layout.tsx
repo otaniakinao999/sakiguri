@@ -8,6 +8,7 @@
 import { AppDataProvider } from "@/components/app-shell/AppDataProvider";
 import { AuthGate } from "@/components/app-shell/AuthGate";
 import { BalanceHeader } from "@/components/app-shell/BalanceHeader";
+import { SaveToast } from "@/components/app-shell/SaveToast";
 import { Sidebar } from "@/components/app-shell/Sidebar";
 
 export default function AppLayout({
@@ -25,6 +26,7 @@ export default function AppLayout({
             </main>
           </div>
         </div>
+        <SaveToast />
       </AuthGate>
     </AppDataProvider>
   );

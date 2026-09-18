@@ -36,11 +36,21 @@ const SAVE_DEBOUNCE_MS = 400;
 /** 今日が定まるまでの仮の基準日。マウント直後に実際の日付へ差し替える。 */
 const PLACEHOLDER_DATE = "1970-01-01";
 
-export type SaveState =
+/**
+ * 保存の状態。
+ *
+ * `seq` は状態が切り替わるたびに増える。トーストは「保存しました」を
+ * 2秒で自動的に消すが、消したあと**同じ状態へもう一度入った**ことを
+ * 検知できないと2回目以降が出ない。値が同じでも別の出来事だと分かる
+ * ようにするための連番である。
+ */
+export type SaveStatePayload =
   | { status: "idle" }
   | { status: "saving" }
   | { status: "saved" }
   | { status: "error"; message: string };
+
+export type SaveState = SaveStatePayload & { seq: number };
 
 export interface AppDataStore {
   data: AppData;
@@ -51,6 +61,8 @@ export interface AppDataStore {
   /** 認証の確認とデータの読み込みが終わったか */
   ready: boolean;
   saveState: SaveState;
+  /** 失敗した保存をもう一度試す。デバウンスを待たずに即座に送る */
+  retrySave: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -77,12 +89,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [saveState, setSaveState] = useState<SaveState>({ status: "idle", seq: 0 });
 
   /** 前回保存に成功した状態。これとの差分だけを送る */
   const savedRef = useRef<AppData | null>(null);
   /** 読み込みが終わるまでは保存しない。空のデータで上書きしないため */
   const loadedRef = useRef(false);
+  /** 再試行は「いま画面にある最新」を送る。保存中に加わった変更も拾う */
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  const seqRef = useRef(0);
+  const toState = useCallback(
+    (next: SaveStatePayload) => setSaveState({ ...next, seq: ++seqRef.current }),
+    [],
+  );
 
   useEffect(() => {
     setToday(todayStr());
@@ -119,12 +140,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         loadedRef.current = false;
         savedRef.current = null;
         setDataState(emptyAppData(todayStr()));
-        setSaveState({ status: "idle" });
+        toState({ status: "idle" });
         setReady(true);
       }
     });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [toState]);
 
   /* ---------- 読み込み ---------- */
   useEffect(() => {
@@ -138,10 +159,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         setDataState(loaded);
         savedRef.current = loaded;
         loadedRef.current = true;
-        setSaveState({ status: "idle" });
+        toState({ status: "idle" });
       } catch (e) {
         if (cancelled) return;
-        setSaveState({
+        toState({
           status: "error",
           message: `読み込めませんでした：${e instanceof Error ? e.message : String(e)}`,
         });
@@ -153,34 +174,48 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session, today]);
+  }, [session, today, toState]);
 
-  /* ---------- 保存（400ms デバウンス） ---------- */
-  useEffect(() => {
+  /* ---------- 保存 ---------- */
+
+  /**
+   * いま溜まっている差分を送る。
+   *
+   * デバウンス後の自動保存と、失敗したあとの再試行の両方から呼ぶ。
+   * 送る対象は `dataRef.current`（＝最新）で、呼ばれた時点で差分が
+   * 無ければ何もしない。
+   */
+  const runSave = useCallback(async () => {
     if (!session || !loadedRef.current) return;
 
-    const diff = diffAppData(savedRef.current, data);
+    const target = dataRef.current;
+    const diff = diffAppData(savedRef.current, target);
     if (diff.empty) return;
 
-    const timer = setTimeout(() => {
-      void (async () => {
-        setSaveState({ status: "saving" });
-        try {
-          await saveDiff(getSupabase(), session.user.id, diff, data);
-          /* 成功したときだけ基準を進める。失敗したら次回まとめて送り直す */
-          savedRef.current = data;
-          setSaveState({ status: "saved" });
-        } catch (e) {
-          setSaveState({
-            status: "error",
-            message: e instanceof Error ? e.message : String(e),
-          });
-        }
-      })();
-    }, SAVE_DEBOUNCE_MS);
+    toState({ status: "saving" });
+    try {
+      await saveDiff(getSupabase(), session.user.id, diff, target);
+      /* 成功したときだけ基準を進める。失敗したら次回まとめて送り直す */
+      savedRef.current = target;
+      toState({ status: "saved" });
+    } catch (e) {
+      toState({
+        status: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }, [session, toState]);
 
+  /* 400ms デバウンス（要件定義書 §5.2） */
+  useEffect(() => {
+    if (!session || !loadedRef.current) return;
+    if (diffAppData(savedRef.current, data).empty) return;
+
+    const timer = setTimeout(() => void runSave(), SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [data, session]);
+  }, [data, session, runSave]);
+
+  const retrySave = useCallback(() => void runSave(), [runSave]);
 
   const setData = useCallback((update: (previous: AppData) => AppData) => {
     setDataState(update);
@@ -191,8 +226,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const store = useMemo(
-    () => ({ data, setData, today, session, ready, saveState, signOut }),
-    [data, setData, today, session, ready, saveState, signOut],
+    () => ({ data, setData, today, session, ready, saveState, retrySave, signOut }),
+    [data, setData, today, session, ready, saveState, retrySave, signOut],
   );
 
   return (
