@@ -102,29 +102,43 @@ export function parseNumberField(
 }
 
 /**
+ * 対象月欄の解析結果。
+ *
+ * 「読めなかった」を値で表さずに分けている。`null`（毎月）も `[]`（発生
+ * しない）も**意味を持つ正当な値**なので、失敗の受け皿に使えない。
+ */
+export type MonthsFieldResult =
+  | { ok: true; months: number[] | null }
+  | { ok: false; reason: "no-valid-month" };
+
+/**
  * 定期項目の「対象月」欄を月の配列にする。
  *
- * 一次情報：docs/要件定義書.md §3.2「months … 発生月の配列。null は毎月」
+ * 一次情報：docs/要件定義書.md §3.2 months
  * 対応する受入基準：AC-21
  *
  * `"6,8,10,1"` のような入力を受ける。区切りはカンマ・読点・空白。
+ * 空欄は `null`（毎月）。
  *
- * **有効な月が1つも取れないときは null（毎月）を返す。空配列を返さない。**
- * 空配列は CL-1 で1件も展開されない一方、画面は
+ * **有効な月が1つも取れない入力は失敗として返す。値を作らない。**
+ * ここで `[]` を返すと CL-1 が1件も展開せず、しかも画面は
  * `months ? months.join(",") : ""` で描くため空欄＝「毎月」に見える。
- * 停止していない定期項目が、原因の見えないまま消える。
+ * かといって `null` に倒すと、誤入力が全月に1件ずつ発生して資金繰りが
+ * 大きく狂い、利用者は気づけない。どちらも選ばず、呼び出し側に
+ * 「直前の値を保ってエラーを出す」を選ばせる。
  *
  * 全角数字を半角に直してから読む。日本語IMEで「６」と打たれたものを
- * 落とすと、やはり黙って毎月でなくなる。
+ * 落とすと、やはり黙って意味が変わる。
  */
-export function parseMonthsField(text: string): number[] | null {
+export function parseMonthsField(text: string): MonthsFieldResult {
   const trimmed = normalizeDigits(text).trim();
-  if (trimmed === "") return null;
+  if (trimmed === "") return { ok: true, months: null };
 
   const months = trimmed
     .split(/[,、\s]+/)
     .map(Number)
     .filter((n) => Number.isInteger(n) && n >= 1 && n <= 12);
 
-  return months.length > 0 ? [...new Set(months)].sort((a, b) => a - b) : null;
+  if (months.length === 0) return { ok: false, reason: "no-valid-month" };
+  return { ok: true, months: [...new Set(months)].sort((a, b) => a - b) };
 }

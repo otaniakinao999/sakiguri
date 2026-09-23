@@ -16,7 +16,7 @@ import {
   type CategoryGroup,
 } from "@/core/categories";
 import type { EntryType } from "@/core/types";
-import { parseNumberField } from "@/lib/number-field";
+import { parseMonthsField, parseNumberField } from "@/lib/number-field";
 
 const CONTROL =
   "border-border-base-high bg-surface-base-primary text-object-base-high w-full rounded-base border px-8 py-4 text-body-xs leading-normal disabled:bg-surface-overlay-hoverd disabled:text-object-base-low";
@@ -106,6 +106,64 @@ export function NumberInput({
       }}
       className={`${CONTROL} num text-right`}
     />
+  );
+}
+
+/**
+ * 定期項目の「対象月」の入力（AC-21）。
+ *
+ * 一次情報：docs/要件定義書.md §3.2 months
+ *   null は毎月、配列はその月だけ、空配列はどの月でもない（＝発生しない）。
+ *
+ * **読めない入力では値を書き換えない。** 直前の値を保ったままエラーを
+ * 出す。空配列を保存すると CL-1 が1件も展開しないのに欄は空欄＝「毎月」
+ * に見え、逆に null へ倒すと誤入力が全月に1件ずつ発生して気づけない。
+ * どちらも黙って資金繰りを変えてしまうので、書き換えずに知らせる。
+ *
+ * 入力途中の文字列は自前で持つ（ADR-0015 と同じ理由）。
+ */
+export function MonthsInput({
+  value,
+  onValueChange,
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
+  value: number[] | null;
+  onValueChange: (months: number[] | null) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState(false);
+  const messageId = useId();
+
+  return (
+    <>
+      <input
+        {...props}
+        type="text"
+        value={draft ?? (value ? value.join(",") : "")}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? messageId : undefined}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setDraft(raw);
+          const got = parseMonthsField(raw);
+          setInvalid(!got.ok);
+          /* 読めたときだけ書き換える。読めなければ直前の値が残る */
+          if (got.ok) onValueChange(got.months);
+        }}
+        onBlur={(e) => {
+          /* 直せていないうちは打った文字を消さない。消すと何が悪いのか
+             分からなくなる */
+          if (!invalid) setDraft(null);
+          props.onBlur?.(e);
+        }}
+        className={`${CONTROL} ${invalid ? "border-object-error-dim" : ""}`}
+      />
+      {invalid && (
+        <p id={messageId} className="text-object-error-dim mt-4 text-body-xxs leading-normal">
+          1〜12 の月を入れてください。直前の指定のままにしてあります。
+        </p>
+      )}
+    </>
   );
 }
 

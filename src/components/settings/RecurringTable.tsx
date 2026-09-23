@@ -13,8 +13,7 @@ import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { NumberInput, TextInput } from "@/components/ui/inputs";
-import { parseMonthsField } from "@/lib/number-field";
+import { MonthsInput, NumberInput, TextInput } from "@/components/ui/inputs";
 import {
   addRecurring,
   blankRecurring,
@@ -102,16 +101,12 @@ export function RecurringTable() {
                     />
                   </td>
                   <td className={CELL}>
-                    <TextInput
+                    <MonthsInput
                       aria-label="対象月"
-                      value={item.months ? item.months.join(",") : ""}
+                      value={item.months}
                       placeholder="毎月"
-                      onChange={(e) =>
-                        setData((d) =>
-                          updateRecurring(d, item.id, {
-                            months: parseMonthsField(e.target.value),
-                          }),
-                        )
+                      onValueChange={(months) =>
+                        setData((d) => updateRecurring(d, item.id, { months }))
                       }
                     />
                   </td>

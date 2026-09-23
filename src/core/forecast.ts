@@ -54,7 +54,7 @@ export function oneoffKey(oneoffId: string): string {
  *
  * - `active` が false の項目は展開しない
  * - `months` が null なら毎月、配列ならその月（1〜12）だけ
- * - **`months` が空配列のときも毎月**とする。理由は下の実装のコメント
+ * - **空配列はどの月も含まないので1件も生成しない**（AC-21）
  * - 発生日は `min(day, その月の末日)`。`day = 31` は月末になる
  *
  * オーバーライドはまだ適用しない。期間による絞り込みも行わない
@@ -70,20 +70,16 @@ export function expandRecurring(
   const out: ForecastInstance[] = [];
   for (const { year, month } of eachMonth(from, to)) {
     /**
-     * 空配列は「毎月」として扱う。
+     * `months` が null なら毎月、配列ならその月だけ。
      *
-     * `months` が `[]` のとき、素直に `includes` で絞ると全月が外れ、
-     * 停止していない項目が1件も展開されない。しかも画面は
-     * `months ? months.join(",") : ""` で描くため、`[]` は空欄＝「毎月」に
-     * 見える。**表示と計算で解釈が食い違うと、利用者からは原因の見えない
-     * 消失になる。** 表示側に合わせて毎月とする。
+     * **空配列はどの月も含まないので、1件も生成しない。** 定義どおりで
+     * あり、安全側でもある。空配列を「毎月」と解釈すると、対象月欄への
+     * 誤入力が全月に1件ずつ発生して資金繰りが大きく狂い、しかも利用者は
+     * 気づけない。生成しないなら「入力したのに出てこない」と気づける。
      *
-     * 「発生しない定期項目」は `active: false`（停止）で表すので、`[]` に
-     * 別の意味を与える必要もない。
+     * 空配列を作らないのは入力側の責任である（AC-21）。
      */
-    if (item.months && item.months.length > 0 && !item.months.includes(month)) {
-      continue;
-    }
+    if (item.months && !item.months.includes(month)) continue;
 
     const date = dayInMonth(year, month, item.day);
     out.push({
