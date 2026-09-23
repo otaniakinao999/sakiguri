@@ -368,7 +368,7 @@ describe("CL-7 予定との自動照合", () => {
 
   it("金額が完全一致し、日付差12日以内、向きが同じなら候補になる", () => {
     const got = matchPlan(
-      { date: "2026-04-28", amount: 120_000, type: "expense" },
+      { date: "2026-04-28", amount: 120_000, type: "expense", accountId: "a1" },
       candidates,
     );
     expect(got?.key).toBe("p1");
@@ -376,31 +376,31 @@ describe("CL-7 予定との自動照合", () => {
 
   it("金額が1円でも違えば照合しない", () => {
     expect(
-      matchPlan({ date: "2026-04-27", amount: 119_999, type: "expense" }, candidates),
+      matchPlan({ date: "2026-04-27", amount: 119_999, type: "expense", accountId: "a1" }, candidates),
     ).toBeNull();
   });
 
   it("日付差12日ちょうどは照合する", () => {
     expect(
-      matchPlan({ date: "2026-05-09", amount: 120_000, type: "expense" }, candidates)?.key,
+      matchPlan({ date: "2026-05-09", amount: 120_000, type: "expense", accountId: "a1" }, candidates)?.key,
     ).toBe("p1");
   });
 
   it("日付差13日は照合しない", () => {
     expect(
-      matchPlan({ date: "2026-05-10", amount: 120_000, type: "expense" }, candidates),
+      matchPlan({ date: "2026-05-10", amount: 120_000, type: "expense", accountId: "a1" }, candidates),
     ).toBeNull();
   });
 
   it("前にずれていても12日以内なら照合する", () => {
     expect(
-      matchPlan({ date: "2026-04-15", amount: 120_000, type: "expense" }, candidates)?.key,
+      matchPlan({ date: "2026-04-15", amount: 120_000, type: "expense", accountId: "a1" }, candidates)?.key,
     ).toBe("p1");
   });
 
   it("収支の向きが違えば照合しない", () => {
     expect(
-      matchPlan({ date: "2026-04-27", amount: 120_000, type: "income" }, candidates),
+      matchPlan({ date: "2026-04-27", amount: 120_000, type: "income", accountId: "a1" }, candidates),
     ).toBeNull();
   });
 
@@ -410,7 +410,7 @@ describe("CL-7 予定との自動照合", () => {
       plan({ key: "second", date: "2026-04-21", amount: 5_000 }),
     ];
     expect(
-      matchPlan({ date: "2026-04-20", amount: 5_000, type: "expense" }, same)?.key,
+      matchPlan({ date: "2026-04-20", amount: 5_000, type: "expense", accountId: "a1" }, same)?.key,
     ).toBe("first");
   });
 
@@ -420,7 +420,7 @@ describe("CL-7 予定との自動照合", () => {
       plan({ key: "second", date: "2026-04-21", amount: 5_000 }),
     ];
     const got = matchPlan(
-      { date: "2026-04-20", amount: 5_000, type: "expense" },
+      { date: "2026-04-20", amount: 5_000, type: "expense", accountId: "a1" },
       same,
       new Set(["first"]),
     );
@@ -428,7 +428,71 @@ describe("CL-7 予定との自動照合", () => {
   });
 
   it("候補が無ければ null", () => {
-    expect(matchPlan({ date: "2026-04-27", amount: 1, type: "expense" }, [])).toBeNull();
+    expect(matchPlan({ date: "2026-04-27", amount: 1, type: "expense", accountId: "a1" }, [])).toBeNull();
+  });
+
+  /* ---------- 口座の一致（AC-33） ---------- */
+
+  it("AC-33: 口座が違えば照合しない", () => {
+    expect(
+      matchPlan(
+        { date: "2026-04-27", amount: 120_000, type: "expense", accountId: "a2" },
+        candidates,
+      ),
+    ).toBeNull();
+  });
+
+  /**
+   * AC-33 の本体。
+   *
+   * 探す側の予定は全口座にまたがっている。取込時に選ばせるのは取り込む
+   * 実績の口座だけなので、口座を条件にしないと同額・同日の別口座の予定に
+   * 当たる。しかも消し込みが成立するため誰も気づかない。
+   */
+  it("AC-33: 同額・同日の予定が別口座にあっても、選んだ口座の予定だけが当たる", () => {
+    const both = [
+      /* 三井住友カードの引落 80,000（先に並んでいる） */
+      plan({ key: "card", date: "2026-04-27", amount: 80_000, accountId: "c1" }),
+      /* ゆうちょから出る家賃 80,000 */
+      plan({ key: "bank", date: "2026-04-27", amount: 80_000, accountId: "a1" }),
+    ];
+
+    const got = matchPlan(
+      { date: "2026-04-27", amount: 80_000, type: "expense", accountId: "a1" },
+      both,
+    );
+
+    expect(got?.key).toBe("bank");
+  });
+
+  it("AC-33: カードの予定は銀行口座の行に当たらない", () => {
+    /* カードの引落は CL-2 で合算された1件として銀行に現れる。個別の利用
+       明細とは金額が一致しないが、従来はそれで偶然防がれていただけだった */
+    const card = [plan({ key: "card", date: "2026-04-27", amount: 9_800, accountId: "c1" })];
+
+    expect(
+      matchPlan(
+        { date: "2026-04-27", amount: 9_800, type: "expense", accountId: "a1" },
+        card,
+      ),
+    ).toBeNull();
+  });
+
+  it("AC-33: 取込全体でも、選んだ口座以外の予定は消し込まれない", () => {
+    const rows = parseCsv("日付,摘要,入金,出金\n2026/04/27,ﾔﾁﾝ,,80000");
+    const both = [
+      plan({ key: "card", date: "2026-04-27", amount: 80_000, accountId: "c1" }),
+      plan({ key: "bank", date: "2026-04-27", amount: 80_000, accountId: "a1" }),
+    ];
+
+    const got = buildImportRows({
+      rows,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: both,
+    });
+
+    expect(got[0].matchedKey).toBe("bank");
   });
 });
 
