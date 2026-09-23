@@ -32,7 +32,10 @@ import {
 } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
+import { findDoubleCounts } from "@/lib/reconcile";
+
 import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
+import { DoubleCountCard } from "./DoubleCountCard";
 import { DeferralEditor } from "./DeferralEditor";
 
 /** 消し込み待ちに出す範囲。今日から先1週間ぶんまで拾う */
@@ -45,8 +48,9 @@ export function EntryScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
 
-  const pending = useMemo(() => {
-    if (!today || data.accounts.length === 0) return [];
+  const { pending, doubleCounts } = useMemo(() => {
+    if (!today || data.accounts.length === 0)
+      return { pending: [], doubleCounts: [] };
     const to = forecastEnd(data.asOf);
     const forecast = buildForecast(
       {
@@ -63,7 +67,14 @@ export function EntryScreen() {
       today,
     );
     const limit = addDays(today, PENDING_LOOKAHEAD_DAYS);
-    return series.unmatchedForecast.filter((f) => f.date <= limit);
+    return {
+      pending: series.unmatchedForecast.filter((f) => f.date <= limit),
+      /* FR-46。key を持たない実績が同じ取引を二重に乗せていないか */
+      doubleCounts: findDoubleCounts({
+        actuals: data.actuals,
+        unmatchedForecast: series.unmatchedForecast,
+      }),
+    };
   }, [data, today]);
 
   const recent = useMemo(
@@ -141,6 +152,13 @@ export function EntryScreen() {
 
   return (
     <div className="grid gap-12 wide:grid-cols-2">
+      {/* ---------- 二重計上の候補（FR-46） ---------- */}
+      {doubleCounts.length > 0 && (
+        <div className="wide:col-span-2">
+          <DoubleCountCard candidates={doubleCounts} accounts={data.accounts} />
+        </div>
+      )}
+
       {/* ---------- 消し込み待ち（FR-06） ---------- */}
       <Card title={`消し込み待ちの予定（${pending.length}件）`}>
         {pending.length === 0 ? (

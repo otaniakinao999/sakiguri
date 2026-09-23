@@ -203,6 +203,29 @@ export function updateActual(
   };
 }
 
+/**
+ * 既存の実績を予定に紐づける（FR-46、AC-30）。
+ *
+ * `key` を張る**唯一の**経路。`updateActual` は編集で `key` が壊れないよう
+ * 型でも実行時でも弾いているので、二重計上の解消はここを通す。
+ * 分けてあるのは、紐づけの変更が「編集」とは別の意味を持つ操作だからである。
+ *
+ * 利用者が候補を確認して確定したときだけ呼ぶ。金額と日付が近いという理由で
+ * 自動的に呼んではいけない（FR-46）。
+ */
+export function linkActualToPlan(
+  data: AppData,
+  actualId: string,
+  planKey: string,
+): AppData {
+  return {
+    ...data,
+    actuals: data.actuals.map((a) =>
+      a.id === actualId ? { ...a, key: planKey } : a,
+    ),
+  };
+}
+
 export function removeActual(data: AppData, id: string): AppData {
   return { ...data, actuals: data.actuals.filter((a) => a.id !== id) };
 }
