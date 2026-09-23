@@ -169,6 +169,40 @@ export function addActuals(data: AppData, actuals: Actual[]): AppData {
   return { ...data, actuals: [...data.actuals, ...actuals] };
 }
 
+/**
+ * 実績の編集で変えてよい項目（FR-33）。
+ *
+ * **`id` と `key` は含めない。** `key` は予定との紐づけで、CL-3 手順2 は
+ * これだけを見て消し込みを判定する（日付にも金額にも依存しない）。
+ * 編集で触れるようにすると、金額を直しただけで消し込みが外れる。
+ */
+export type ActualPatch = Partial<Omit<Actual, "id" | "key">>;
+
+/**
+ * 実績を編集する（FR-33、AC-24〜AC-26）。
+ *
+ * CSV取込で費目が誤って推測された場合、削除して入れ直すのは現実的では
+ * ない。取込1回で数十件入るため。
+ *
+ * 型で `key` を弾いているが、実行時にも落とす。`patch as never` のような
+ * 抜け道で紐づけが切れると、原因を追うのが難しいバグになる。
+ */
+export function updateActual(
+  data: AppData,
+  id: string,
+  patch: ActualPatch,
+): AppData {
+  return {
+    ...data,
+    actuals: data.actuals.map((a) => {
+      if (a.id !== id) return a;
+      const next = { ...a, ...patch };
+      /* 何を渡されても id と key は元のまま */
+      return { ...next, id: a.id, key: a.key };
+    }),
+  };
+}
+
 export function removeActual(data: AppData, id: string): AppData {
   return { ...data, actuals: data.actuals.filter((a) => a.id !== id) };
 }

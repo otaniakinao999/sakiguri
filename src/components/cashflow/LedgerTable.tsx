@@ -13,6 +13,7 @@ import { Fragment, useState } from "react";
 
 import { categoryOf } from "@/core/categories";
 import type { Account } from "@/core/types";
+import { Button } from "@/components/ui/Button";
 import { KindTag, RatioTag, StatusTag } from "@/components/ui/Tag";
 import { formatAmount, formatMonthDay, MINUS } from "@/lib/format";
 import type { LedgerMonthGroup, LedgerView } from "@/lib/ledger";
@@ -94,9 +95,17 @@ function GroupHeader({
 export function LedgerTable({
   view,
   accounts,
+  onEditActual,
 }: {
   view: LedgerView;
   accounts: Account[];
+  /**
+   * 実績行の「編集」を押したとき（FR-33）。
+   *
+   * 入出金予定表は実績の編集の入口の1つ。もう1つは実績入力画面の
+   * 「最近の実績」一覧。渡さなければボタンを出さない。
+   */
+  onEditActual?: (actualId: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const accountName = (id: string) =>
@@ -226,7 +235,16 @@ export function LedgerTable({
                           </span>
                         )}
                       </td>
-                      <td className={CELL} />
+                      <td className={`${CELL} text-right`}>
+                        {entry.status === "actual" && entry.srcId && onEditActual && (
+                          <Button
+                            size="sm"
+                            onClick={() => onEditActual(entry.srcId!)}
+                          >
+                            編集
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
               </Fragment>

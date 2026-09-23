@@ -48,6 +48,9 @@ export function actualToEvent(actual: Actual): LedgerEvent {
     accountId: actual.accountId,
     toAccountId: actual.toAccountId,
     src: "actual",
+    /* 入出金予定表から編集するために実績の id を運ぶ（FR-33）。
+       key は予定との紐づけで、突発の実績では null になるため使えない */
+    srcId: actual.id,
   };
 }
 

@@ -367,6 +367,27 @@ describe("actualToEvent", () => {
       accountId: "a1",
       toAccountId: undefined,
       src: "actual",
+      /* 入出金予定表から実績を編集するために id を運ぶ（FR-33）。
+         key は予定との紐づけで、突発の実績では null になるため使えない */
+      srcId: "act1",
     });
+  });
+
+  it("突発の実績（key が null）でも srcId は入る", () => {
+    const sudden: Actual = {
+      id: "act2",
+      key: null,
+      date: "2026-04-20",
+      name: "スーパー",
+      type: "expense",
+      costType: "variable",
+      categoryCode: "EXP-21",
+      amount: 4_820,
+      bizRatio: 0,
+      accountId: "a1",
+    };
+
+    expect(actualToEvent(sudden).key).toBeNull();
+    expect(actualToEvent(sudden).srcId).toBe("act2");
   });
 });

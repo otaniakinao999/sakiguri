@@ -15,20 +15,11 @@ import { buildBalanceSeries } from "@/core/balance";
 import { categoryOf } from "@/core/categories";
 import { addDays } from "@/core/date";
 import { buildForecast } from "@/core/forecast";
-import type { Actual, EntryType, ForecastInstance } from "@/core/types";
+import type { Actual, ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import {
-  CategorySelect,
-  DateInput,
-  Field,
-  fitCategory,
-  NumberInput,
-  Select,
-  TextInput,
-} from "@/components/ui/inputs";
 import { KindTag, RatioTag } from "@/components/ui/Tag";
 import { formatAmount, formatMonthDay, MINUS } from "@/lib/format";
 import {
@@ -37,9 +28,11 @@ import {
   newId,
   removeActual,
   settleAsPlanned,
+  updateActual,
 } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
+import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
 import { DeferralEditor } from "./DeferralEditor";
 
 /** 消し込み待ちに出す範囲。今日から先1週間ぶんまで拾う */
@@ -48,6 +41,8 @@ const PENDING_LOOKAHEAD_DAYS = 7;
 export function EntryScreen() {
   const { data, setData, today, session } = useAppData();
   const [form, setForm] = useState<Actual | null>(null);
+  /** 編集中の実績の id。新規入力なら null */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
 
   const pending = useMemo(() => {
@@ -94,31 +89,54 @@ export function EntryScreen() {
     );
   }
 
-  const startForm = (base?: Partial<Actual>) =>
-    setForm({
-      ...blankActual(newId(), data.accounts[0].id, today),
-      ...base,
-    });
+  const startForm = (base?: Partial<Actual>) => {
+    setEditingId(null);
+    setForm({ ...blankActual(newId(), data.accounts[0].id, today), ...base });
+  };
+
+  /** 既存の実績を編集する（FR-33）。 */
+  const startEdit = (actual: Actual) => {
+    setEditingId(actual.id);
+    setForm({ ...actual });
+  };
+
+  const closeForm = () => {
+    setForm(null);
+    setEditingId(null);
+  };
 
   const update = (patch: Partial<Actual>) =>
-    setForm((f) => {
-      if (!f) return f;
-      const next = { ...f, ...patch };
-      if (patch.type) {
-        next.costType = patch.type === "expense" ? (f.costType ?? "variable") : null;
-        next.categoryCode = fitCategory(patch.type, f.categoryCode);
-      }
-      return next;
-    });
+    setForm((f) => (f ? applyActualPatch(f, patch) : f));
 
   const submit = () => {
-    if (!form || !form.name.trim() || form.amount === 0) return;
-    setData((d) => addActual(d, { ...form, name: form.name.trim() }));
-    track(session?.user.id, "actual_recorded", {
-      settled: form.key !== null,
-      fromCsv: false,
-    });
-    setForm(null);
+    if (!form || !isSubmittable(form)) return;
+    const name = form.name.trim();
+
+    if (editingId) {
+      /* FR-33 が編集を認めている項目だけを渡す。id と key は含めない。
+         key は予定との紐づけで、これを触ると消し込みが外れる
+         （AC-24・AC-25）。updateActual 側でも落としている */
+      setData((d) =>
+        updateActual(d, editingId, {
+          date: form.date,
+          name,
+          type: form.type,
+          costType: form.costType,
+          categoryCode: form.categoryCode,
+          amount: form.amount,
+          bizRatio: form.bizRatio,
+          accountId: form.accountId,
+          toAccountId: form.toAccountId,
+        }),
+      );
+    } else {
+      setData((d) => addActual(d, { ...form, name }));
+      track(session?.user.id, "actual_recorded", {
+        settled: form.key !== null,
+        fromCsv: false,
+      });
+    }
+    closeForm();
   };
 
   return (
@@ -208,9 +226,15 @@ export function EntryScreen() {
         </p>
       </Card>
 
-      {/* ---------- 実績入力（FR-05） ---------- */}
+      {/* ---------- 実績入力・編集（FR-05、FR-33） ---------- */}
       <Card
-        title={form?.key ? "実績を入力（予定を消し込み）" : "実績を入力"}
+        title={
+          editingId
+            ? "実績を編集"
+            : form?.key
+              ? "実績を入力（予定を消し込み）"
+              : "実績を入力"
+        }
         right={
           form ? undefined : (
             <Button size="sm" color="black" onClick={() => startForm()}>
@@ -222,142 +246,17 @@ export function EntryScreen() {
         {!form ? (
           <p className="text-object-base-mid py-24 text-center text-body-xs">
             「入力する」を押すと、突発の入出金を手で登録できます。
+            登録済みの実績は下の一覧から編集できます。
           </p>
         ) : (
-          <>
-            <div className="grid gap-8 wide:grid-cols-2">
-              <Field label="日付">
-                {(id) => (
-                  <DateInput
-                    id={id}
-                    value={form.date}
-                    onChange={(e) => update({ date: e.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label="内容">
-                {(id) => (
-                  <TextInput
-                    id={id}
-                    value={form.name}
-                    placeholder="スーパー"
-                    onChange={(e) => update({ name: e.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label="金額">
-                {(id) => (
-                  <NumberInput
-                    id={id}
-                    value={form.amount}
-                    onValueChange={(amount) => update({ amount })}
-                  />
-                )}
-              </Field>
-              <Field label="収支">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={form.type}
-                    onChange={(e) => update({ type: e.target.value as EntryType })}
-                  >
-                    <option value="expense">支出</option>
-                    <option value="income">収入</option>
-                    <option value="transfer">振替</option>
-                  </Select>
-                )}
-              </Field>
-              <Field label="固定/変動">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={form.costType ?? ""}
-                    disabled={form.type !== "expense"}
-                    onChange={(e) =>
-                      update({ costType: e.target.value === "fixed" ? "fixed" : "variable" })
-                    }
-                  >
-                    <option value="variable">変動費</option>
-                    <option value="fixed">固定費</option>
-                  </Select>
-                )}
-              </Field>
-              <Field label="費目">
-                {(id) => (
-                  <CategorySelect
-                    id={id}
-                    type={form.type}
-                    value={form.categoryCode}
-                    onChange={(categoryCode) => update({ categoryCode })}
-                  />
-                )}
-              </Field>
-              <Field label="事業割合 %" hint="初期値は0。項目ごとに設定します">
-                {(id) => (
-                  <NumberInput
-                    id={id}
-                    value={form.bizRatio}
-                    max={100}
-                    onValueChange={(bizRatio) => update({ bizRatio })}
-                  />
-                )}
-              </Field>
-              <Field label="支払方法">
-                {(id) => (
-                  <Select
-                    id={id}
-                    value={form.accountId}
-                    onChange={(e) => update({ accountId: e.target.value })}
-                  >
-                    {data.accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                        {a.kind === "card" ? "（カード）" : ""}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-              {form.type === "transfer" && (
-                <Field label="振替先">
-                  {(id) => (
-                    <Select
-                      id={id}
-                      value={form.toAccountId ?? ""}
-                      onChange={(e) => update({ toAccountId: e.target.value })}
-                    >
-                      <option value="">選んでください</option>
-                      {data.accounts
-                        .filter((a) => a.id !== form.accountId)
-                        .map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                    </Select>
-                  )}
-                </Field>
-              )}
-            </div>
-
-            <div className="mt-12 flex gap-8">
-              <Button
-                color="black"
-                onClick={submit}
-                disabled={!form.name.trim() || form.amount === 0}
-              >
-                登録
-              </Button>
-              <Button onClick={() => setForm(null)}>やめる</Button>
-            </div>
-
-            {form.key && (
-              <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
-                この予定に紐づけて登録します。予測からは自動で除かれます。
-                年月別収支の「予定」列は変わりません。
-              </p>
-            )}
-          </>
+          <ActualForm
+            value={form}
+            accounts={data.accounts}
+            mode={editingId ? "edit" : "create"}
+            onChange={update}
+            onSubmit={submit}
+            onCancel={closeForm}
+          />
         )}
       </Card>
 
@@ -412,13 +311,20 @@ export function EntryScreen() {
                         {formatAmount(actual.amount)}
                       </td>
                       <td className="border-b-border-base-low border-b px-8 py-8 text-right">
-                        <Button
-                          size="sm"
-                          color="danger"
-                          onClick={() => setData((d) => removeActual(d, actual.id))}
-                        >
-                          削除
-                        </Button>
+                        <span className="flex justify-end gap-4">
+                          {/* FR-33。CSV取込で費目を誤って推測された分を
+                              削除せずに直せるようにする */}
+                          <Button size="sm" onClick={() => startEdit(actual)}>
+                            編集
+                          </Button>
+                          <Button
+                            size="sm"
+                            color="danger"
+                            onClick={() => setData((d) => removeActual(d, actual.id))}
+                          >
+                            削除
+                          </Button>
+                        </span>
                       </td>
                     </tr>
                   ))}

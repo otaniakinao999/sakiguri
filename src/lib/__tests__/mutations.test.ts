@@ -26,6 +26,7 @@ import {
   settleAsPlanned,
   toggleRecurringActive,
   updateAccount,
+  updateActual,
   updateOneoff,
   updateRecurring,
 } from "../mutations";
@@ -389,5 +390,162 @@ describe("オーバーライド", () => {
     );
 
     expect(forecast).toEqual([]);
+  });
+});
+
+/* ========================= 実績の編集（FR-33） ========================= */
+
+describe("FR-33 実績の編集", () => {
+  /** 4/27 の家賃を消し込んだ実績 */
+  const settled = {
+    id: "act1",
+    key: "r:rent:2026-04-27",
+    date: "2026-04-27",
+    name: "家賃",
+    type: "expense" as const,
+    costType: "fixed" as const,
+    categoryCode: "EXP-01",
+    amount: 120_000,
+    bizRatio: 0,
+    accountId: "a1",
+  };
+
+  const withSettled = () => addActual(base(), settled);
+
+  /** 消し込みが効いているか＝その予定が予測に残っていないか */
+  function stillSettled(data: AppData): boolean {
+    const forecast = buildForecast(
+      { recurring: data.recurring, oneoffs: data.oneoffs, overrides: data.overrides },
+      ASOF,
+      "2026-04-30",
+    );
+    const series = buildBalanceSeries(
+      { accounts: data.accounts, asOf: ASOF, forecast, actuals: data.actuals },
+      "2026-04-30",
+      TODAY,
+    );
+    return !series.unmatchedForecast.some((f) => f.key === settled.key);
+  }
+
+  it("編集できる項目が反映される", () => {
+    const data = updateActual(withSettled(), "act1", {
+      name: "家賃（4月分）",
+      amount: 118_000,
+      categoryCode: "EXP-02",
+      bizRatio: 40,
+      costType: "variable",
+    });
+    const [got] = data.actuals;
+
+    expect(got.name).toBe("家賃（4月分）");
+    expect(got.amount).toBe(118_000);
+    expect(got.categoryCode).toBe("EXP-02");
+    expect(got.bizRatio).toBe(40);
+    expect(got.costType).toBe("variable");
+  });
+
+  it("AC-24: 金額を変更しても消し込みが外れない", () => {
+    const before = withSettled();
+    expect(stillSettled(before)).toBe(true);
+
+    const after = updateActual(before, "act1", { amount: 118_000 });
+
+    expect(after.actuals[0].key).toBe(settled.key);
+    expect(stillSettled(after)).toBe(true);
+  });
+
+  it("AC-25: 日付を変更しても消し込みが外れない", () => {
+    /* CL-3 手順2 はキーだけで照合する。日付には依存しない */
+    const after = updateActual(withSettled(), "act1", { date: "2026-04-28" });
+
+    expect(after.actuals[0].key).toBe(settled.key);
+    expect(after.actuals[0].date).toBe("2026-04-28");
+    expect(stillSettled(after)).toBe(true);
+  });
+
+  it("AC-25: 変更後の日付で現金イベントが立つ", () => {
+    const after = updateActual(withSettled(), "act1", { date: "2026-04-28" });
+
+    expect(actualToEvent(after.actuals[0]).date).toBe("2026-04-28");
+  });
+
+  it("AC-26: 費目を直すと年月別収支の集計が変わる", () => {
+    const forecast = buildForecast(
+      { recurring: base().recurring, oneoffs: [], overrides: {} },
+      ASOF,
+      "2026-12-31",
+    );
+    /** 実績側の、その費目の年計。行はあっても金額が 0 なら計上されていない */
+    const actualTotal = (data: AppData, code: string) => {
+      const matrix = buildPLMatrix({
+        forecast,
+        actuals: data.actuals.map(actualToEvent),
+        year: 2026,
+        scope: "all",
+      });
+      return (
+        matrix.actual.groups
+          .flatMap((g) => g.rows)
+          .find((r) => r.categoryCode === code)?.yearTotal ?? 0
+      );
+    };
+
+    /* 変更前は固定費の EXP-01（家賃）に立っている */
+    expect(actualTotal(withSettled(), "EXP-01")).toBe(120_000);
+    expect(actualTotal(withSettled(), "EXP-21")).toBe(0);
+
+    const after = updateActual(withSettled(), "act1", {
+      categoryCode: "EXP-21",
+      costType: "variable",
+    });
+
+    /* 変動費の EXP-21（雑費）へ移り、EXP-01 からは抜けている */
+    expect(actualTotal(after, "EXP-21")).toBe(120_000);
+    expect(actualTotal(after, "EXP-01")).toBe(0);
+
+    /* それでも紐づけは維持されている */
+    expect(after.actuals[0].key).toBe(settled.key);
+  });
+
+  it("key は編集で変えられない", () => {
+    /* 型では弾いているが、抜け道で渡されても落とす */
+    const after = updateActual(withSettled(), "act1", {
+      key: null,
+      id: "別のid",
+    } as never);
+
+    expect(after.actuals[0].key).toBe(settled.key);
+    expect(after.actuals[0].id).toBe("act1");
+  });
+
+  it("突発の実績（key が null）を編集しても null のまま", () => {
+    const sudden = { ...settled, id: "act2", key: null, name: "スーパー" };
+    const after = updateActual(addActual(base(), sudden), "act2", {
+      amount: 4_820,
+    });
+
+    expect(after.actuals[0].key).toBeNull();
+    expect(after.actuals[0].amount).toBe(4_820);
+  });
+
+  it("他の実績には触らない", () => {
+    const two = addActual(withSettled(), {
+      ...settled,
+      id: "act2",
+      key: null,
+      name: "スーパー",
+    });
+    const after = updateActual(two, "act1", { amount: 1 });
+
+    expect(after.actuals[1]).toEqual(two.actuals[1]);
+  });
+
+  it("元のデータを書き換えない", () => {
+    const data = withSettled();
+    const snapshot = structuredClone(data);
+
+    updateActual(data, "act1", { amount: 1 });
+
+    expect(data).toEqual(snapshot);
   });
 });

@@ -204,6 +204,17 @@ export interface LedgerEvent {
   accountId: string;
   toAccountId?: string;
   src: EventSource;
+  /**
+   * このイベントの元になったレコードの id。
+   *
+   * `src` が `recurring` / `oneoff` なら RecurringItem / OneoffItem の id、
+   * `actual` なら Actual の id。`settle` は CL-2 の生成物で元レコードが
+   * 無いため undefined。
+   *
+   * 入出金予定表から実績を編集するために要る（FR-33）。`key` は予定との
+   * 紐づけであって実績の識別子ではなく、突発の実績では null になる。
+   */
+  srcId?: string;
 }
 
 /**

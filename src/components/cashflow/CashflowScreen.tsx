@@ -35,6 +35,14 @@ import {
   type PeriodPreset,
 } from "@/lib/period";
 
+import {
+  ActualForm,
+  applyActualPatch,
+  isSubmittable,
+} from "@/components/entry/ActualForm";
+import { updateActual } from "@/lib/mutations";
+import type { Actual } from "@/core/types";
+
 import { BalanceChart, type ChartGrain } from "./BalanceChart";
 import { LedgerTable } from "./LedgerTable";
 import { MonthlyCashflowTable } from "./MonthlyCashflowTable";
@@ -45,7 +53,7 @@ const GRAINS: readonly { value: ChartGrain; label: string }[] = [
 ];
 
 export function CashflowScreen() {
-  const { data, today, session } = useAppData();
+  const { data, setData, today, session } = useAppData();
 
   const [grain, setGrain] = useState<ChartGrain>("day");
   const [preset, setPreset] = useState<PeriodPreset>(DEFAULT_PRESET);
@@ -53,6 +61,14 @@ export function CashflowScreen() {
   const [customTo, setCustomTo] = useState<string | null>(null);
   const [kind, setKind] = useState<LedgerKind>("all");
   const [status, setStatus] = useState<LedgerStatus>("all");
+  /**
+   * 編集中の実績（FR-33）。
+   *
+   * 入出金予定表からも実績を直せるようにする。画面遷移させないのは、
+   * 明細の並びの中で直したいためと、クエリパラメータを足すと静的生成の
+   * 前提（ADR-0003）に Suspense 境界が要るようになるため。
+   */
+  const [editing, setEditing] = useState<Actual | null>(null);
 
   const computed = useMemo(() => {
     if (!today || data.accounts.length === 0) return null;
@@ -266,7 +282,49 @@ export function CashflowScreen() {
           />
         </div>
 
-        <LedgerTable view={view} accounts={data.accounts} />
+        {editing && (
+          <div className="border-border-accent-high bg-surface-accent-subtle rounded-base mb-12 border p-12">
+            <h3 className="text-object-base-high mb-12 text-body-sm font-semibold">
+              実績を編集
+            </h3>
+            <ActualForm
+              value={editing}
+              accounts={data.accounts}
+              mode="edit"
+              onChange={(patch) =>
+                setEditing((e) => (e ? applyActualPatch(e, patch) : e))
+              }
+              onSubmit={() => {
+                if (!editing || !isSubmittable(editing)) return;
+                const target = editing;
+                /* id と key は updateActual が保持する（AC-24・AC-25） */
+                setData((d) =>
+                  updateActual(d, target.id, {
+                    date: target.date,
+                    name: target.name.trim(),
+                    type: target.type,
+                    costType: target.costType,
+                    categoryCode: target.categoryCode,
+                    amount: target.amount,
+                    bizRatio: target.bizRatio,
+                    accountId: target.accountId,
+                    toAccountId: target.toAccountId,
+                  }),
+                );
+                setEditing(null);
+              }}
+              onCancel={() => setEditing(null)}
+            />
+          </div>
+        )}
+
+        <LedgerTable
+          view={view}
+          accounts={data.accounts}
+          onEditActual={(actualId) =>
+            setEditing(data.actuals.find((a) => a.id === actualId) ?? null)
+          }
+        />
       </Card>
     </div>
   );
