@@ -170,7 +170,7 @@ export function addActuals(data: AppData, actuals: Actual[]): AppData {
 }
 
 /**
- * 実績の編集で変えてよい項目（FR-33）。
+ * 実績の編集で変えてよい項目（FR-41）。
  *
  * **`id` と `key` は含めない。** `key` は予定との紐づけで、CL-3 手順2 は
  * これだけを見て消し込みを判定する（日付にも金額にも依存しない）。
@@ -179,7 +179,7 @@ export function addActuals(data: AppData, actuals: Actual[]): AppData {
 export type ActualPatch = Partial<Omit<Actual, "id" | "key">>;
 
 /**
- * 実績を編集する（FR-33、AC-24〜AC-26）。
+ * 実績を編集する（FR-41、AC-24〜AC-26）。
  *
  * CSV取込で費目が誤って推測された場合、削除して入れ直すのは現実的では
  * ない。取込1回で数十件入るため。

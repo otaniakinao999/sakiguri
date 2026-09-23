@@ -94,7 +94,7 @@ export function EntryScreen() {
     setForm({ ...blankActual(newId(), data.accounts[0].id, today), ...base });
   };
 
-  /** 既存の実績を編集する（FR-33）。 */
+  /** 既存の実績を編集する（FR-41）。 */
   const startEdit = (actual: Actual) => {
     setEditingId(actual.id);
     setForm({ ...actual });
@@ -113,7 +113,7 @@ export function EntryScreen() {
     const name = form.name.trim();
 
     if (editingId) {
-      /* FR-33 が編集を認めている項目だけを渡す。id と key は含めない。
+      /* FR-41 が編集を認めている項目だけを渡す。id と key は含めない。
          key は予定との紐づけで、これを触ると消し込みが外れる
          （AC-24・AC-25）。updateActual 側でも落としている */
       setData((d) =>
@@ -226,7 +226,7 @@ export function EntryScreen() {
         </p>
       </Card>
 
-      {/* ---------- 実績入力・編集（FR-05、FR-33） ---------- */}
+      {/* ---------- 実績入力・編集（FR-05、FR-41） ---------- */}
       <Card
         title={
           editingId
@@ -312,7 +312,7 @@ export function EntryScreen() {
                       </td>
                       <td className="border-b-border-base-low border-b px-8 py-8 text-right">
                         <span className="flex justify-end gap-4">
-                          {/* FR-33。CSV取込で費目を誤って推測された分を
+                          {/* FR-41。CSV取込で費目を誤って推測された分を
                               削除せずに直せるようにする */}
                           <Button size="sm" onClick={() => startEdit(actual)}>
                             編集

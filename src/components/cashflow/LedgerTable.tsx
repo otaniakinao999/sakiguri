@@ -100,7 +100,7 @@ export function LedgerTable({
   view: LedgerView;
   accounts: Account[];
   /**
-   * 実績行の「編集」を押したとき（FR-33）。
+   * 実績行の「編集」を押したとき（FR-41）。
    *
    * 入出金予定表は実績の編集の入口の1つ。もう1つは実績入力画面の
    * 「最近の実績」一覧。渡さなければボタンを出さない。

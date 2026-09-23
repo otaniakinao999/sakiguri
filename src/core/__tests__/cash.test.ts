@@ -367,7 +367,7 @@ describe("actualToEvent", () => {
       accountId: "a1",
       toAccountId: undefined,
       src: "actual",
-      /* 入出金予定表から実績を編集するために id を運ぶ（FR-33）。
+      /* 入出金予定表から実績を編集するために id を運ぶ（FR-41）。
          key は予定との紐づけで、突発の実績では null になるため使えない */
       srcId: "act1",
     });

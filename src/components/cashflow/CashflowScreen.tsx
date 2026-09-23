@@ -62,7 +62,7 @@ export function CashflowScreen() {
   const [kind, setKind] = useState<LedgerKind>("all");
   const [status, setStatus] = useState<LedgerStatus>("all");
   /**
-   * 編集中の実績（FR-33）。
+   * 編集中の実績（FR-41）。
    *
    * 入出金予定表からも実績を直せるようにする。画面遷移させないのは、
    * 明細の並びの中で直したいためと、クエリパラメータを足すと静的生成の
