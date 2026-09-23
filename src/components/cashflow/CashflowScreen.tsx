@@ -27,6 +27,7 @@ import {
   type LedgerStatus,
 } from "@/lib/ledger";
 import {
+  DEFAULT_PRESET,
   forecastEnd,
   PERIOD_PRESETS,
   resolveRange,
@@ -47,7 +48,7 @@ export function CashflowScreen() {
   const { data, today, session } = useAppData();
 
   const [grain, setGrain] = useState<ChartGrain>("day");
-  const [preset, setPreset] = useState<PeriodPreset>(3);
+  const [preset, setPreset] = useState<PeriodPreset>(DEFAULT_PRESET);
   const [customFrom, setCustomFrom] = useState<string | null>(null);
   const [customTo, setCustomTo] = useState<string | null>(null);
   const [kind, setKind] = useState<LedgerKind>("all");
@@ -98,7 +99,7 @@ export function CashflowScreen() {
   }, [preset, customFrom, customTo, data.asOf, today, computed]);
 
   const view = useMemo(() => {
-    if (!computed) return null;
+    if (!computed || !today) return null;
     return buildLedgerView({
       series: computed.series,
       monthly: computed.monthly,
@@ -106,8 +107,9 @@ export function CashflowScreen() {
       to: range.to,
       kind,
       status,
+      today,
     });
-  }, [computed, range, kind, status]);
+  }, [computed, range, kind, status, today]);
 
   /* 表示範囲に絞った行と月 */
   const inRange = useMemo(() => {

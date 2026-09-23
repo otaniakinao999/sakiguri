@@ -45,7 +45,15 @@ function GroupHeader({
           </span>
           <span className="text-object-base-mid text-body-xxs">
             {group.count}件
+            {/* 過去月は「何件あるか」より「実態がどこまで入っているか」が
+                知りたい情報になる（要件定義書 §4.2 過去月の表示） */}
+            {group.past && `（実績 ${group.actualCount}件）`}
           </span>
+          {group.overdueCount > 0 && (
+            <span className="text-object-error-dim text-body-xxs font-semibold">
+              未入力 {group.overdueCount}件
+            </span>
+          )}
           <span className="num text-body-xxs">
             <span className="text-object-success-bright">
               +{formatAmount(group.inflow)}
@@ -154,7 +162,16 @@ export function LedgerTable({
                   group.entries.map((entry, index) => (
                     <tr
                       key={`${entry.key}_${index}`}
-                      className={entry.deferred ? "bg-surface-caution-subtle" : ""}
+                      /* 未入力（今日より前の未消込）を最優先で目立たせる。
+                         繰延の黄と区別できるよう error 系にする（§1.3 で
+                         error は purple） */
+                      className={
+                        entry.overdue
+                          ? "bg-surface-error-subtle"
+                          : entry.deferred
+                            ? "bg-surface-caution-subtle"
+                            : ""
+                      }
                     >
                       <td className={`${CELL} num text-object-base-mid`}>
                         {formatMonthDay(entry.date)}
@@ -203,6 +220,11 @@ export function LedgerTable({
                       </td>
                       <td className={CELL}>
                         <StatusTag status={entry.status} />
+                        {entry.overdue && (
+                          <span className="text-object-error-dim block text-body-xxs font-semibold">
+                            未入力
+                          </span>
+                        )}
                       </td>
                       <td className={CELL} />
                     </tr>
@@ -216,6 +238,9 @@ export function LedgerTable({
       <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
         カード払いの明細はここには出ません。締め日ごとにまとまった「引落」として
         現れます。月の見出しを押すと折りたためます。
+        「未入力」は、その日が過ぎたのに実績が入っていない予定です。予定額の
+        まま予測に残っているので、実績を入れて消し込むか、支払日をずらして
+        ください。
       </p>
     </>
   );

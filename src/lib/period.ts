@@ -23,13 +23,34 @@ import type { DateStr, YearMonth } from "@/core/types";
  */
 export const FORECAST_HORIZON_MONTHS = 24;
 
-/** プリセットの月数。`custom` は開始月・終了月を自分で選ぶ。 */
-export type PeriodPreset = 1 | 3 | 6 | 12 | "custom";
+/**
+ * プリセットの月数。
+ *
+ * `recent` は既定（先月〜6ヶ月先）。`custom` は開始月・終了月を自分で選ぶ。
+ * 数値のプリセットは今月起点で、その月数ぶんを表示する。
+ */
+export type PeriodPreset = 1 | 3 | 6 | 12 | "recent" | "custom";
+
+/** 既定。予測の確からしさは直近の実績が予定どおりだったかで判断される */
+export const DEFAULT_PRESET: PeriodPreset = "recent";
+
+/** 既定が遡る月数。1ヶ月前まで見せる */
+export const RECENT_LOOKBACK_MONTHS = 1;
+
+/**
+ * 既定が先を見る月数。
+ *
+ * 「6ヶ月」プリセットと同じ終端にしてある（今月を含めて6ヶ月）。
+ * 既定と 6ヶ月プリセットで先の広さが違うと、切り替えたときに何が
+ * 変わったのか分からなくなる。
+ */
+export const RECENT_AHEAD_MONTHS = 6;
 
 export const PERIOD_PRESETS: readonly {
   value: PeriodPreset;
   label: string;
 }[] = [
+  { value: "recent", label: "先月〜6ヶ月" },
   { value: 1, label: "今月" },
   { value: 3, label: "3ヶ月" },
   { value: 6, label: "6ヶ月" },
@@ -71,6 +92,10 @@ export function selectableMonths(asOf: DateStr): YearMonth[] {
  *
  * 起点は今月。ただし基準日が今月より後なら基準日の月から始める。
  * 終端は予測の終端を超えない。
+ *
+ * `recent`（既定）だけは1ヶ月遡る。**先月が基準日より前になる場合は
+ * 基準日の月に寄せる。** 基準日より前は残高が計算できないため
+ * （要件定義書 §4.2「基準日以降の任意の過去月」）。
  */
 export function presetRange(
   preset: Exclude<PeriodPreset, "custom">,
@@ -79,9 +104,18 @@ export function presetRange(
 ): PeriodRange {
   const months = selectableMonths(asOf);
   const currentYm = toYearMonth(today);
-  const startIndex = Math.max(0, months.indexOf(currentYm));
+  /* 基準日が今月より後なら indexOf が -1 になる。その場合は先頭＝基準日の月 */
+  const currentIndex = Math.max(0, months.indexOf(currentYm));
+
+  const lookback = preset === "recent" ? RECENT_LOOKBACK_MONTHS : 0;
+  const span = preset === "recent" ? RECENT_AHEAD_MONTHS : preset;
+
+  /* 遡りは基準日の月で止める。0 より前へは行けない */
+  const startIndex = Math.max(0, currentIndex - lookback);
+  const endIndex = Math.min(currentIndex + span - 1, months.length - 1);
+
   const from = months[startIndex] ?? months[0];
-  const to = months[Math.min(startIndex + preset - 1, months.length - 1)] ?? from;
+  const to = months[Math.max(endIndex, startIndex)] ?? from;
   return { from, to };
 }
 

@@ -59,6 +59,18 @@ export interface LedgerEntry extends CashEvent {
   origDate?: DateStr;
   /** 生成物なので繰延できない（カード引落）*/
   editable: boolean;
+  /**
+   * 今日より前なのに、まだ実績が入っていない予定（要件定義書 §4.2 過去月の表示）。
+   *
+   * 過去において「予定のまま」は、実態が入っていないという意味である。
+   * 残しておくと残高を実際より低く（または高く）見積もる。
+   *
+   * **カード引落は含めない。** CL-2 の生成物で利用者が消し込む対象では
+   * なく、ダッシュボードの「実績が未入力の予定」（lib/dashboard.ts）も
+   * `unmatchedForecast` を見ていて settle を含まない。同じ画面の中で
+   * 「未入力」の数え方が2通りあると照合できなくなる。
+   */
+  overdue: boolean;
 }
 
 /** 年月ごとのまとまり（要件定義書 §4.2 月グループ）。 */
@@ -77,6 +89,12 @@ export interface LedgerMonthGroup {
   lowest: Yen | null;
   /** 防衛ライン割れ／資金ショートの注記。無ければ null */
   warning: ShortfallWarning | null;
+  /** 今日より前の月か。過去月は見出しの出し方を変える */
+  past: boolean;
+  /** 絞り込み後の実績の件数 */
+  actualCount: number;
+  /** 絞り込み後の未入力（overdue）の件数 */
+  overdueCount: number;
 }
 
 export interface LedgerView {
@@ -95,6 +113,8 @@ export interface LedgerInput {
   to: YearMonth;
   kind: LedgerKind;
   status: LedgerStatus;
+  /** 今日。過去かどうかの判定に使う */
+  today: DateStr;
 }
 
 /**
@@ -143,7 +163,8 @@ export function matchesStatus(
  * 繰延の操作もできない。
  */
 export function buildLedgerView(input: LedgerInput): LedgerView {
-  const { series, monthly, from, to, kind, status } = input;
+  const { series, monthly, from, to, kind, status, today } = input;
+  const currentYm = toYearMonth(today);
 
   /* 日付 → その日の予測残高 */
   const balanceByDate = new Map(series.rows.map((r) => [r.date, r.proj]));
@@ -172,6 +193,8 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
       origDate,
       /* カード引落は CL-2 の生成物。利用者は動かせない（§4.2 繰延操作） */
       editable: entryStatus === "plan" && event.src !== "settle",
+      overdue:
+        entryStatus === "plan" && event.src !== "settle" && event.date < today,
     });
   }
 
@@ -201,12 +224,17 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
         closing: summary?.closing ?? null,
         lowest: summary?.lowest ?? null,
         warning: summary?.warning ?? null,
+        past: yearMonth < currentYm,
+        actualCount: 0,
+        overdueCount: 0,
       };
       groups.push(group);
     }
 
     group.entries.push(entry);
     group.count++;
+    if (entry.status === "actual") group.actualCount++;
+    if (entry.overdue) group.overdueCount++;
     if (entry.type === "income") {
       group.inflow += entry.amount;
       total.inflow += entry.amount;

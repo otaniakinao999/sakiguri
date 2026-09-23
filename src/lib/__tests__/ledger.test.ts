@@ -16,7 +16,12 @@ import {
   type LedgerKind,
   type LedgerStatus,
 } from "../ledger";
-import { customRange, presetRange, selectableMonths } from "../period";
+import {
+  customRange,
+  DEFAULT_PRESET,
+  presetRange,
+  selectableMonths,
+} from "../period";
 
 /* ========================= 素材 ========================= */
 
@@ -121,8 +126,14 @@ function build(
   status: LedgerStatus,
   from: string,
   to: string,
-  extra: { oneoffs?: OneoffItem[]; overrides?: Record<string, object> } = {},
+  extra: {
+    oneoffs?: OneoffItem[];
+    overrides?: Record<string, object>;
+    actuals?: Parameters<typeof buildBalanceSeries>[0]["actuals"];
+    today?: string;
+  } = {},
 ) {
+  const today = extra.today ?? TODAY;
   const forecast = buildForecast(
     {
       recurring: RECURRING,
@@ -133,12 +144,17 @@ function build(
     TO,
   );
   const series = buildBalanceSeries(
-    { accounts: [bank, jigyou, card], asOf: ASOF, forecast, actuals: [] },
+    {
+      accounts: [bank, jigyou, card],
+      asOf: ASOF,
+      forecast,
+      actuals: extra.actuals ?? [],
+    },
     TO,
-    TODAY,
+    today,
   );
   const monthly = buildMonthlyCashflow(series, 600_000);
-  return buildLedgerView({ series, monthly, from, to, kind, status });
+  return buildLedgerView({ series, monthly, from, to, kind, status, today });
 }
 
 const names = (view: ReturnType<typeof build>) =>
@@ -327,6 +343,7 @@ describe("状態フィルタ（§4.2）", () => {
       to: "2026-04",
       kind: "all",
       status,
+      today: TODAY,
     });
   }
 
@@ -450,6 +467,7 @@ describe("月グループの見出し（§4.2）", () => {
       to: "2026-04",
       kind: "all",
       status: "all",
+      today: TODAY,
     });
 
     expect(view.groups[0].warning).toEqual({
@@ -511,5 +529,139 @@ describe("期間の指定（§4.2）", () => {
     expect(months[0]).toBe("2026-04");
     expect(months).toHaveLength(25);
     expect(months.at(-1)).toBe("2028-04");
+  });
+});
+
+/* ========================= AC-22 既定期間 ========================= */
+
+describe("AC-22 既定の表示範囲は「先月〜6ヶ月先」", () => {
+  it("既定のプリセットは recent", () => {
+    expect(DEFAULT_PRESET).toBe("recent");
+  });
+
+  it("先月から始まり、6ヶ月プリセットと同じ終端になる", () => {
+    /* 基準日 2026-04-01、今日 2026-07-15。先月＝2026-06 */
+    const got = presetRange("recent", ASOF, "2026-07-15");
+
+    expect(got).toEqual({ from: "2026-06", to: "2026-12" });
+    /* 先の広さは 6ヶ月プリセットと揃える。切り替えたときに
+       何が変わったのか分かるようにするため */
+    expect(got.to).toBe(presetRange(6, ASOF, "2026-07-15").to);
+  });
+
+  /**
+   * 案A。基準日より前は残高が計算できないため、遡りは基準日の月で止める
+   * （要件定義書 §4.2「基準日以降の任意の過去月」）。
+   */
+  it("先月が基準日より前なら、基準日の月に寄せる", () => {
+    /* 基準日と今日が同じ月。先月は存在しない */
+    expect(presetRange("recent", ASOF, TODAY)).toEqual({
+      from: "2026-04",
+      to: "2026-09",
+    });
+  });
+
+  it("今日が基準日より後でも、遡りは基準日を割らない", () => {
+    /* 今日が基準日の翌月。先月＝基準日の月ちょうど */
+    expect(presetRange("recent", ASOF, "2026-05-10").from).toBe("2026-04");
+  });
+
+  it("予測の終端を超えない", () => {
+    const last = selectableMonths(ASOF).at(-1)!;
+
+    expect(presetRange("recent", ASOF, `${last}-01`).to).toBe(last);
+  });
+
+  it("数値のプリセットは今月起点のまま変わらない", () => {
+    expect(presetRange(1, ASOF, "2026-07-15")).toEqual({
+      from: "2026-07",
+      to: "2026-07",
+    });
+    expect(presetRange(6, ASOF, "2026-07-15").from).toBe("2026-07");
+  });
+});
+
+/* ========================= AC-23 未入力の強調 ========================= */
+
+describe("AC-23 過去に残った未消込の予定", () => {
+  /** 今日を 2026-06-20 にすると、4月・5月と6/10 までが過去になる */
+  const NOW = "2026-06-20";
+
+  it("今日より前の未消込の予定に印が付く", () => {
+    const view = build("fixed", "all", "2026-04", "2026-06", { today: NOW });
+    const overdue = view.groups
+      .flatMap((g) => g.entries)
+      .filter((e) => e.overdue);
+
+    expect(overdue.length).toBeGreaterThan(0);
+    for (const entry of overdue) {
+      expect(entry.date < NOW).toBe(true);
+      expect(entry.status).toBe("plan");
+    }
+  });
+
+  it("今日以降の予定には印が付かない", () => {
+    const view = build("all", "all", "2026-06", "2026-09", { today: NOW });
+    const future = view.groups
+      .flatMap((g) => g.entries)
+      .filter((e) => e.date >= NOW);
+
+    expect(future.every((e) => !e.overdue)).toBe(true);
+  });
+
+  it("消し込み済みなら印が付かない", () => {
+    const settled = {
+      id: "act1",
+      key: "r:rent:2026-04-27",
+      date: "2026-04-27",
+      name: "家賃",
+      type: "expense" as const,
+      costType: "fixed" as const,
+      categoryCode: "EXP-01",
+      amount: 118_000,
+      bizRatio: 0,
+      accountId: "a1",
+    };
+    const view = build("fixed", "all", "2026-04", "2026-04", {
+      today: NOW,
+      actuals: [settled],
+    });
+    const rent = view.groups[0].entries.filter((e) => e.name === "家賃");
+
+    expect(rent).toHaveLength(1);
+    expect(rent[0].status).toBe("actual");
+    expect(rent[0].overdue).toBe(false);
+  });
+
+  /**
+   * カード引落は CL-2 の生成物で、ダッシュボードの「実績が未入力の予定」
+   * （unmatchedForecast）にも含まれない。同じ画面で「未入力」の数え方が
+   * 2通りあると照合できなくなるため、ここでも数えない。
+   */
+  it("カード引落は未入力に数えない", () => {
+    const view = build("settle", "all", "2026-04", "2026-06", { today: NOW });
+    const settles = view.groups.flatMap((g) => g.entries);
+
+    expect(settles.length).toBeGreaterThan(0);
+    expect(settles.every((e) => !e.overdue)).toBe(true);
+  });
+
+  it("月グループが過去かどうかと、実績・未入力の件数を持つ", () => {
+    const view = build("fixed", "all", "2026-04", "2026-07", { today: NOW });
+    const april = view.groups.find((g) => g.yearMonth === "2026-04")!;
+    const july = view.groups.find((g) => g.yearMonth === "2026-07")!;
+
+    expect(april.past).toBe(true);
+    expect(april.overdueCount).toBe(april.entries.filter((e) => e.overdue).length);
+    expect(april.overdueCount).toBeGreaterThan(0);
+
+    expect(july.past).toBe(false);
+    expect(july.overdueCount).toBe(0);
+  });
+
+  it("当月は過去月として扱わない", () => {
+    const view = build("fixed", "all", "2026-06", "2026-06", { today: NOW });
+
+    expect(view.groups[0].past).toBe(false);
   });
 });
