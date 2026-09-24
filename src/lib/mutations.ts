@@ -362,6 +362,7 @@ export function blankCardAccount(id: string, settleAccountId: string): Account {
     name: "新しいカード",
     kind: "card",
     balance: 0,
+    unbilledBalance: 0,
     closingDay: 15,
     payMonthOffset: 1,
     payDay: 10,

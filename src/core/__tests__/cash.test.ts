@@ -274,6 +274,108 @@ describe("toCashEvents", () => {
     });
   });
 
+  /* ---------- 未払の2つの束（AC-36） ---------- */
+
+  /**
+   * AC-36。
+   *
+   * 締め翌月払いのカードでは、基準日時点で未払の束が2つ同時に存在する。
+   * 月末締め・翌月27日払いで基準日が 9/17 なら、8月利用分は 9/27、
+   * 9/1〜9/16 利用分は 10/27 に落ちる。
+   *
+   * **1つにまとめて最初の引落日に載せると、最大1ヶ月ぶんの支出を前倒しで
+   * 計上する。** 近い将来の残高が実際より低く出て、防衛ラインの警告が
+   * 誤って鳴る。
+   */
+  it("AC-36: 確定金額と未確定分が別々の引落日に乗る", () => {
+    const monthEnd = card({ closingDay: 31, payMonthOffset: 1, payDay: 27 });
+
+    const got = toCashEvents(
+      [],
+      [bank, { ...monthEnd, balance: 100_000, unbilledBalance: 60_000 }],
+      "2026-09-17",
+    );
+
+    expect(got.map((e) => [e.date, e.amount])).toEqual([
+      ["2026-09-27", 100_000],
+      ["2026-10-27", 60_000],
+    ]);
+  });
+
+  it("AC-36: 2つが同じ引落日にまとめられない", () => {
+    const monthEnd = card({ closingDay: 31, payMonthOffset: 1, payDay: 27 });
+
+    const got = toCashEvents(
+      [],
+      [bank, { ...monthEnd, balance: 100_000, unbilledBalance: 60_000 }],
+      "2026-09-17",
+    );
+
+    expect(new Set(got.map((e) => e.date)).size).toBe(2);
+    /* 合計160,000が9/27に乗る、という従来の誤りをしていないこと */
+    expect(got.some((e) => e.date === "2026-09-27" && e.amount === 160_000)).toBe(
+      false,
+    );
+  });
+
+  it("未確定分が未入力（0）なら1件だけ", () => {
+    const got = toCashEvents(
+      [],
+      [bank, card({ balance: 142_000, unbilledBalance: 0 })],
+      "2026-04-01",
+    );
+
+    expect(got).toHaveLength(1);
+    expect(got[0].date).toBe("2026-04-10");
+  });
+
+  it("未確定分の項目が無い既存データでも1件だけ", () => {
+    /* unbilledBalance を持たないカード。列を足す前に保存された状態 */
+    const got = toCashEvents([], [bank, card({ balance: 142_000 })], "2026-04-01");
+
+    expect(got).toHaveLength(1);
+  });
+
+  it("確定金額が0で未確定分だけあれば、2回目の引落日に乗る", () => {
+    const got = toCashEvents(
+      [],
+      [bank, card({ balance: 0, unbilledBalance: 50_000 })],
+      "2026-04-01",
+    );
+
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ date: "2026-05-10", amount: 50_000 });
+  });
+
+  it("引落日を過ぎていれば、翌月と翌々月に乗る", () => {
+    /* 支払日10日、基準日 4/11。最初は 5/10、次は 6/10 */
+    const got = toCashEvents(
+      [],
+      [bank, card({ balance: 100_000, unbilledBalance: 60_000 })],
+      "2026-04-11",
+    );
+
+    expect(got.map((e) => [e.date, e.amount])).toEqual([
+      ["2026-05-10", 100_000],
+      ["2026-06-10", 60_000],
+    ]);
+  });
+
+  it("未確定分は当月の利用と合算される", () => {
+    /* 4/1 に 5,000 利用 → 締日15日・翌月10日払いなので 5/10 に落ちる。
+       未確定分 60,000 も 5/10 なので合算される */
+    const got = toCashEvents(
+      [event({ date: "2026-04-01", amount: 5_000 })],
+      [bank, card({ balance: 100_000, unbilledBalance: 60_000 })],
+      "2026-04-01",
+    );
+
+    expect(got.map((e) => [e.date, e.amount])).toEqual([
+      ["2026-04-10", 100_000],
+      ["2026-05-10", 65_000],
+    ]);
+  });
+
   it("未払残高は同じ引落日の利用と合算される", () => {
     const got = toCashEvents(
       // 3/20 利用 → 4月締め → 5/10 ではなく、3/20 は 3/15 超えなので4月締め→5/10

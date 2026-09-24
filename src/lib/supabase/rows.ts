@@ -35,6 +35,8 @@ export interface AccountRow {
   name: string;
   kind: "bank" | "cash" | "card";
   balance: Yen;
+  /** card のみ。次回の引落に含まれない未確定の利用額（CL-2 手順4） */
+  unbilled_balance: Yen;
   closing_day: number | null;
   pay_month_offset: number | null;
   pay_day: number | null;
@@ -89,6 +91,7 @@ export function toAccount(row: AccountRow): Account {
       balance: row.balance,
       /* card なら4項目が揃っていることを DB の check 制約で担保している。
          settle_account_id だけは、引落元の口座を消したときに空になりうる */
+      unbilledBalance: row.unbilled_balance ?? 0,
       closingDay: row.closing_day ?? 15,
       payMonthOffset: row.pay_month_offset ?? 1,
       payDay: row.pay_day ?? 10,
@@ -178,6 +181,7 @@ export function fromAccount(account: Account, userId: string): AccountRow {
     name: account.name,
     kind: account.kind,
     balance: account.balance,
+    unbilled_balance: card?.unbilledBalance ?? 0,
     closing_day: card?.closingDay ?? null,
     pay_month_offset: card?.payMonthOffset ?? null,
     pay_day: card?.payDay ?? null,

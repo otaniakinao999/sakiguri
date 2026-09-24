@@ -85,23 +85,37 @@ export function settleDateOf(card: CardAccount, usedOn: DateStr): DateStr {
 }
 
 /**
- * 基準日以降で最初に到来する引落日（CL-2 手順4）。
+ * 基準日以降に到来する引落日を、近い順に `nth` 番目まで数えて返す（CL-2 手順4）。
  *
- * 当月の引落日が基準日より前なら翌月。基準日は必ず当月にあるため、
- * 翌月の引落日は必ず基準日より後になる。2回で足りる。
+ * `nth = 0` が最初、`nth = 1` がその次。当月の引落日が基準日より前なら翌月
+ * から数える。基準日は必ず当月にあるため、`nth + 2` 回で必ず見つかる。
+ */
+export function settleDateAfter(
+  card: CardAccount,
+  asOf: DateStr,
+  nth: number,
+): DateStr {
+  const { year, month } = parseDate(asOf);
+  let found = -1;
+  for (let i = 0; i < nth + 2; i++) {
+    const m = shiftMonth({ year, month }, i);
+    const date = dayInMonth(m.year, m.month, card.payDay);
+    if (date < asOf) continue;
+    found++;
+    if (found === nth) return date;
+  }
+  /* istanbul ignore next -- 上のループで必ず返る */
+  throw new Error(`引落日を決められません: ${card.id}`);
+}
+
+/**
+ * 基準日以降で最初に到来する引落日（CL-2 手順4）。
  */
 export function firstSettleDateOnOrAfter(
   card: CardAccount,
   asOf: DateStr,
 ): DateStr {
-  const { year, month } = parseDate(asOf);
-  for (let i = 0; i < 2; i++) {
-    const m = shiftMonth({ year, month }, i);
-    const date = dayInMonth(m.year, m.month, card.payDay);
-    if (date >= asOf) return date;
-  }
-  /* istanbul ignore next -- 上のループで必ず返る */
-  throw new Error(`引落日を決められません: ${card.id}`);
+  return settleDateAfter(card, asOf, 0);
 }
 
 function indexAccounts(accounts: Account[]): Map<string, Account> {
@@ -159,10 +173,31 @@ export function toCashEvents(
     cash.push(event);
   }
 
-  /* 手順4：基準日時点の未払残高を、最初に到来する引落日に加算する */
+  /**
+   * 手順4：基準日時点の未払額を引落日に割り当てる。
+   *
+   * **2つの束を別々の引落日に載せる。まとめてはならない。** 締め翌月払いの
+   * カードでは、基準日時点で「締め済みで次回引落を待つ束」と「まだ締まって
+   * いない束」が同時に未払として存在する。月末締め・翌月27日払いで基準日が
+   * 9/17 なら、8月利用分は 9/27、9/1〜9/16 利用分は 10/27 に落ちる。
+   *
+   * 1つにまとめて最初の引落日に載せると、最大1ヶ月ぶんの支出を前倒しで
+   * 計上する。近い将来の残高が実際より低く出るので、防衛ラインの警告が
+   * 誤って鳴る（AC-36）。
+   *
+   * `payMonthOffset = 2`（翌々月払い）では束が3つになりうるが、2項目では
+   * 表現できない。3束目は `unbilledBalance` に含める近似とする（OI-19）。
+   */
   for (const account of accounts) {
-    if (!isCard(account) || account.balance === 0) continue;
-    bump(account, firstSettleDateOnOrAfter(account, asOf), account.balance);
+    if (!isCard(account)) continue;
+
+    if (account.balance !== 0) {
+      bump(account, settleDateAfter(account, asOf, 0), account.balance);
+    }
+    const unbilled = account.unbilledBalance ?? 0;
+    if (unbilled !== 0) {
+      bump(account, settleDateAfter(account, asOf, 1), unbilled);
+    }
   }
 
   /* 手順5：合算が0でないものを引落イベントにする */

@@ -168,12 +168,34 @@ describe("行とアプリ型の往復", () => {
       name: "メインカード",
       kind: "card" as const,
       balance: 142_000,
+      unbilledBalance: 58_000,
       closingDay: 15,
       payMonthOffset: 1,
       payDay: 10,
       settleAccountId: "a1",
     };
     expect(toAccount(fromAccount(card, USER))).toEqual(card);
+  });
+
+  it("未確定分を持たない既存のカードは 0 になる", () => {
+    /* unbilled_balance を足す前に保存されたカード。DB の既定値が0なので
+       読み戻すと 0 が入る。既存値を2つに分けるデータ移行は行わない
+       （ADR-0017）。利用者に入れ直してもらう */
+    const old = {
+      id: "c1",
+      name: "メインカード",
+      kind: "card" as const,
+      balance: 142_000,
+      closingDay: 15,
+      payMonthOffset: 1,
+      payDay: 10,
+      settleAccountId: "a1",
+    };
+
+    expect(toAccount(fromAccount(old, USER))).toEqual({
+      ...old,
+      unbilledBalance: 0,
+    });
   });
 
   it("定期項目", () => {

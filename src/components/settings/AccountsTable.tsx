@@ -69,7 +69,8 @@ export function AccountsTable() {
               <tr>
                 <th className={`${HEAD} min-w-[var(--layout-field-width)]`}>名前</th>
                 <th className={HEAD}>種類</th>
-                <th className={`${HEAD} text-right`}>基準日の残高／未払</th>
+                <th className={`${HEAD} text-right`}>基準日の残高／確定金額</th>
+                <th className={`${HEAD} text-right`}>未確定分</th>
                 <th className={HEAD}>締日</th>
                 <th className={HEAD}>支払月</th>
                 <th className={HEAD}>支払日</th>
@@ -111,14 +112,30 @@ export function AccountsTable() {
                   </td>
                   <td className={CELL}>
                     <NumberInput
-                      aria-label={isCard(account) ? "未払残高" : "残高"}
+                      aria-label={isCard(account) ? "確定金額" : "残高"}
                       value={account.balance}
                       /* 口座はマイナスを許す（当座借越・残高マイナス）。
-                         カードの未払残高は「正の値」と決まっている（§3.2）。
+                         カードの未払は「正の値」と決まっている（§3.2）。
                          返金はカードの未払ではなく口座側で処理する */
                       allowNegative={!isCard(account)}
                       onValueChange={(balance) => patch(account.id, { balance })}
                     />
+                  </td>
+                  <td className={CELL}>
+                    {isCard(account) ? (
+                      /* CL-2 手順4。確定金額は最初の引落日、未確定分はその次の
+                         引落日に載せる。1つにまとめると最大1ヶ月ぶんの支出を
+                         前倒しで計上してしまう（AC-36） */
+                      <NumberInput
+                        aria-label="未確定分"
+                        value={account.unbilledBalance ?? 0}
+                        onValueChange={(unbilledBalance) =>
+                          patch(account.id, { unbilledBalance } as Partial<Account>)
+                        }
+                      />
+                    ) : (
+                      <span className="text-object-base-mid">—</span>
+                    )}
                   </td>
                   {isCard(account) ? (
                     <>
@@ -200,6 +217,10 @@ export function AccountsTable() {
         カードで払った支出は、利用日ではなくこの日に口座から出ていく前提で
         残高を計算します。口座を削除すると、その口座を使う予定と実績も
         一緒に消えます。
+        カードの「確定金額」には次回引き落とされる金額を、「未確定分」には
+        まだ請求が確定していない利用額を入れてください。カード会社の明細に
+        その2つが並んで載っています。分けずに合計を入れると、1ヶ月先に
+        落ちるはずの金額まで次回に計上され、残高が実際より低く出ます。
       </p>
     </Card>
   );

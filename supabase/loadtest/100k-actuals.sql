@@ -129,3 +129,50 @@ from public.actuals
 group by 1
 order by 2 desc
 limit 5;
+
+-- 後片付け -------------------------------------------------------------------
+--
+-- **行を先に消してから、アカウントを消すこと。**
+--
+-- accounts / actuals などは on delete cascade なのでアカウント削除だけでも
+-- 消えるが、**10万行の cascade delete が1トランザクションで走るため
+-- タイムアウトしうる。** 途中で失敗すると中途半端な状態が残り、原因が
+-- 分かりにくくなる。先に行を消しておけば、アカウント削除は軽い操作になる。
+--
+-- LOAD_USER_ID は投入時と同じものに差し替える。
+
+do $$
+declare
+  load_user_id uuid := '00000000-0000-0000-0000-000000000000';
+  removed integer;
+begin
+  if load_user_id = '00000000-0000-0000-0000-000000000000' then
+    raise exception 'load_user_id を差し替えてください';
+  end if;
+
+  -- 1万行ずつ消す。1トランザクションで10万行消してタイムアウトするのを避ける
+  loop
+    delete from public.actuals
+    where id in (
+      select id from public.actuals
+      where user_id = load_user_id
+      limit 10000
+    );
+    get diagnostics removed = row_count;
+    raise notice '% 行削除', removed;
+    exit when removed = 0;
+  end loop;
+
+  delete from public.oneoff_items   where user_id = load_user_id;
+  delete from public.recurring_items where user_id = load_user_id;
+  delete from public.overrides      where user_id = load_user_id;
+  delete from public.accounts       where user_id = load_user_id;
+  delete from public.settings       where user_id = load_user_id;
+  -- usage_events はイベント記録。ここでは消さず、アカウント削除の cascade に任せる
+end $$;
+
+-- 残っていないことを確認してから、ダッシュボードの
+-- Authentication → Users でアカウントを削除する。
+select
+  (select count(*) from public.actuals  where user_id = '00000000-0000-0000-0000-000000000000') as 実績,
+  (select count(*) from public.accounts where user_id = '00000000-0000-0000-0000-000000000000') as 口座;
