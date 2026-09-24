@@ -32,6 +32,8 @@ import {
 } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
+import { buildActualList, MONTH_PAGE_SIZE } from "@/lib/actual-list";
+import { formatYearMonthLabel } from "@/lib/format";
 import { findDoubleCounts } from "@/lib/reconcile";
 
 import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
@@ -77,9 +79,13 @@ export function EntryScreen() {
     };
   }, [data, today]);
 
-  const recent = useMemo(
-    () => [...data.actuals].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 40),
-    [data.actuals],
+  /* FR-42。月で区切り、その月は全件。月内が上限を超えたときだけページング */
+  const [listMonth, setListMonth] = useState<string | null>(null);
+  const [listPage, setListPage] = useState(0);
+
+  const list = useMemo(
+    () => buildActualList({ actuals: data.actuals, yearMonth: listMonth, page: listPage }),
+    [data.actuals, listMonth, listPage],
   );
 
   const accountName = (id: string) =>
@@ -290,8 +296,34 @@ export function EntryScreen() {
 
       {/* ---------- 最近の実績 ---------- */}
       <div className="wide:col-span-2">
-        <Card title={`最近の実績（${data.actuals.length}件）`}>
-          {recent.length === 0 ? (
+        <Card
+          title={`実績（${list.total}件）`}
+          right={
+            list.months.length > 0 ? (
+              <span className="flex items-center gap-8">
+                <label className="sr-only" htmlFor="actual-month">
+                  表示する月
+                </label>
+                <select
+                  id="actual-month"
+                  value={list.yearMonth ?? ""}
+                  onChange={(e) => {
+                    setListMonth(e.target.value);
+                    setListPage(0);
+                  }}
+                  className="border-border-base-high bg-surface-base-primary rounded-base border px-8 py-4 text-body-xs"
+                >
+                  {list.months.map((m) => (
+                    <option key={m.yearMonth} value={m.yearMonth}>
+                      {formatYearMonthLabel(m.yearMonth)}（{m.count}件）
+                    </option>
+                  ))}
+                </select>
+              </span>
+            ) : undefined
+          }
+        >
+          {list.rows.length === 0 ? (
             <p className="text-object-base-mid py-24 text-center text-body-xs">
               まだ実績がありません。
             </p>
@@ -299,7 +331,7 @@ export function EntryScreen() {
             <div className="max-h-[var(--layout-ledger-height)] overflow-auto">
               <table className="w-full border-collapse text-body-xs">
                 <tbody>
-                  {recent.map((actual) => (
+                  {list.rows.map((actual) => (
                     <tr key={actual.id}>
                       <td className="border-b-border-base-low num text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
                         {formatMonthDay(actual.date)}
@@ -350,6 +382,37 @@ export function EntryScreen() {
               </table>
             </div>
           )}
+
+          {/* 月内が上限を超えたときだけ出す。無限スクロールは採らない
+              （§5.1「一覧の表示件数」）。狙った位置に到達できないため */}
+          {list.pageCount > 1 && (
+            <div className="mt-12 flex flex-wrap items-center gap-8">
+              <Button
+                size="sm"
+                disabled={list.page === 0}
+                onClick={() => setListPage(list.page - 1)}
+              >
+                前の200件
+              </Button>
+              <span className="text-object-base-mid num text-body-xxs">
+                {list.page * MONTH_PAGE_SIZE + 1}〜
+                {list.page * MONTH_PAGE_SIZE + list.rows.length} 件目 ／{" "}
+                {list.monthCount}件（{list.page + 1}/{list.pageCount}ページ）
+              </span>
+              <Button
+                size="sm"
+                disabled={list.page >= list.pageCount - 1}
+                onClick={() => setListPage(list.page + 1)}
+              >
+                次の200件
+              </Button>
+            </div>
+          )}
+
+          <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
+            月ごとに区切って全件を出しています。見出しの件数は全期間の合計で、
+            月を切り替えるとすべての実績に辿り着けます。
+          </p>
         </Card>
       </div>
     </div>
