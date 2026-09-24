@@ -17,7 +17,7 @@ import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DateInput, Field, NumberInput, TextInput } from "@/components/ui/inputs";
-import { clearOverride, setOverride } from "@/lib/mutations";
+import { clearOverride, markReconciled, setOverride } from "@/lib/mutations";
 
 export function DeferralEditor({
   plan,
@@ -26,7 +26,7 @@ export function DeferralEditor({
   plan: ForecastInstance;
   onClose: () => void;
 }) {
-  const { data, setData, session } = useAppData();
+  const { data, setData, session, today } = useAppData();
   const existing = data.overrides[plan.key];
 
   const [date, setDate] = useState(plan.date);
@@ -34,9 +34,12 @@ export function DeferralEditor({
   const [note, setNote] = useState(existing?.note ?? "");
 
   const apply = (patch: Parameters<typeof setOverride>[2] | null) => {
-    setData((d) =>
-      patch === null ? clearOverride(d, plan.key) : setOverride(d, plan.key, patch),
-    );
+    setData((d) => {
+      const next =
+        patch === null ? clearOverride(d, plan.key) : setOverride(d, plan.key, patch);
+      /* 繰延も消し込み操作のひとつ（FR-43、§3.2 Settings） */
+      return today ? markReconciled(next, today) : next;
+    });
     if (patch !== null) {
       track(session?.user.id, "plan_deferred", {
         skipped: patch.skipped === true,

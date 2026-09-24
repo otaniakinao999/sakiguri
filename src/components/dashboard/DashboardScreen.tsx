@@ -26,6 +26,7 @@ import { Notification } from "@/components/ui/Notification";
 import { track } from "@/lib/analytics/track";
 import { isEmpty } from "@/lib/app-data";
 import { buildDashboard, DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
+import { buildReconcileWarnings, STRANDED_DAYS } from "@/lib/reconcile-warnings";
 import { formatAmount, formatMonthDay, formatYen } from "@/lib/format";
 import { forecastEnd } from "@/lib/period";
 
@@ -51,12 +52,21 @@ export function DashboardScreen() {
       to,
       today,
     );
-    return buildDashboard({
-      series,
-      accounts: data.accounts,
-      reserveLine: data.reserveLine,
-      today,
-    });
+    return {
+      ...buildDashboard({
+        series,
+        accounts: data.accounts,
+        reserveLine: data.reserveLine,
+        today,
+      }),
+      /* FR-43。消し込みの停止と取り残しは別の警告として出す */
+      reconcile: buildReconcileWarnings({
+        lastReconciledAt: data.lastReconciledAt,
+        asOf: data.asOf,
+        unmatchedForecast: series.unmatchedForecast,
+        today,
+      }),
+    };
   }, [data, today]);
 
   /* 警告を見せたことを1回だけ記録する（指標の分母） */
@@ -262,6 +272,42 @@ export function DashboardScreen() {
           </table>
         </div>
       </Card>
+
+      {/* ---------- 消し込みの警告（FR-43）---------- */}
+      {(dashboard.reconcile.stalled || dashboard.reconcile.stranded) && (
+        <div className="flex flex-col gap-8">
+          {dashboard.reconcile.stalled && (
+            <Notification variant="caution">
+              <strong className="font-semibold">
+                消し込みが{dashboard.reconcile.stalled.sinceDays}日止まっています。
+              </strong>
+              　予測が予定額に依存しきっているため、残高が実態とずれている
+              可能性があります。CSVを取り込むか、実績を入れてください。
+              <span className="mt-8 block">
+                <Link href="/import">
+                  <Button size="sm">CSVを取り込む</Button>
+                </Link>
+              </span>
+            </Notification>
+          )}
+          {dashboard.reconcile.stranded && (
+            <Notification variant="caution">
+              <strong className="font-semibold">
+                {STRANDED_DAYS}日以上前の予定が
+                {dashboard.reconcile.stranded.count}件、消し込まれずに
+                残っています。
+              </strong>
+              　最も古いものは{formatMonthDay(dashboard.reconcile.stranded.oldest)}
+              です。実績を入れるか、繰延してください。
+              <span className="mt-8 block">
+                <Link href="/entry">
+                  <Button size="sm">要対応を見る</Button>
+                </Link>
+              </span>
+            </Notification>
+          )}
+        </div>
+      )}
 
       {/*
         要件定義書 §7 制約3。

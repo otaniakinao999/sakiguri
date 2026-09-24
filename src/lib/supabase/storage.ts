@@ -80,6 +80,7 @@ export async function loadAppData(
   return {
     asOf,
     reserveLine: settingsRow?.reserve_line ?? 0,
+    lastReconciledAt: settingsRow?.last_reconciled_at ?? null,
     accounts: accounts.map(toAccount),
     recurring: recurring.map(toRecurring),
     oneoffs: oneoffs.map(toOneoff),
@@ -90,9 +91,15 @@ export async function loadAppData(
 }
 
 /** 設定が無いときの既定。空のデータと同じ値にする。 */
-function emptyDefaults(asOf: string): Pick<AppData, "asOf" | "reserveLine"> {
+function emptyDefaults(
+  asOf: string,
+): Pick<AppData, "asOf" | "reserveLine" | "lastReconciledAt"> {
   const base = emptyAppData(asOf);
-  return { asOf: base.asOf, reserveLine: base.reserveLine };
+  return {
+    asOf: base.asOf,
+    reserveLine: base.reserveLine,
+    lastReconciledAt: base.lastReconciledAt,
+  };
 }
 
 /**

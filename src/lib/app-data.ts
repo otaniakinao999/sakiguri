@@ -27,6 +27,13 @@ export interface AppData {
   asOf: DateStr;
   /** 生活防衛ライン。法人では必要運転資金ライン */
   reserveLine: Yen;
+  /**
+   * 最後に消し込み操作を行った日（要件定義書 §3.2 Settings）。
+   *
+   * FR-43 の「消し込みが止まっている」警告のためだけに持つ。
+   * null は一度も消し込んでいない状態で、起点には基準日を使う。
+   */
+  lastReconciledAt: DateStr | null;
   accounts: Account[];
   recurring: RecurringItem[];
   oneoffs: OneoffItem[];
@@ -45,6 +52,7 @@ export function emptyAppData(asOf: DateStr): AppData {
   return {
     asOf,
     reserveLine: 0,
+    lastReconciledAt: null,
     accounts: [],
     recurring: [],
     oneoffs: [],

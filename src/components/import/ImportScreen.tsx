@@ -33,7 +33,7 @@ import {
   type HistoryEntry,
   type ImportRow,
 } from "@/core/csv";
-import { addActuals, newId } from "@/lib/mutations";
+import { addActuals, markReconciled, newId } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
 import { ColumnMappingForm } from "./ColumnMappingForm";
@@ -159,7 +159,13 @@ export function ImportScreen() {
       bizRatio: r.bizRatio,
       accountId: r.accountId,
     }));
-    setData((d) => addActuals(d, actuals));
+    /* CSV取込は、照合が1件も成立しなくても消し込み操作として数える。
+       測っているのは「利用者が消し込みに向き合ったか」であって、成果の
+       有無ではない（FR-43、§3.2 Settings） */
+    setData((d) => {
+      const next = addActuals(d, actuals);
+      return today ? markReconciled(next, today) : next;
+    });
     /* 件数だけを送る。金額・摘要・ファイル名は入れない（ADR-0013） */
     track(session?.user.id, "csv_imported", {
       rows: chosen.length,

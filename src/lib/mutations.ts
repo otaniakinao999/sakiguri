@@ -42,6 +42,20 @@ export function setReserveLine(data: AppData, reserveLine: Yen): AppData {
   return { ...data, reserveLine };
 }
 
+/**
+ * 消し込み操作を行った日を記録する（FR-43、AC-29a）。
+ *
+ * 「利用者が消し込みに向き合った」ことを表す。成果の有無で区別しないため、
+ * **照合が1件も成立しなかったCSV取込でも書き込む。**
+ *
+ * 書き込みは best-effort であり、これが失敗しても消し込みそのものを
+ * 巻き戻さない。警告のための補助情報が、実際の記録より優先されてはならない。
+ * 保存は差分保存（diff.ts）に乗るので、失敗しても次の変更で送り直される。
+ */
+export function markReconciled(data: AppData, on: DateStr): AppData {
+  return { ...data, lastReconciledAt: on };
+}
+
 /* ========================= 口座・カード（FR-01） ========================= */
 
 export function addAccount(data: AppData, account: Account): AppData {

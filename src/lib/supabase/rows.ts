@@ -27,6 +27,8 @@ export interface SettingsRow {
   user_id: string;
   as_of: DateStr;
   reserve_line: Yen;
+  /** 最後に消し込み操作を行った日。FR-43 の警告のためだけに持つ */
+  last_reconciled_at: DateStr | null;
 }
 
 export interface AccountRow {
@@ -173,7 +175,12 @@ export function toOverrides(rows: OverrideRow[]): Overrides {
 /* ========================= アプリ → 行 ========================= */
 
 export function fromSettings(data: AppData, userId: string): SettingsRow {
-  return { user_id: userId, as_of: data.asOf, reserve_line: data.reserveLine };
+  return {
+    user_id: userId,
+    as_of: data.asOf,
+    reserve_line: data.reserveLine,
+    last_reconciled_at: data.lastReconciledAt,
+  };
 }
 
 export function fromAccount(account: Account, userId: string): AccountRow {

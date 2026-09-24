@@ -41,6 +41,7 @@ import {
   addActual,
   blankActual,
   linkActualToPlan,
+  markReconciled,
   newId,
   setUnplanned,
   removeActual,
@@ -188,8 +189,17 @@ export function EntryScreen() {
 
   /* ---------- 要対応リストの操作 ---------- */
 
+  /**
+   * 消し込み操作を記録する（FR-43、AC-29a）。
+   *
+   * best-effort。保存は差分保存に乗るので、失敗しても消し込みそのものは
+   * 巻き戻らない。警告のための補助情報が実際の記録より優先されてはならない。
+   */
+  const reconciled = (d: ReturnType<typeof markReconciled>) =>
+    markReconciled(d, today);
+
   const recordActual = (plan: ForecastInstance, amount: number) => {
-    setData((d) => settleAsPlanned(d, { ...plan, amount }, newId()));
+    setData((d) => reconciled(settleAsPlanned(d, { ...plan, amount }, newId())));
     track(session?.user.id, "actual_recorded", { settled: true, fromCsv: false });
   };
 
@@ -199,9 +209,9 @@ export function EntryScreen() {
       recordActual(row.plan, amount),
     defer: (row: TodoPlanRow) => setDeferring(row.plan),
     linkTo: (row: TodoCandidateRow, planKey: string) =>
-      setData((d) => linkActualToPlan(d, row.actual.id, planKey)),
+      setData((d) => reconciled(linkActualToPlan(d, row.actual.id, planKey))),
     markUnplanned: (row: TodoCandidateRow) =>
-      setData((d) => setUnplanned(d, row.actual.id, true)),
+      setData((d) => reconciled(setUnplanned(d, row.actual.id, true))),
   };
 
   return (
