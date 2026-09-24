@@ -278,11 +278,28 @@ export function DashboardScreen() {
         <div className="flex flex-col gap-8">
           {dashboard.reconcile.stalled && (
             <Notification variant="caution">
-              <strong className="font-semibold">
-                消し込みが{dashboard.reconcile.stalled.sinceDays}日止まっています。
-              </strong>
-              　予測が予定額に依存しきっているため、残高が実態とずれている
-              可能性があります。CSVを取り込むか、実績を入れてください。
+              {/* 一度も消し込んでいない利用者に「○日止まっています」と出す
+                  のは誤り。止まっているのではなく、まだ始まっていない
+                  （AC-29c）。設定だけして放置した新規利用者がこの状態 */}
+              {dashboard.reconcile.stalled.neverReconciled ? (
+                <>
+                  <strong className="font-semibold">
+                    まだ一度も消し込みが行われていません（基準日から
+                    {dashboard.reconcile.stalled.sinceDays}日）。
+                  </strong>
+                  　予測はすべて予定額のままです。CSVを取り込むか、実績を
+                  入れると、残高が実態に近づきます。
+                </>
+              ) : (
+                <>
+                  <strong className="font-semibold">
+                    消し込みが{dashboard.reconcile.stalled.sinceDays}日
+                    止まっています。
+                  </strong>
+                  　予測が予定額に依存しきっているため、残高が実態とずれて
+                  いる可能性があります。CSVを取り込むか、実績を入れてください。
+                </>
+              )}
               <span className="mt-8 block">
                 <Link href="/import">
                   <Button size="sm">CSVを取り込む</Button>

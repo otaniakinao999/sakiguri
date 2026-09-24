@@ -59,7 +59,11 @@ describe("AC-29a 消し込みが止まっている", () => {
   it("45日ちょうどで鳴る", () => {
     const got = run({ lastReconciledAt: "2026-07-18", today: "2026-09-01" });
 
-    expect(got.stalled).toEqual({ sinceDays: 45, from: "2026-07-18" });
+    expect(got.stalled).toEqual({
+      sinceDays: 45,
+      from: "2026-07-18",
+      neverReconciled: false,
+    });
   });
 
   it("46日でも鳴る", () => {
@@ -72,7 +76,11 @@ describe("AC-29a 消し込みが止まっている", () => {
     /* 基準日 4/1 から 9/1 は153日 */
     const got = run({ lastReconciledAt: null, asOf: ASOF, today: TODAY });
 
-    expect(got.stalled).toEqual({ sinceDays: 153, from: ASOF });
+    expect(got.stalled).toEqual({
+      sinceDays: 153,
+      from: ASOF,
+      neverReconciled: true,
+    });
   });
 
   /**
@@ -218,5 +226,32 @@ describe("純関数であること", () => {
     };
 
     expect(buildReconcileWarnings(input)).toEqual(buildReconcileWarnings(input));
+  });
+});
+
+/* ========================= 文面の出し分け（AC-29c） ========================= */
+
+describe("AC-29c 一度も消し込んでいないケースを区別する", () => {
+  /**
+   * 「止まっている」は継続していたものが止まった言い方である。一度も
+   * 消し込んでいない利用者に「115日止まっています」と出すのは誤りで、
+   * 止まっているのではなく、まだ始まっていない。設定だけして放置した
+   * 新規利用者がまさにこの状態になる。
+   */
+  it("null なら neverReconciled が立つ", () => {
+    expect(run({ lastReconciledAt: null, asOf: ASOF }).stalled?.neverReconciled)
+      .toBe(true);
+  });
+
+  it("一度でも消し込んでいれば立たない", () => {
+    expect(
+      run({ lastReconciledAt: "2026-06-01" }).stalled?.neverReconciled,
+    ).toBe(false);
+  });
+
+  it("経過日数はどちらの場合も出す", () => {
+    /* 文面は違っても、何日経ったかは両方に必要 */
+    expect(run({ lastReconciledAt: null, asOf: ASOF }).stalled?.sinceDays).toBe(153);
+    expect(run({ lastReconciledAt: "2026-06-01" }).stalled?.sinceDays).toBe(92);
   });
 });

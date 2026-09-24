@@ -42,8 +42,19 @@ export interface ReconcileWarningsInput {
 }
 
 export interface ReconcileWarnings {
-  /** 消し込みが止まっている。null なら警告なし */
-  stalled: { sinceDays: number; from: DateStr } | null;
+  /**
+   * 消し込みが止まっている。null なら警告なし。
+   *
+   * `neverReconciled` は「一度も消し込んでいない」。**文面を分けるために
+   * 持つ（AC-29c）。** 止まっているのではなく、まだ始まっていない。
+   * 一度も消し込んでいない利用者に「○日止まっています」と出すのは誤りで、
+   * 設定だけして放置した新規利用者がまさにこの状態になる。
+   */
+  stalled: {
+    sinceDays: number;
+    from: DateStr;
+    neverReconciled: boolean;
+  } | null;
   /** 取り残された予定がある。null なら警告なし */
   stranded: { count: number; oldest: DateStr } | null;
 }
@@ -76,7 +87,10 @@ export function buildReconcileWarnings({
     .sort();
 
   return {
-    stalled: sinceDays >= STALLED_DAYS ? { sinceDays, from } : null,
+    stalled:
+      sinceDays >= STALLED_DAYS
+        ? { sinceDays, from, neverReconciled: lastReconciledAt === null }
+        : null,
     stranded:
       stranded.length > 0
         ? { count: stranded.length, oldest: stranded[0] }

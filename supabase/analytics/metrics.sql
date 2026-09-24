@@ -169,3 +169,116 @@ where key in (
   or jsonb_typeof(value) = 'string'  -- 自由入力の文字列を入れない約束
 group by event, key
 order by 件数 desc;
+
+
+-- ============================================================
+-- 追加の観測（PoC の5指標の外）
+--
+-- 途中で追加した機能の当たり外れを見る。5指標のように成否を決める値では
+-- なく、閾値と条件を調整するための材料である。
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- OI-20：消し込み間隔の分布
+--
+-- FR-43 の閾値（45日／60日）は BS-2 の「CSV取込は月1〜2回」から机上で
+-- 置いた値である。実際の間隔を見て調整する。
+--
+-- 読み方：45日のところに山があるなら、警告が正常な運用を踏んでいる。
+-- 上位のパーセンタイルが45日より十分に小さければ、閾値は妥当。
+-- ------------------------------------------------------------
+with reconciles as (
+  select
+    user_id,
+    occurred_at::date as 実施日,
+    lag(occurred_at::date) over (
+      partition by user_id order by occurred_at
+    ) as 前回
+  from public.usage_events
+  -- 消し込み操作とみなすもの。CSV取込は照合0件でも数える
+  where event in ('actual_recorded', 'csv_imported')
+),
+gaps as (
+  select user_id, 実施日 - 前回 as 間隔日数
+  from reconciles
+  where 前回 is not null
+)
+select
+  count(*)                                                as 回数,
+  count(distinct user_id)                                 as 人数,
+  round(avg(間隔日数))                                     as 平均,
+  percentile_cont(0.5)  within group (order by 間隔日数)   as 中央値,
+  percentile_cont(0.75) within group (order by 間隔日数)   as p75,
+  percentile_cont(0.90) within group (order by 間隔日数)   as p90,
+  max(間隔日数)                                            as 最大,
+  count(*) filter (where 間隔日数 >= 45)                   as "45日以上",
+  round(
+    100.0 * count(*) filter (where 間隔日数 >= 45) / nullif(count(*), 0)
+  )                                                        as "45日以上の割合%"
+from gaps;
+
+-- 間隔の分布を10日刻みで見る。45日の手前に山があるかを確かめる
+with reconciles as (
+  select
+    user_id,
+    occurred_at::date as 実施日,
+    lag(occurred_at::date) over (
+      partition by user_id order by occurred_at
+    ) as 前回
+  from public.usage_events
+  where event in ('actual_recorded', 'csv_imported')
+)
+select
+  (( 実施日 - 前回 ) / 10) * 10 || '〜' || ((( 実施日 - 前回 ) / 10) * 10 + 9) || '日'
+    as 間隔,
+  count(*) as 回数
+from reconciles
+where 前回 is not null
+group by ( 実施日 - 前回 ) / 10
+order by ( 実施日 - 前回 ) / 10;
+
+-- ------------------------------------------------------------
+-- FR-46：候補提示が当たっているか
+--
+-- 候補から行った操作のうち、確定した割合と「予定にない支出」として
+-- 却下した割合を見る。
+--
+-- 読み方：却下が大半なら CL-7 の条件（同額・日付±12日以内・同一口座）が
+-- 緩すぎる。候補が邪魔をしているだけということになる。
+-- ------------------------------------------------------------
+select
+  count(*)                                                    as 候補からの操作,
+  count(*) filter (where (props ->> 'unplanned')::boolean)    as 却下,
+  count(*) filter (where not (props ->> 'unplanned')::boolean) as 確定,
+  round(
+    100.0 * count(*) filter (where not (props ->> 'unplanned')::boolean)
+    / nullif(count(*), 0)
+  )                                                            as "確定率%"
+from public.usage_events
+where event = 'actual_recorded'
+  and (props ->> 'fromCandidate')::boolean;
+
+-- 利用者ごと。特定の1人だけが却下を連発しているのか、全体の傾向かを見る
+select
+  user_id,
+  count(*)                                                     as 候補からの操作,
+  count(*) filter (where not (props ->> 'unplanned')::boolean) as 確定
+from public.usage_events
+where event = 'actual_recorded'
+  and (props ->> 'fromCandidate')::boolean
+group by user_id
+order by 候補からの操作 desc;
+
+-- ------------------------------------------------------------
+-- FR-47：読み込みの切り捨てが起きていないか
+--
+-- load_incomplete は分割取得のバグを検知するカナリアであり、
+-- **1件でも出たら実装の不具合である。** 0件であることを確かめる。
+-- ------------------------------------------------------------
+select
+  count(*)                              as 発生件数,
+  count(distinct user_id)               as 影響した人数,
+  max((props ->> 'expected')::int)      as 最大の総件数,
+  max((props ->> 'received')::int)      as 最大の受信件数
+from public.usage_events
+where event = 'load_incomplete';

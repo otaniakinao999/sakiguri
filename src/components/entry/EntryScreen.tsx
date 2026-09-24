@@ -175,6 +175,8 @@ export function EntryScreen() {
           bizRatio: form.bizRatio,
           accountId: form.accountId,
           toAccountId: form.toAccountId,
+          /* 「予定にない支出」の取り消し（AC-38）。編集の対象に含める */
+          unplanned: form.unplanned ?? false,
         }),
       );
     } else {
@@ -208,10 +210,25 @@ export function EntryScreen() {
     settleWithAmount: (row: TodoPlanRow, amount: number) =>
       recordActual(row.plan, amount),
     defer: (row: TodoPlanRow) => setDeferring(row.plan),
-    linkTo: (row: TodoCandidateRow, planKey: string) =>
-      setData((d) => reconciled(linkActualToPlan(d, row.actual.id, planKey))),
-    markUnplanned: (row: TodoCandidateRow) =>
-      setData((d) => reconciled(setUnplanned(d, row.actual.id, true))),
+    linkTo: (row: TodoCandidateRow, planKey: string) => {
+      setData((d) => reconciled(linkActualToPlan(d, row.actual.id, planKey)));
+      /* 候補が当たっていたか。fromCandidate を母数に unplanned の割合を見る */
+      track(session?.user.id, "actual_recorded", {
+        settled: true,
+        fromCsv: false,
+        fromCandidate: true,
+        unplanned: false,
+      });
+    },
+    markUnplanned: (row: TodoCandidateRow) => {
+      setData((d) => reconciled(setUnplanned(d, row.actual.id, true)));
+      track(session?.user.id, "actual_recorded", {
+        settled: false,
+        fromCsv: false,
+        fromCandidate: true,
+        unplanned: true,
+      });
+    },
   };
 
   return (

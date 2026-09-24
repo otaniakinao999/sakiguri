@@ -193,6 +193,22 @@ export function ActualForm({
             : "この予定に紐づけて登録します。予測からは自動で除かれます。年月別収支の「予定」列は変わりません。"}
         </p>
       )}
+
+      {/* 「予定にない支出」の取り消し（AC-38）。誤って押した場合の戻し手段を
+          編集に置く。ここでしか戻せないと分かるよう、状態も説明する */}
+      {mode === "edit" && value.key === null && value.unplanned && (
+        <div className="border-border-base-low mt-16 border-t pt-12">
+          <p className="text-object-base-mid text-body-xxs leading-normal">
+            この実績は「予定にない支出」として確定済みです。消し込み候補は
+            出ません。取り消すと、条件に合う予定があれば候補が戻ります。
+          </p>
+          <div className="mt-8">
+            <Button size="sm" onClick={() => onChange({ unplanned: false })}>
+              「予定にない支出」を取り消す
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
