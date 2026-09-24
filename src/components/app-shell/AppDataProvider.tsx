@@ -26,6 +26,7 @@ import type { DateStr } from "@/core/types";
 import { emptyAppData, type AppData } from "@/lib/app-data";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { diffAppData } from "@/lib/supabase/diff";
+import { IncompleteLoadError } from "@/lib/supabase/fetch-all";
 import { loadAppData, saveDiff } from "@/lib/supabase/storage";
 import { todayStr } from "@/lib/today";
 import { track } from "@/lib/analytics/track";
@@ -63,6 +64,15 @@ export interface AppDataStore {
   saveState: SaveState;
   /** 失敗した保存をもう一度試す。デバウンスを待たずに即座に送る */
   retrySave: () => void;
+  /**
+   * 読み込みに失敗した理由。成功していれば null（FR-47）。
+   *
+   * **これが立っているあいだはアプリを出さない。** 一部だけ取得できた
+   * データで計算すると、残高も防衛ラインの警告も静かに狂う（§5.1.2）。
+   */
+  loadError: string | null;
+  /** 読み込みをやり直す */
+  retryLoad: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -90,6 +100,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle", seq: 0 });
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** 増やすと読み込みをやり直す */
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   /** 前回保存に成功した状態。これとの差分だけを送る */
   const savedRef = useRef<AppData | null>(null);
@@ -152,6 +165,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (!session || !today) return;
     let cancelled = false;
 
+    setLoadError(null);
+
     void (async () => {
       try {
         const loaded = await loadAppData(getSupabase(), today);
@@ -162,10 +177,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         toState({ status: "idle" });
       } catch (e) {
         if (cancelled) return;
-        toState({
-          status: "error",
-          message: `読み込めませんでした：${e instanceof Error ? e.message : String(e)}`,
-        });
+        /* 読み込めなかったので保存もさせない。空のデータで上書きしないため */
+        loadedRef.current = false;
+        savedRef.current = null;
+        setLoadError(e instanceof Error ? e.message : String(e));
+
+        /* 分割取得のバグを検知するカナリア（§5.1.2）。件数だけを残す。
+           金額・費目名・口座名は入れない（ADR-0013） */
+        if (e instanceof IncompleteLoadError) {
+          track(session.user.id, "load_incomplete", {
+            expected: e.expected,
+            received: e.received,
+          });
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -174,7 +198,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session, today, toState]);
+  }, [session, today, toState, loadAttempt]);
+
+  const retryLoad = useCallback(() => setLoadAttempt((n) => n + 1), []);
 
   /* ---------- 保存 ---------- */
 
@@ -226,8 +252,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const store = useMemo(
-    () => ({ data, setData, today, session, ready, saveState, retrySave, signOut }),
-    [data, setData, today, session, ready, saveState, retrySave, signOut],
+    () => ({
+      data,
+      setData,
+      today,
+      session,
+      ready,
+      saveState,
+      retrySave,
+      loadError,
+      retryLoad,
+      signOut,
+    }),
+    [
+      data,
+      setData,
+      today,
+      session,
+      ready,
+      saveState,
+      retrySave,
+      loadError,
+      retryLoad,
+      signOut,
+    ],
   );
 
   return (

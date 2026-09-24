@@ -67,6 +67,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       shortfall_warned: { shortfall: false, daysAhead: 41 },
       shortfall_acted: { toEntry: true },
       plan_deferred: { skipped: false },
+      load_incomplete: { expected: 3_000, received: 1_000 },
       forecast_horizon: { months: 8, accounts: 3 },
     };
 
@@ -87,6 +88,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       "shortfall_warned",
       "shortfall_acted",
       "plan_deferred",
+      "load_incomplete",
       "forecast_horizon",
     ];
     for (const name of names) {

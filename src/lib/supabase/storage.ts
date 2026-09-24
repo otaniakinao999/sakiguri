@@ -17,6 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppData } from "../app-data";
 import { emptyAppData } from "../app-data";
 import type { DataDiff } from "./diff";
+import { fetchAll } from "./fetch-all";
 import {
   fromAccount,
   fromActual,
@@ -38,39 +39,52 @@ import {
 } from "./rows";
 
 /**
- * 保存済みのデータを読む。
+ * 保存済みのデータを読む（FR-47）。
  *
  * 行が1件も無ければ（＝はじめての利用）空のデータを返す。
  * サンプルデータは入れない（PoC開発計画 §4 の指標のため）。
+ *
+ * **2段階で読む。** 先に設定を読んで基準日を確定させ、そのうえで実績と
+ * 単発予定を基準日以降に絞る。CL-3 の開始残高が基準日時点で定義され、
+ * FR-40 で基準日より前の月を参照しないと決めたため、基準日より前の実績を
+ * 読み込む必要がない（§5.1）。性能上の工夫ではなく、計算の定義から従う制約。
+ *
+ * 取得はすべて `fetchAll` を通す。順序を固定したうえで分割し、総件数と
+ * 照合する。合わなければ例外を投げ、**部分的なデータで計算に進ませない**
+ * （§5.1.2、AC-34・AC-35）。
  */
 export async function loadAppData(
   supabase: SupabaseClient,
   fallbackAsOf: string,
 ): Promise<AppData> {
-  const [settings, accounts, recurring, oneoffs, actuals, overrides] =
-    await Promise.all([
-      supabase.from("settings").select("*").maybeSingle(),
-      supabase.from("accounts").select("*"),
-      supabase.from("recurring_items").select("*"),
-      supabase.from("oneoff_items").select("*"),
-      supabase.from("actuals").select("*"),
-      supabase.from("overrides").select("*"),
-    ]);
-
-  for (const result of [settings, accounts, recurring, oneoffs, actuals, overrides]) {
-    if (result.error) throw new Error(result.error.message);
-  }
+  /* 段階1：基準日を確定させる。以降の絞り込みの基準になる */
+  const settings = await supabase.from("settings").select("*").maybeSingle();
+  if (settings.error) throw new Error(settings.error.message);
 
   const settingsRow = settings.data as SettingsRow | null;
+  const asOf = settingsRow?.as_of ?? fallbackAsOf;
+  const since = { column: "date", value: asOf };
+
+  /* 段階2：残りを取る。日付を持つ2つだけ基準日以降に絞る。
+     overrides は予定インスタンスキーで引くので日付で絞れない。
+     accounts と recurring_items はもともと件数が小さい */
+  const [accounts, recurring, oneoffs, actuals, overrides] = await Promise.all([
+    fetchAll<AccountRow>(supabase, "accounts"),
+    fetchAll<RecurringRow>(supabase, "recurring_items"),
+    fetchAll<OneoffRow>(supabase, "oneoff_items", { since }),
+    fetchAll<ActualRow>(supabase, "actuals", { since }),
+    /* overrides の主キーは plan_key。id 列を持たない */
+    fetchAll<OverrideRow>(supabase, "overrides", { idColumn: "plan_key" }),
+  ]);
 
   return {
-    asOf: settingsRow?.as_of ?? fallbackAsOf,
+    asOf,
     reserveLine: settingsRow?.reserve_line ?? 0,
-    accounts: ((accounts.data ?? []) as AccountRow[]).map(toAccount),
-    recurring: ((recurring.data ?? []) as RecurringRow[]).map(toRecurring),
-    oneoffs: ((oneoffs.data ?? []) as OneoffRow[]).map(toOneoff),
-    actuals: ((actuals.data ?? []) as ActualRow[]).map(toActual),
-    overrides: toOverrides((overrides.data ?? []) as OverrideRow[]),
+    accounts: accounts.map(toAccount),
+    recurring: recurring.map(toRecurring),
+    oneoffs: oneoffs.map(toOneoff),
+    actuals: actuals.map(toActual),
+    overrides: toOverrides(overrides),
     ...(settingsRow ? {} : emptyDefaults(fallbackAsOf)),
   };
 }
