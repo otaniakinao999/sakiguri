@@ -5,8 +5,8 @@ import { buildForecast } from "@/core/forecast";
 import type { Actual, DepositAccount, RecurringItem } from "@/core/types";
 
 import { emptyAppData, type AppData } from "../app-data";
-import { linkActualToPlan } from "../mutations";
-import { findDoubleCounts, isDoubleCountCandidate } from "../reconcile";
+import { linkActualToPlan, setUnplanned } from "../mutations";
+import { findCandidates, isCandidate } from "../reconcile";
 
 /**
  * FR-46 / AC-30。
@@ -93,7 +93,7 @@ const OPENING = 1_500_000;
 const closing = (data: AppData) => series(data).rows.at(-1)!.proj;
 
 const found = (data: AppData) =>
-  findDoubleCounts({
+  findCandidates({
     actuals: data.actuals,
     unmatchedForecast: series(data).unmatchedForecast,
   });
@@ -126,8 +126,9 @@ describe("AC-30 候補の抽出", () => {
 
     expect(got).toHaveLength(1);
     expect(got[0].actual.id).toBe("x1");
-    expect(got[0].plan.key).toBe("r:rent:2026-04-05");
-    expect(got[0].dayGap).toBe(5);
+    expect(got[0].plans).toHaveLength(1);
+    expect(got[0].plans[0].plan.key).toBe("r:rent:2026-04-05");
+    expect(got[0].plans[0].dayGap).toBe(5);
   });
 
   it("日付がちょうど12日差なら候補になる", () => {
@@ -162,7 +163,13 @@ describe("AC-30 候補の抽出", () => {
     expect(got).toHaveLength(0);
   });
 
-  it("1つの予定に当たる実績は1件だけ", () => {
+  /**
+   * 1つの予定が複数の実績の候補になってよい。
+   *
+   * どれか1つを確定すればその予定は消し込まれ、次の計算で他方の候補から
+   * 消える。先に取ったもの勝ちにする必要はない。
+   */
+  it("同じ予定が複数の実績の候補になる", () => {
     const got = found(
       base([
         actual({ id: "x1", date: "2026-04-05" }),
@@ -170,7 +177,8 @@ describe("AC-30 候補の抽出", () => {
       ]),
     );
 
-    expect(got).toHaveLength(1);
+    expect(got).toHaveLength(2);
+    expect(got.every((g) => g.plans.length === 1)).toBe(true);
   });
 
   it("候補が無ければ空", () => {
@@ -194,7 +202,11 @@ describe("AC-30 自動では消し込まない", () => {
     const before = base([actual({ id: "x1", amount: 120_000 })]);
     const [candidate] = found(before);
 
-    const after = linkActualToPlan(before, candidate.actual.id, candidate.plan.key);
+    const after = linkActualToPlan(
+      before,
+      candidate.actual.id,
+      candidate.plans[0].plan.key,
+    );
 
     expect(after.actuals[0].key).toBe("r:rent:2026-04-05");
     expect(closing(after)).toBe(OPENING - 120_000);
@@ -205,9 +217,12 @@ describe("AC-30 自動では消し込まない", () => {
     const before = base([actual({ id: "x1", amount: 120_000, name: "四月家賃" })]);
     const after = linkActualToPlan(before, "x1", "r:rent:2026-04-05");
 
+    /* key と unplanned 以外は変わらない。紐づいた時点で「予定に対応しない」
+       ではなくなるので unplanned は下りる */
     expect(after.actuals[0]).toEqual({
       ...before.actuals[0],
       key: "r:rent:2026-04-05",
+      unplanned: false,
     });
   });
 
@@ -246,9 +261,141 @@ describe("純関数であること", () => {
   it("述語は単体でも使える", () => {
     const plan = series(base([])).unmatchedForecast[0];
 
-    expect(isDoubleCountCandidate(actual({ id: "x1" }), plan)).toBe(true);
-    expect(
-      isDoubleCountCandidate(actual({ id: "x1", key: "k" }), plan),
-    ).toBe(false);
+    expect(isCandidate(actual({ id: "x1" }), plan)).toBe(true);
+    expect(isCandidate(actual({ id: "x1", key: "k" }), plan)).toBe(false);
+    expect(isCandidate(actual({ id: "x1", unplanned: true }), plan)).toBe(false);
+  });
+});
+
+/* ========================= 候補は全件（AC-39） ========================= */
+
+describe("AC-39 候補を全件提示する", () => {
+  /**
+   * CL-7 の「最初の1件」は自動確定のための規則であり、利用者に選ばせる
+   * 場面では全件を並べるのが正しい。1件に絞ると、本当の相手が2件目だった
+   * ときに選べない。
+   */
+  it("条件を満たす予定が2件あれば2件とも返す", () => {
+    /* 同額・同口座の単発予定を2件、実績の前後に置く */
+    const oneoffs = [
+      {
+        id: "o1",
+        date: "2026-04-08",
+        name: "電気代A",
+        type: "expense" as const,
+        costType: "variable" as const,
+        categoryCode: "EXP-02",
+        amount: 9_800,
+        bizRatio: 0,
+        accountId: "a1",
+      },
+      {
+        id: "o2",
+        date: "2026-04-12",
+        name: "電気代B",
+        type: "expense" as const,
+        costType: "variable" as const,
+        categoryCode: "EXP-02",
+        amount: 9_800,
+        bizRatio: 0,
+        accountId: "a1",
+      },
+    ];
+    const data = {
+      ...base([actual({ id: "x1", date: "2026-04-10", amount: 9_800 })], []),
+      oneoffs,
+    };
+
+    const got = found(data);
+
+    expect(got).toHaveLength(1);
+    expect(got[0].plans.map((c) => c.plan.key)).toEqual(["o:o1", "o:o2"]);
+  });
+
+  it("候補は日付の近い順に並ぶ", () => {
+    const oneoffs = [
+      {
+        id: "far",
+        date: "2026-04-01",
+        name: "遠い",
+        type: "expense" as const,
+        costType: "variable" as const,
+        categoryCode: "EXP-02",
+        amount: 9_800,
+        bizRatio: 0,
+        accountId: "a1",
+      },
+      {
+        id: "near",
+        date: "2026-04-09",
+        name: "近い",
+        type: "expense" as const,
+        costType: "variable" as const,
+        categoryCode: "EXP-02",
+        amount: 9_800,
+        bizRatio: 0,
+        accountId: "a1",
+      },
+    ];
+    const data = {
+      ...base([actual({ id: "x1", date: "2026-04-10", amount: 9_800 })], []),
+      oneoffs,
+    };
+
+    expect(found(data)[0].plans.map((c) => c.dayGap)).toEqual([1, 9]);
+  });
+});
+
+/* ========================= 予定にない支出（AC-38） ========================= */
+
+describe("AC-38 予定にない支出", () => {
+  it("unplanned を立てると候補が出なくなる", () => {
+    const before = base([actual({ id: "x1" })]);
+    expect(found(before)).toHaveLength(1);
+
+    const after = setUnplanned(before, "x1", true);
+
+    expect(found(after)).toEqual([]);
+  });
+
+  it("残高は変わらない。計算に影響しないフラグである", () => {
+    const before = base([actual({ id: "x1", amount: 120_000 })]);
+    const after = setUnplanned(before, "x1", true);
+
+    /* 二重計上のままである。候補の提示を止めるだけで消し込みはしない */
+    expect(closing(after)).toBe(closing(before));
+  });
+
+  it("取り消すと候補が戻る", () => {
+    const data = setUnplanned(base([actual({ id: "x1" })]), "x1", true);
+
+    expect(found(setUnplanned(data, "x1", false))).toHaveLength(1);
+  });
+
+  it("紐づけると unplanned は下りる", () => {
+    const data = setUnplanned(base([actual({ id: "x1" })]), "x1", true);
+    const after = linkActualToPlan(data, "x1", "r:rent:2026-04-05");
+
+    expect(after.actuals[0].unplanned).toBe(false);
+    expect(after.actuals[0].key).toBe("r:rent:2026-04-05");
+  });
+
+  it("他の実績には触らない", () => {
+    const before = base([
+      actual({ id: "x1" }),
+      actual({ id: "x2", amount: 3_000, name: "スーパー" }),
+    ]);
+    const after = setUnplanned(before, "x1", true);
+
+    expect(after.actuals[1]).toEqual(before.actuals[1]);
+  });
+
+  it("元のデータを書き換えない", () => {
+    const data = base([actual({ id: "x1" })]);
+    const snapshot = structuredClone(data);
+
+    setUnplanned(data, "x1", true);
+
+    expect(data).toEqual(snapshot);
   });
 });

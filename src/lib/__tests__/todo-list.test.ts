@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Actual, ForecastInstance } from "@/core/types";
 
-import type { DoubleCount } from "../reconcile";
+import type { CandidateGroup } from "../reconcile";
 import { buildTodoList } from "../todo-list";
 
 /**
@@ -45,10 +45,12 @@ function actual(over: Partial<Actual> & Pick<Actual, "id">): Actual {
   };
 }
 
-const pair = (p: ForecastInstance, a: Actual, dayGap = 0): DoubleCount => ({
-  plan: p,
+const group = (
+  a: Actual,
+  plans: [ForecastInstance, number][],
+): CandidateGroup => ({
   actual: a,
-  dayGap,
+  plans: plans.map(([plan, dayGap]) => ({ plan, dayGap })),
 });
 
 const UNTIL = "2026-04-30";
@@ -63,7 +65,7 @@ describe("AC-37 1つのリストに混在させる", () => {
 
     const got = buildTodoList({
       unmatchedForecast: [p1, p2, p3],
-      doubleCounts: [pair(p2, actual({ id: "x1" }))],
+      candidates: [group(actual({ id: "x1" }), [[p2, 0]])],
       until: UNTIL,
     });
 
@@ -81,7 +83,7 @@ describe("AC-37 1つのリストに混在させる", () => {
 
     const got = buildTodoList({
       unmatchedForecast: [p1, p2],
-      doubleCounts: [pair(p1, actual({ id: "x1", date: "2026-04-25" }), 20)],
+      candidates: [group(actual({ id: "x1", date: "2026-04-25" }), [[p1, 20]])],
       until: UNTIL,
     });
 
@@ -94,7 +96,7 @@ describe("AC-37 1つのリストに混在させる", () => {
 
     const got = buildTodoList({
       unmatchedForecast: [p1],
-      doubleCounts: [pair(p1, actual({ id: "x1" }))],
+      candidates: [group(actual({ id: "x1" }), [[p1, 0]])],
       until: UNTIL,
     });
 
@@ -107,7 +109,7 @@ describe("AC-37 1つのリストに混在させる", () => {
 
     const got = buildTodoList({
       unmatchedForecast: [p1],
-      doubleCounts: [pair(p1, actual({ id: "x1" }))],
+      candidates: [group(actual({ id: "x1" }), [[p1, 0]])],
       until: UNTIL,
     });
 
@@ -116,7 +118,7 @@ describe("AC-37 1つのリストに混在させる", () => {
 
   it("どちらも無ければ空", () => {
     expect(
-      buildTodoList({ unmatchedForecast: [], doubleCounts: [], until: UNTIL }),
+      buildTodoList({ unmatchedForecast: [], candidates: [], until: UNTIL }),
     ).toEqual([]);
   });
 });
@@ -130,17 +132,17 @@ describe("表示する範囲", () => {
         plan({ key: "near", date: "2026-04-10" }),
         plan({ key: "far", date: "2026-06-01", name: "先の予定" }),
       ],
-      doubleCounts: [],
+      candidates: [],
       until: UNTIL,
     });
 
-    expect(got.map((r) => r.plan.key)).toEqual(["near"]);
+    expect(got.map((r) => r.rowKey)).toEqual(["p:near"]);
   });
 
   it("until ちょうどは出す", () => {
     const got = buildTodoList({
       unmatchedForecast: [plan({ key: "edge", date: UNTIL })],
-      doubleCounts: [],
+      candidates: [],
       until: UNTIL,
     });
 
@@ -158,7 +160,7 @@ describe("表示する範囲", () => {
 
     const got = buildTodoList({
       unmatchedForecast: [far],
-      doubleCounts: [pair(far, actual({ id: "x1", date: "2026-06-02" }))],
+      candidates: [group(actual({ id: "x1", date: "2026-06-02" }), [[far, 1]])],
       until: UNTIL,
     });
 
@@ -170,23 +172,25 @@ describe("表示する範囲", () => {
 /* ========================= 並びの安定 ========================= */
 
 describe("純関数であること", () => {
-  it("同じ日付なら内容とキーで決まる", () => {
+  it("同じ日付なら行キーで決まる", () => {
     const got = buildTodoList({
       unmatchedForecast: [
         plan({ key: "b", date: "2026-04-10", name: "通信費" }),
         plan({ key: "a", date: "2026-04-10", name: "家賃" }),
       ],
-      doubleCounts: [],
+      candidates: [],
       until: UNTIL,
     });
 
-    expect(got.map((r) => r.plan.name)).toEqual(["家賃", "通信費"]);
+    expect(
+      got.map((r) => (r.kind === "plan" ? r.plan.name : r.actual.name)),
+    ).toEqual(["家賃", "通信費"]);
   });
 
   it("同じ入力なら同じ出力", () => {
     const input = {
       unmatchedForecast: [plan({ key: "p1", date: "2026-04-10" })],
-      doubleCounts: [],
+      candidates: [],
       until: UNTIL,
     };
 

@@ -42,13 +42,20 @@ import {
   blankActual,
   linkActualToPlan,
   newId,
+  setUnplanned,
   removeActual,
   settleAsPlanned,
   updateActual,
 } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
-import { findDoubleCounts } from "@/lib/reconcile";
-import { buildTodoList, type TodoRow } from "@/lib/todo-list";
+import { findCandidates } from "@/lib/reconcile";
+import {
+  buildTodoList,
+  TODO_PREVIEW_COUNT,
+  type TodoCandidateRow,
+  type TodoPlanRow,
+  type TodoRow,
+} from "@/lib/todo-list";
 
 import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
 import { DeferralEditor } from "./DeferralEditor";
@@ -66,14 +73,8 @@ export function EntryScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
 
-  /**
-   * 「別の取引」で消した候補。
-   *
-   * **この画面を開いているあいだだけ効く。** 却下を保存する項目がデータ
-   * モデルに無いため、再読込すると候補は戻る。永続化するかどうかは仕様に
-   * 無いので決めていない。
-   */
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
+  /** 要対応リストを全件出すか（B-2） */
+  const [showAllTodo, setShowAllTodo] = useState(false);
 
   /* 実績一覧（FR-42） */
   const [listMonth, setListMonth] = useState<string | null>(null);
@@ -99,20 +100,21 @@ export function EntryScreen() {
       today,
     );
 
-    const doubleCounts = findDoubleCounts({
+    /* unplanned の実績は候補から除かれる（AC-38） */
+    const candidates = findCandidates({
       actuals: data.actuals,
       unmatchedForecast: series.unmatchedForecast,
-    }).filter((c) => !dismissed.has(`${c.plan.key}|${c.actual.id}`));
+    });
 
     return {
       todo: buildTodoList({
         unmatchedForecast: series.unmatchedForecast,
-        doubleCounts,
+        candidates,
         until: addDays(today, PENDING_LOOKAHEAD_DAYS),
       }),
-      candidateCount: doubleCounts.length,
+      candidateCount: candidates.length,
     };
-  }, [data, today, dismissed]);
+  }, [data, today]);
 
   const list = useMemo(
     () =>
@@ -192,15 +194,14 @@ export function EntryScreen() {
   };
 
   const actions = {
-    settleAsIs: (row: Extract<TodoRow, { kind: "plan" }>) =>
-      recordActual(row.plan, row.plan.amount),
-    settleWithAmount: (row: Extract<TodoRow, { kind: "plan" }>, amount: number) =>
+    settleAsIs: (row: TodoPlanRow) => recordActual(row.plan, row.plan.amount),
+    settleWithAmount: (row: TodoPlanRow, amount: number) =>
       recordActual(row.plan, amount),
-    defer: (row: Extract<TodoRow, { kind: "plan" }>) => setDeferring(row.plan),
-    linkCandidate: (row: Extract<TodoRow, { kind: "candidate" }>) =>
-      setData((d) => linkActualToPlan(d, row.actual.id, row.plan.key)),
-    dismissCandidate: (row: Extract<TodoRow, { kind: "candidate" }>) =>
-      setDismissed((s) => new Set(s).add(`${row.plan.key}|${row.actual.id}`)),
+    defer: (row: TodoPlanRow) => setDeferring(row.plan),
+    linkTo: (row: TodoCandidateRow, planKey: string) =>
+      setData((d) => linkActualToPlan(d, row.actual.id, planKey)),
+    markUnplanned: (row: TodoCandidateRow) =>
+      setData((d) => setUnplanned(d, row.actual.id, true)),
   };
 
   return (
@@ -224,7 +225,30 @@ export function EntryScreen() {
           </div>
         )}
 
-        <TodoTable rows={computed.todo} accounts={data.accounts} actions={actions} />
+        <TodoTable
+          rows={
+            showAllTodo
+              ? computed.todo
+              : computed.todo.slice(0, TODO_PREVIEW_COUNT)
+          }
+          accounts={data.accounts}
+          actions={actions}
+        />
+
+        {/* B-2。古いものから20件だけ出し、残りは開いて見せる */}
+        {computed.todo.length > TODO_PREVIEW_COUNT && (
+          <div className="mt-12 flex flex-wrap items-center gap-8">
+            <span className="text-object-base-mid num text-body-xxs">
+              {showAllTodo
+                ? `${computed.todo.length}件すべて`
+                : `${TODO_PREVIEW_COUNT}件 ／ ${computed.todo.length}件`}
+              を表示しています
+            </span>
+            <Button size="sm" onClick={() => setShowAllTodo(!showAllTodo)}>
+              {showAllTodo ? "古い20件だけ表示" : "すべて表示"}
+            </Button>
+          </div>
+        )}
 
         <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
           「予定どおり」で予定額のまま実績にします。金額が違うときや払えな

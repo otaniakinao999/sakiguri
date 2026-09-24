@@ -231,6 +231,8 @@ describe("行とアプリ型の往復", () => {
       bizRatio: 25,
       accountId: "a1",
       toAccountId: undefined,
+      /* DB の既定値は false。列を足す前の行を読み戻しても false になる */
+      unplanned: false,
     };
     expect(toActual(fromActual(actual, USER))).toEqual(actual);
   });
@@ -248,6 +250,8 @@ describe("行とアプリ型の往復", () => {
       bizRatio: 0,
       accountId: "a1",
       toAccountId: undefined,
+      /* DB の既定値は false。列を足す前の行を読み戻しても false になる */
+      unplanned: false,
     };
     expect(toActual(fromActual(actual, USER))).toEqual(actual);
   });

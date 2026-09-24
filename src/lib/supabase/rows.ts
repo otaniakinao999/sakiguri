@@ -69,6 +69,8 @@ export interface OneoffRow extends EntryRowBase {
 export interface ActualRow extends EntryRowBase {
   date: DateStr;
   plan_key: string | null;
+  /** key が null である理由が「予定に対応しない」と確定済みか（FR-46） */
+  unplanned: boolean;
 }
 
 export interface OverrideRow {
@@ -142,6 +144,7 @@ export function toActual(row: ActualRow): Actual {
   return {
     id: row.id,
     key: row.plan_key,
+    unplanned: row.unplanned ?? false,
     date: row.date,
     name: row.name,
     type: row.type,
@@ -228,6 +231,7 @@ export function fromActual(item: Actual, userId: string): ActualRow {
     id: item.id,
     user_id: userId,
     plan_key: item.key,
+    unplanned: item.unplanned ?? false,
     date: item.date,
     name: item.name,
     type: item.type,

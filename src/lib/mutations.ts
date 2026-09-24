@@ -221,7 +221,27 @@ export function linkActualToPlan(
   return {
     ...data,
     actuals: data.actuals.map((a) =>
-      a.id === actualId ? { ...a, key: planKey } : a,
+      /* 紐づいた時点で「予定に対応しない」ではなくなる */
+      a.id === actualId ? { ...a, key: planKey, unplanned: false } : a,
+    ),
+  };
+}
+
+/**
+ * 実績を「予定に対応しない突発の支出」と確定する／取り消す（FR-46、AC-38）。
+ *
+ * `key` が null である理由を記録するだけで、**残高の計算には影響しない。**
+ * 候補の提示を止めるためのフラグである。取り消しは実績の編集から行える。
+ */
+export function setUnplanned(
+  data: AppData,
+  actualId: string,
+  unplanned: boolean,
+): AppData {
+  return {
+    ...data,
+    actuals: data.actuals.map((a) =>
+      a.id === actualId ? { ...a, unplanned } : a,
     ),
   };
 }
@@ -341,6 +361,7 @@ export function blankActual(
   return {
     id,
     key: null,
+    unplanned: false,
     date,
     name: "",
     type: "expense",
