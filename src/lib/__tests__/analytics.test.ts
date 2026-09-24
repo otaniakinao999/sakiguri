@@ -62,12 +62,8 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
     const samples: { [K in keyof EventMap]: EventMap[K] } = {
       signed_in: {},
       plan_created: { recurring: true },
-      actual_recorded: {
-        settled: true,
-        fromCsv: false,
-        fromCandidate: true,
-        unplanned: false,
-      },
+      actual_recorded: { settled: true, fromCsv: false },
+      candidate_resolved: { confirmed: true, candidateCount: 2 },
       csv_imported: { rows: 12, matched: 3 },
       shortfall_warned: { shortfall: false, daysAhead: 41 },
       shortfall_acted: { toEntry: true },
@@ -89,6 +85,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       "signed_in",
       "plan_created",
       "actual_recorded",
+      "candidate_resolved",
       "csv_imported",
       "shortfall_warned",
       "shortfall_acted",

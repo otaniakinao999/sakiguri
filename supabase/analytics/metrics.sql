@@ -240,34 +240,44 @@ order by ( 実施日 - 前回 ) / 10;
 -- ------------------------------------------------------------
 -- FR-46：候補提示が当たっているか
 --
--- 候補から行った操作のうち、確定した割合と「予定にない支出」として
--- 却下した割合を見る。
+-- candidate_resolved は候補に決着をつけた操作。actual_recorded とは別の
+-- イベントにしてある。候補の確定も却下も既存の実績を更新する操作であって
+-- 実績を記録していないため、流用すると実績入力の件数が水増しされる。
 --
 -- 読み方：却下が大半なら CL-7 の条件（同額・日付±12日以内・同一口座）が
 -- 緩すぎる。候補が邪魔をしているだけということになる。
 -- ------------------------------------------------------------
 select
-  count(*)                                                    as 候補からの操作,
-  count(*) filter (where (props ->> 'unplanned')::boolean)    as 却下,
-  count(*) filter (where not (props ->> 'unplanned')::boolean) as 確定,
+  count(*)                                                  as 決着した候補,
+  count(*) filter (where (props ->> 'confirmed')::boolean)  as 確定,
+  count(*) filter (where not (props ->> 'confirmed')::boolean) as 却下,
   round(
-    100.0 * count(*) filter (where not (props ->> 'unplanned')::boolean)
+    100.0 * count(*) filter (where (props ->> 'confirmed')::boolean)
     / nullif(count(*), 0)
-  )                                                            as "確定率%"
+  )                                                          as "確定率%"
 from public.usage_events
-where event = 'actual_recorded'
-  and (props ->> 'fromCandidate')::boolean;
+where event = 'candidate_resolved';
+
+-- 候補が何件あったか。複数が普通なのか稀なのかで、CL-7 の条件の見直し方が
+-- 変わる。常に1件なら条件は十分に狭い
+select
+  (props ->> 'candidateCount')::int                          as 候補件数,
+  count(*)                                                   as 回数,
+  count(*) filter (where (props ->> 'confirmed')::boolean)   as うち確定
+from public.usage_events
+where event = 'candidate_resolved'
+group by 1
+order by 1;
 
 -- 利用者ごと。特定の1人だけが却下を連発しているのか、全体の傾向かを見る
 select
   user_id,
-  count(*)                                                     as 候補からの操作,
-  count(*) filter (where not (props ->> 'unplanned')::boolean) as 確定
+  count(*)                                                   as 決着した候補,
+  count(*) filter (where (props ->> 'confirmed')::boolean)   as 確定
 from public.usage_events
-where event = 'actual_recorded'
-  and (props ->> 'fromCandidate')::boolean
+where event = 'candidate_resolved'
 group by user_id
-order by 候補からの操作 desc;
+order by 決着した候補 desc;
 
 -- ------------------------------------------------------------
 -- FR-47：読み込みの切り捨てが起きていないか

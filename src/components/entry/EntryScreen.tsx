@@ -210,23 +210,20 @@ export function EntryScreen() {
     settleWithAmount: (row: TodoPlanRow, amount: number) =>
       recordActual(row.plan, amount),
     defer: (row: TodoPlanRow) => setDeferring(row.plan),
+    /* どちらも既存の実績を更新する操作であって、実績を記録していない。
+       actual_recorded は使わない（実績入力の件数が水増しされるため） */
     linkTo: (row: TodoCandidateRow, planKey: string) => {
       setData((d) => reconciled(linkActualToPlan(d, row.actual.id, planKey)));
-      /* 候補が当たっていたか。fromCandidate を母数に unplanned の割合を見る */
-      track(session?.user.id, "actual_recorded", {
-        settled: true,
-        fromCsv: false,
-        fromCandidate: true,
-        unplanned: false,
+      track(session?.user.id, "candidate_resolved", {
+        confirmed: true,
+        candidateCount: row.plans.length,
       });
     },
     markUnplanned: (row: TodoCandidateRow) => {
       setData((d) => reconciled(setUnplanned(d, row.actual.id, true)));
-      track(session?.user.id, "actual_recorded", {
-        settled: false,
-        fromCsv: false,
-        fromCandidate: true,
-        unplanned: true,
+      track(session?.user.id, "candidate_resolved", {
+        confirmed: false,
+        candidateCount: row.plans.length,
       });
     },
   };
