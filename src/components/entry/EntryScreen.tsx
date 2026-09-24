@@ -3,10 +3,17 @@
 /**
  * SC-05 実績入力
  *
- * 一次情報：docs/要件定義書.md §4.1 SC-05
- *   消し込み待ちリスト、実績入力フォーム、最近の実績。
- * 対応する機能要件：FR-05（実績の手入力）、FR-06（消し込み）、FR-07（繰延）
- * 対応する受入基準：AC-03
+ * 一次情報：docs/要件定義書.md §4.1 SC-05、§4.1.1 実績入力の構成
+ * 対応する機能要件：FR-05（手入力）、FR-06（消し込み）、FR-07（繰延）、
+ *                   FR-41（実績の編集）、FR-42（一覧）、FR-46（照合候補）
+ * 対応する受入基準：AC-03、AC-27、AC-28a、AC-30、AC-37
+ *
+ * **1カラム。** 高さが伸びる要対応リストと高さの固定された入力フォームを
+ * 横に並べると、件数が増えた時点で必ず崩れる。
+ *
+ * **主従を分ける。** 想定フローは「CSV取込 → 自動照合 → 残りを消し込み」で、
+ * 手入力は例外処理である。要対応リストを主とし、手入力はボタンから
+ * モーダルで開く。
  */
 
 import { useMemo, useState } from "react";
@@ -20,39 +27,62 @@ import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
+import { Notification } from "@/components/ui/Notification";
 import { KindTag, RatioTag } from "@/components/ui/Tag";
-import { formatAmount, formatMonthDay, MINUS } from "@/lib/format";
+import { buildActualList, MONTH_PAGE_SIZE } from "@/lib/actual-list";
+import {
+  formatAmount,
+  formatMonthDay,
+  formatYearMonthLabel,
+  MINUS,
+} from "@/lib/format";
 import {
   addActual,
   blankActual,
+  linkActualToPlan,
   newId,
   removeActual,
   settleAsPlanned,
   updateActual,
 } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
-
-import { buildActualList, MONTH_PAGE_SIZE } from "@/lib/actual-list";
-import { formatYearMonthLabel } from "@/lib/format";
 import { findDoubleCounts } from "@/lib/reconcile";
+import { buildTodoList, type TodoRow } from "@/lib/todo-list";
 
 import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
-import { DoubleCountCard } from "./DoubleCountCard";
 import { DeferralEditor } from "./DeferralEditor";
+import { TodoTable } from "./TodoTable";
 
-/** 消し込み待ちに出す範囲。今日から先1週間ぶんまで拾う */
+/** 要対応に出す予定の範囲。今日から先1週間ぶんまで拾う */
 const PENDING_LOOKAHEAD_DAYS = 7;
 
 export function EntryScreen() {
   const { data, setData, today, session } = useAppData();
+
+  /** 手入力・編集のモーダル。null なら閉じている */
   const [form, setForm] = useState<Actual | null>(null);
   /** 編集中の実績の id。新規入力なら null */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
 
-  const { pending, doubleCounts } = useMemo(() => {
-    if (!today || data.accounts.length === 0)
-      return { pending: [], doubleCounts: [] };
+  /**
+   * 「別の取引」で消した候補。
+   *
+   * **この画面を開いているあいだだけ効く。** 却下を保存する項目がデータ
+   * モデルに無いため、再読込すると候補は戻る。永続化するかどうかは仕様に
+   * 無いので決めていない。
+   */
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
+
+  /* 実績一覧（FR-42） */
+  const [listMonth, setListMonth] = useState<string | null>(null);
+  const [listPage, setListPage] = useState(0);
+
+  const computed = useMemo(() => {
+    if (!today || data.accounts.length === 0) {
+      return { todo: [] as TodoRow[], candidateCount: 0 };
+    }
     const to = forecastEnd(data.asOf);
     const forecast = buildForecast(
       {
@@ -68,23 +98,25 @@ export function EntryScreen() {
       to,
       today,
     );
-    const limit = addDays(today, PENDING_LOOKAHEAD_DAYS);
-    return {
-      pending: series.unmatchedForecast.filter((f) => f.date <= limit),
-      /* FR-46。key を持たない実績が同じ取引を二重に乗せていないか */
-      doubleCounts: findDoubleCounts({
-        actuals: data.actuals,
-        unmatchedForecast: series.unmatchedForecast,
-      }),
-    };
-  }, [data, today]);
 
-  /* FR-42。月で区切り、その月は全件。月内が上限を超えたときだけページング */
-  const [listMonth, setListMonth] = useState<string | null>(null);
-  const [listPage, setListPage] = useState(0);
+    const doubleCounts = findDoubleCounts({
+      actuals: data.actuals,
+      unmatchedForecast: series.unmatchedForecast,
+    }).filter((c) => !dismissed.has(`${c.plan.key}|${c.actual.id}`));
+
+    return {
+      todo: buildTodoList({
+        unmatchedForecast: series.unmatchedForecast,
+        doubleCounts,
+        until: addDays(today, PENDING_LOOKAHEAD_DAYS),
+      }),
+      candidateCount: doubleCounts.length,
+    };
+  }, [data, today, dismissed]);
 
   const list = useMemo(
-    () => buildActualList({ actuals: data.actuals, yearMonth: listMonth, page: listPage }),
+    () =>
+      buildActualList({ actuals: data.actuals, yearMonth: listMonth, page: listPage }),
     [data.actuals, listMonth, listPage],
   );
 
@@ -106,12 +138,13 @@ export function EntryScreen() {
     );
   }
 
-  const startForm = (base?: Partial<Actual>) => {
+  /* ---------- 手入力・編集 ---------- */
+
+  const startForm = () => {
     setEditingId(null);
-    setForm({ ...blankActual(newId(), data.accounts[0].id, today), ...base });
+    setForm(blankActual(newId(), data.accounts[0].id, today));
   };
 
-  /** 既存の実績を編集する（FR-41）。 */
   const startEdit = (actual: Actual) => {
     setEditingId(actual.id);
     setForm({ ...actual });
@@ -122,17 +155,12 @@ export function EntryScreen() {
     setEditingId(null);
   };
 
-  const update = (patch: Partial<Actual>) =>
-    setForm((f) => (f ? applyActualPatch(f, patch) : f));
-
   const submit = () => {
     if (!form || !isSubmittable(form)) return;
     const name = form.name.trim();
 
     if (editingId) {
-      /* FR-41 が編集を認めている項目だけを渡す。id と key は含めない。
-         key は予定との紐づけで、これを触ると消し込みが外れる
-         （AC-24・AC-25）。updateActual 側でも落としている */
+      /* FR-41 が編集を認めている項目だけを渡す。id と key は含めない */
       setData((d) =>
         updateActual(d, editingId, {
           date: form.date,
@@ -156,85 +184,142 @@ export function EntryScreen() {
     closeForm();
   };
 
+  /* ---------- 要対応リストの操作 ---------- */
+
+  const recordActual = (plan: ForecastInstance, amount: number) => {
+    setData((d) => settleAsPlanned(d, { ...plan, amount }, newId()));
+    track(session?.user.id, "actual_recorded", { settled: true, fromCsv: false });
+  };
+
+  const actions = {
+    settleAsIs: (row: Extract<TodoRow, { kind: "plan" }>) =>
+      recordActual(row.plan, row.plan.amount),
+    settleWithAmount: (row: Extract<TodoRow, { kind: "plan" }>, amount: number) =>
+      recordActual(row.plan, amount),
+    defer: (row: Extract<TodoRow, { kind: "plan" }>) => setDeferring(row.plan),
+    linkCandidate: (row: Extract<TodoRow, { kind: "candidate" }>) =>
+      setData((d) => linkActualToPlan(d, row.actual.id, row.plan.key)),
+    dismissCandidate: (row: Extract<TodoRow, { kind: "candidate" }>) =>
+      setDismissed((s) => new Set(s).add(`${row.plan.key}|${row.actual.id}`)),
+  };
+
   return (
-    <div className="grid gap-12 wide:grid-cols-2">
-      {/* ---------- 二重計上の候補（FR-46） ---------- */}
-      {doubleCounts.length > 0 && (
-        <div className="wide:col-span-2">
-          <DoubleCountCard candidates={doubleCounts} accounts={data.accounts} />
-        </div>
+    <div className="flex flex-col gap-12">
+      {/* ---------- 要対応（主）---------- */}
+      <Card
+        title={`要対応（${computed.todo.length}件）`}
+        right={
+          <Button size="sm" onClick={startForm}>
+            ＋ 実績を手入力
+          </Button>
+        }
+      >
+        {computed.candidateCount > 0 && (
+          <div className="mb-12">
+            <Notification variant="caution">
+              同じ取引かもしれない実績と予定が{computed.candidateCount}組あります。
+              両方が残高に乗っているため、残高が実際より低く出ています。
+              同じ取引なら「同じ取引」を押してください。
+            </Notification>
+          </div>
+        )}
+
+        <TodoTable rows={computed.todo} accounts={data.accounts} actions={actions} />
+
+        <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
+          「予定どおり」で予定額のまま実績にします。金額が違うときや払えな
+          かったときは「ほかの操作」を開いてください。CSV取込を使うと、
+          ここの多くは自動で消し込まれます。
+        </p>
+      </Card>
+
+      {/* ---------- 繰延（FR-07）---------- */}
+      {deferring && (
+        <DeferralEditor plan={deferring} onClose={() => setDeferring(null)} />
       )}
 
-      {/* ---------- 消し込み待ち（FR-06） ---------- */}
-      <Card title={`消し込み待ちの予定（${pending.length}件）`}>
-        {pending.length === 0 ? (
+      {/* ---------- 実績（FR-42）---------- */}
+      <Card
+        title={`実績（${list.total}件）`}
+        right={
+          list.months.length > 0 ? (
+            <span className="flex items-center gap-8">
+              <label className="sr-only" htmlFor="actual-month">
+                表示する月
+              </label>
+              <select
+                id="actual-month"
+                value={list.yearMonth ?? ""}
+                onChange={(e) => {
+                  setListMonth(e.target.value);
+                  setListPage(0);
+                }}
+                className="border-border-base-high bg-surface-base-primary rounded-base border px-8 py-4 text-body-xs"
+              >
+                {list.months.map((m) => (
+                  <option key={m.yearMonth} value={m.yearMonth}>
+                    {formatYearMonthLabel(m.yearMonth)}（{m.count}件）
+                  </option>
+                ))}
+              </select>
+            </span>
+          ) : undefined
+        }
+      >
+        {list.rows.length === 0 ? (
           <p className="text-object-base-mid py-24 text-center text-body-xs">
-            消し込み待ちはありません。
+            まだ実績がありません。
           </p>
         ) : (
           <div className="max-h-[var(--layout-ledger-height)] overflow-auto">
             <table className="w-full border-collapse text-body-xs">
               <tbody>
-                {pending.map((plan) => (
-                  <tr key={plan.key} className={plan.origDate ? "bg-surface-caution-subtle" : ""}>
+                {list.rows.map((actual) => (
+                  <tr key={actual.id}>
                     <td className="border-b-border-base-low num text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
-                      {formatMonthDay(plan.date)}
-                      {plan.origDate && (
-                        <span className="block text-body-xxs">
-                          ←{formatMonthDay(plan.origDate)}
-                        </span>
-                      )}
+                      {formatMonthDay(actual.date)}
                     </td>
                     <td className="border-b-border-base-low border-b px-8 py-8">
-                      {plan.name}
+                      {actual.name}
                       <span className="text-object-base-mid block text-body-xxs">
-                        {categoryOf(plan.categoryCode).name} ／{" "}
-                        {accountName(plan.accountId)}
+                        {categoryOf(actual.categoryCode).name} ／{" "}
+                        {accountName(actual.accountId)}
                       </span>
                     </td>
-                    <td className="border-b-border-base-low num border-b px-8 py-8 text-right whitespace-nowrap">
-                      {formatAmount(plan.amount)}
+                    <td className="border-b-border-base-low border-b px-8 py-8">
+                      <span className="flex gap-4">
+                        <KindTag event={{ ...actual, src: "actual" }} />
+                        <RatioTag bizRatio={actual.bizRatio} />
+                      </span>
+                    </td>
+                    <td className="border-b-border-base-low text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
+                      {actual.key ? "消し込み済み" : "突発"}
+                    </td>
+                    <td
+                      className={`border-b-border-base-low num border-b px-8 py-8 text-right whitespace-nowrap ${
+                        actual.type === "income" ? "text-object-success-bright" : ""
+                      }`}
+                    >
+                      {actual.type === "transfer"
+                        ? "±"
+                        : actual.type === "income"
+                          ? "+"
+                          : MINUS}
+                      {formatAmount(actual.amount)}
                     </td>
                     <td className="border-b-border-base-low border-b px-8 py-8 text-right">
-                      <span className="flex flex-wrap justify-end gap-4">
-                        <Button
-                          size="sm"
-                          color="black"
-                          onClick={() => {
-                            setData((d) => settleAsPlanned(d, plan, newId()));
-                            track(session?.user.id, "actual_recorded", {
-                              settled: true,
-                              fromCsv: false,
-                            });
-                          }}
-                        >
-                          予定どおり
+                      <span className="flex justify-end gap-4">
+                        {/* FR-41。CSV取込で費目を誤って推測された分を
+                            削除せずに直せるようにする */}
+                        <Button size="sm" onClick={() => startEdit(actual)}>
+                          編集
                         </Button>
                         <Button
                           size="sm"
-                          onClick={() =>
-                            startForm({
-                              key: plan.key,
-                              date: plan.date,
-                              name: plan.name,
-                              type: plan.type,
-                              costType: plan.costType,
-                              categoryCode: plan.categoryCode,
-                              amount: plan.amount,
-                              bizRatio: plan.bizRatio,
-                              accountId: plan.accountId,
-                              toAccountId: plan.toAccountId,
-                            })
-                          }
+                          color="danger"
+                          onClick={() => setData((d) => removeActual(d, actual.id))}
                         >
-                          金額を直す
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="line_gray"
-                          onClick={() => setDeferring(plan)}
-                        >
-                          払えなかった
+                          削除
                         </Button>
                       </span>
                     </td>
@@ -244,177 +329,55 @@ export function EntryScreen() {
             </table>
           </div>
         )}
+
+        {/* 月内が上限を超えたときだけ出す。無限スクロールは採らない
+            （§5.1「一覧の表示件数」）。狙った位置に到達できないため */}
+        {list.pageCount > 1 && (
+          <div className="mt-12 flex flex-wrap items-center gap-8">
+            <Button
+              size="sm"
+              disabled={list.page === 0}
+              onClick={() => setListPage(list.page - 1)}
+            >
+              前の200件
+            </Button>
+            <span className="text-object-base-mid num text-body-xxs">
+              {list.page * MONTH_PAGE_SIZE + 1}〜
+              {list.page * MONTH_PAGE_SIZE + list.rows.length} 件目 ／{" "}
+              {list.monthCount}件（{list.page + 1}/{list.pageCount}ページ）
+            </span>
+            <Button
+              size="sm"
+              disabled={list.page >= list.pageCount - 1}
+              onClick={() => setListPage(list.page + 1)}
+            >
+              次の200件
+            </Button>
+          </div>
+        )}
+
         <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
-          「予定どおり」で予定額のまま実績にします。「払えなかった」を押すと、
-          その回だけ支払日や金額を動かせます。
+          月ごとに区切って全件を出しています。見出しの件数は全期間の合計で、
+          月を切り替えるとすべての実績に辿り着けます。
         </p>
       </Card>
 
-      {/* ---------- 実績入力・編集（FR-05、FR-41） ---------- */}
-      <Card
-        title={
-          editingId
-            ? "実績を編集"
-            : form?.key
-              ? "実績を入力（予定を消し込み）"
-              : "実績を入力"
-        }
-        right={
-          form ? undefined : (
-            <Button size="sm" color="black" onClick={() => startForm()}>
-              ＋ 入力する
-            </Button>
-          )
-        }
-      >
-        {!form ? (
-          <p className="text-object-base-mid py-24 text-center text-body-xs">
-            「入力する」を押すと、突発の入出金を手で登録できます。
-            登録済みの実績は下の一覧から編集できます。
-          </p>
-        ) : (
+      {/* ---------- 手入力・編集（従）---------- */}
+      {form && (
+        <Modal
+          title={editingId ? "実績を編集" : "実績を手入力"}
+          onClose={closeForm}
+        >
           <ActualForm
             value={form}
             accounts={data.accounts}
             mode={editingId ? "edit" : "create"}
-            onChange={update}
+            onChange={(patch) => setForm((f) => (f ? applyActualPatch(f, patch) : f))}
             onSubmit={submit}
             onCancel={closeForm}
           />
-        )}
-      </Card>
-
-      {/* ---------- 繰延（FR-07） ---------- */}
-      {deferring && (
-        <div className="wide:col-span-2">
-          <DeferralEditor
-            plan={deferring}
-            onClose={() => setDeferring(null)}
-          />
-        </div>
+        </Modal>
       )}
-
-      {/* ---------- 最近の実績 ---------- */}
-      <div className="wide:col-span-2">
-        <Card
-          title={`実績（${list.total}件）`}
-          right={
-            list.months.length > 0 ? (
-              <span className="flex items-center gap-8">
-                <label className="sr-only" htmlFor="actual-month">
-                  表示する月
-                </label>
-                <select
-                  id="actual-month"
-                  value={list.yearMonth ?? ""}
-                  onChange={(e) => {
-                    setListMonth(e.target.value);
-                    setListPage(0);
-                  }}
-                  className="border-border-base-high bg-surface-base-primary rounded-base border px-8 py-4 text-body-xs"
-                >
-                  {list.months.map((m) => (
-                    <option key={m.yearMonth} value={m.yearMonth}>
-                      {formatYearMonthLabel(m.yearMonth)}（{m.count}件）
-                    </option>
-                  ))}
-                </select>
-              </span>
-            ) : undefined
-          }
-        >
-          {list.rows.length === 0 ? (
-            <p className="text-object-base-mid py-24 text-center text-body-xs">
-              まだ実績がありません。
-            </p>
-          ) : (
-            <div className="max-h-[var(--layout-ledger-height)] overflow-auto">
-              <table className="w-full border-collapse text-body-xs">
-                <tbody>
-                  {list.rows.map((actual) => (
-                    <tr key={actual.id}>
-                      <td className="border-b-border-base-low num text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
-                        {formatMonthDay(actual.date)}
-                      </td>
-                      <td className="border-b-border-base-low border-b px-8 py-8">
-                        {actual.name}
-                      </td>
-                      <td className="border-b-border-base-low border-b px-8 py-8">
-                        <span className="flex gap-4">
-                          <KindTag event={{ ...actual, src: "actual" }} />
-                          <RatioTag bizRatio={actual.bizRatio} />
-                        </span>
-                      </td>
-                      <td className="border-b-border-base-low text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
-                        {actual.key ? "消し込み済み" : "突発"}
-                      </td>
-                      <td
-                        className={`border-b-border-base-low num border-b px-8 py-8 text-right whitespace-nowrap ${
-                          actual.type === "income" ? "text-object-success-bright" : ""
-                        }`}
-                      >
-                        {actual.type === "transfer"
-                          ? "±"
-                          : actual.type === "income"
-                            ? "+"
-                            : MINUS}
-                        {formatAmount(actual.amount)}
-                      </td>
-                      <td className="border-b-border-base-low border-b px-8 py-8 text-right">
-                        <span className="flex justify-end gap-4">
-                          {/* FR-41。CSV取込で費目を誤って推測された分を
-                              削除せずに直せるようにする */}
-                          <Button size="sm" onClick={() => startEdit(actual)}>
-                            編集
-                          </Button>
-                          <Button
-                            size="sm"
-                            color="danger"
-                            onClick={() => setData((d) => removeActual(d, actual.id))}
-                          >
-                            削除
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* 月内が上限を超えたときだけ出す。無限スクロールは採らない
-              （§5.1「一覧の表示件数」）。狙った位置に到達できないため */}
-          {list.pageCount > 1 && (
-            <div className="mt-12 flex flex-wrap items-center gap-8">
-              <Button
-                size="sm"
-                disabled={list.page === 0}
-                onClick={() => setListPage(list.page - 1)}
-              >
-                前の200件
-              </Button>
-              <span className="text-object-base-mid num text-body-xxs">
-                {list.page * MONTH_PAGE_SIZE + 1}〜
-                {list.page * MONTH_PAGE_SIZE + list.rows.length} 件目 ／{" "}
-                {list.monthCount}件（{list.page + 1}/{list.pageCount}ページ）
-              </span>
-              <Button
-                size="sm"
-                disabled={list.page >= list.pageCount - 1}
-                onClick={() => setListPage(list.page + 1)}
-              >
-                次の200件
-              </Button>
-            </div>
-          )}
-
-          <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
-            月ごとに区切って全件を出しています。見出しの件数は全期間の合計で、
-            月を切り替えるとすべての実績に辿り着けます。
-          </p>
-        </Card>
-      </div>
     </div>
   );
 }
