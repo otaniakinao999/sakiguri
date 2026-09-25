@@ -12,7 +12,6 @@ import { useMemo, useState } from "react";
 import { actualToEvent } from "@/core/cash";
 import { buildForecast } from "@/core/forecast";
 import { buildPLMatrix, type PLMode } from "@/core/pl";
-import { toYearMonth } from "@/core/date";
 import type { Scope } from "@/core/proration";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Card } from "@/components/ui/Card";
@@ -76,8 +75,9 @@ export function ProfitLossScreen() {
       actuals: computed.actuals,
       year: activeYear,
       scope,
+      today,
     });
-    return buildPLDisplay(matrix, mode, toYearMonth(today));
+    return buildPLDisplay(matrix, mode, today);
   }, [computed, today, activeYear, scope, mode]);
 
   if (!today) {
@@ -139,7 +139,8 @@ export function ProfitLossScreen() {
           異なります。
           {mode === "mixed" && "　過去月は実績、未来月は予定です。"}
           {mode === "diff" &&
-            "　差異は 収入なら実績−予定、費用なら予定−実績。正の値が良い方向です。"}
+            "　差異は 収入なら実績−予定、費用なら予定−実績。正の値が良い方向です。" +
+              "予定側は予定日が本日以前のものだけを数えているため、「予定」モードの月合計とは一致しません。"}
         </p>
       </Card>
     </div>

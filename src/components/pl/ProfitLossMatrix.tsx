@@ -88,12 +88,18 @@ export function ProfitLossMatrix({ display }: { display: PLDisplay }) {
             >
               費目
             </th>
-            {display.months.map((month) => (
+            {display.months.map((month, index) => (
               <th
                 key={month}
                 className="num bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-12 py-8 text-right text-body-xxs font-semibold tracking-wide whitespace-nowrap"
               >
                 {Number(month.slice(5, 7))}月
+                {/* 途中までの比較であることを列に出す（AC-43） */}
+                {display.asOfNote?.monthIndex === index && (
+                  <span className="text-object-base-mid block font-normal">
+                    {display.asOfNote.label}
+                  </span>
+                )}
               </th>
             ))}
             <th className="num bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-12 py-8 text-right text-body-xxs font-semibold tracking-wide whitespace-nowrap">
@@ -129,7 +135,10 @@ export function ProfitLossMatrix({ display }: { display: PLDisplay }) {
                   }`}
                 >
                   {display.mode === "diff"
-                    ? formatSigned(row.yearTotal)
+                    ? /* 0 に符号を付けない。月のセルと揃える */
+                      row.yearTotal === 0
+                      ? "0"
+                      : formatSigned(row.yearTotal)
                     : formatAmount(row.yearTotal)}
                 </td>
               </tr>

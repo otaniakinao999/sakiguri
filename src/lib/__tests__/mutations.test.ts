@@ -33,6 +33,8 @@ import {
 
 const ASOF = "2026-04-01";
 const TODAY = "2026-04-30";
+/** CL-5 の差異の比較範囲（AC-42）を絞らないための本日。ここでは予定側・実績側の集計だけを見る */
+const PL_TODAY = "2099-12-31";
 
 const bank: DepositAccount = {
   id: "a1",
@@ -294,6 +296,7 @@ describe("AC-03 予定を実績で消し込む", () => {
       actuals: data.actuals.map(actualToEvent),
       year: 2026,
       scope: "all",
+      today: PL_TODAY,
     });
     return { data, series, pl };
   }
@@ -482,6 +485,7 @@ describe("FR-41 実績の編集", () => {
         actuals: data.actuals.map(actualToEvent),
         year: 2026,
         scope: "all",
+        today: PL_TODAY,
       });
       return (
         matrix.actual.groups

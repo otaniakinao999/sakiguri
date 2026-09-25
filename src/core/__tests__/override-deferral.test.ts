@@ -22,6 +22,12 @@ import { buildMonthlyCashflow } from "../monthly";
 import { buildPLMatrix, type PLGroup, type PLSide } from "../pl";
 import type { DepositAccount, Overrides } from "../types";
 
+/**
+ * 差異モードの比較範囲（AC-42）を絞らないための本日。
+ * このテストは予定側の集計だけを見ているので、全予定を予定側に入れる。
+ */
+const FAR_FUTURE = "2099-12-31";
+
 const seikatsu: DepositAccount = {
   id: "a1",
   name: "生活口座",
@@ -64,7 +70,7 @@ function run(overrides?: Overrides) {
     forecast,
     series,
     monthly: buildMonthlyCashflow(series, 0),
-    pl: buildPLMatrix({ forecast, actuals: [], year: 2026, scope: "all" }),
+    pl: buildPLMatrix({ forecast, actuals: [], year: 2026, scope: "all", today: FAR_FUTURE }),
   };
 }
 
@@ -259,7 +265,7 @@ describe("繰延で資金繰りと損益がずれる場合", () => {
       );
       return {
         monthly: buildMonthlyCashflow(series, 0),
-        pl: buildPLMatrix({ forecast, actuals: [], year: 2026, scope: "all" }),
+        pl: buildPLMatrix({ forecast, actuals: [], year: 2026, scope: "all", today: FAR_FUTURE }),
       };
     };
 

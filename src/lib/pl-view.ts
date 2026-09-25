@@ -9,8 +9,10 @@
  */
 
 import { categoryOf } from "@/core/categories";
+import { toYearMonth } from "@/core/date";
 import { applyMode, PL_GROUPS, type PLGroup, type PLMatrix, type PLMode } from "@/core/pl";
-import type { Yen, YearMonth } from "@/core/types";
+import type { DateStr, Yen, YearMonth } from "@/core/types";
+import { formatMonthDay } from "@/lib/format";
 
 export const PL_MODES: readonly { value: PLMode; label: string }[] = [
   { value: "mixed", label: "実績+予定" },
@@ -58,6 +60,16 @@ export interface PLDisplay {
   rows: PLDisplayRow[];
   /** 収支の行のラベル。事業ビューでは「事業所得」 */
   netLabel: string;
+  /**
+   * 差異モードで、途中までの比較になっている列に添える注記（AC-43）。
+   *
+   * 当月の差異は「本日までに予定日が来た予定」との比較なので、`予定`
+   * モードに出ている月合計とは一致しない。注記が無いと「差異と予定が
+   * 合わない」という別の疑問を生む。
+   *
+   * 当月がその年に含まれないとき（去年・来年を見ているとき）は null。
+   */
+  asOfNote: { monthIndex: number; label: string } | null;
 }
 
 /** 見えている値だけを足す。null は0として数えない。 */
@@ -86,13 +98,14 @@ export function diffTone(value: Yen | null): "good" | "bad" | null {
  * 行は グループ計 → その下に費目 の順。最後に収支。
  * 費目の並びは CL-5 が決めている（費目マスタの掲載順）。
  *
- * @param currentYearMonth 今月。過去月かどうかの判定に使う
+ * @param today 本日。今月の判定と、差異の比較範囲の注記に使う
  */
 export function buildPLDisplay(
   matrix: PLMatrix,
   mode: PLMode,
-  currentYearMonth: YearMonth,
+  today: DateStr,
 ): PLDisplay {
+  const currentYearMonth = toYearMonth(today);
   const months = Array.from(
     { length: 12 },
     (_, i) => `${matrix.year}-${String(i + 1).padStart(2, "0")}`,
@@ -102,17 +115,31 @@ export function buildPLDisplay(
   const cells = (
     group: PLGroup,
     plan: Yen[],
+    planToDate: Yen[],
     actual: Yen[],
   ): (Yen | null)[] =>
-    months.map((_, i) => applyMode(mode, group, plan[i], actual[i], isPast[i]));
+    months.map((_, i) =>
+      applyMode(
+        mode,
+        group,
+        { plan: plan[i], planToDate: planToDate[i], actual: actual[i] },
+        isPast[i],
+      ),
+    );
 
   const rows: PLDisplayRow[] = [];
 
   for (const group of PL_GROUPS) {
     const planBlock = matrix.plan.groups.find((g) => g.group === group)!;
+    const toDateBlock = matrix.planToDate.groups.find((g) => g.group === group)!;
     const actualBlock = matrix.actual.groups.find((g) => g.group === group)!;
 
-    const groupMonthly = cells(group, planBlock.monthly, actualBlock.monthly);
+    const groupMonthly = cells(
+      group,
+      planBlock.monthly,
+      toDateBlock.monthly,
+      actualBlock.monthly,
+    );
     rows.push({
       key: `group:${group}`,
       kind: "group",
@@ -125,7 +152,13 @@ export function buildPLDisplay(
 
     planBlock.rows.forEach((planRow, index) => {
       const actualRow = actualBlock.rows[index];
-      const monthly = cells(group, planRow.monthly, actualRow.monthly);
+      const toDateRow = toDateBlock.rows[index];
+      const monthly = cells(
+        group,
+        planRow.monthly,
+        toDateRow.monthly,
+        actualRow.monthly,
+      );
       rows.push({
         key: `category:${group}:${planRow.categoryCode}`,
         kind: "category",
@@ -143,8 +176,11 @@ export function buildPLDisplay(
     applyMode(
       mode,
       "income",
-      matrix.plan.netMonthly[i],
-      matrix.actual.netMonthly[i],
+      {
+        plan: matrix.plan.netMonthly[i],
+        planToDate: matrix.planToDate.netMonthly[i],
+        actual: matrix.actual.netMonthly[i],
+      },
       isPast[i],
     ),
   );
@@ -158,6 +194,8 @@ export function buildPLDisplay(
     planMonthly: mode === "mixed" ? matrix.plan.netMonthly : undefined,
   });
 
+  const currentIndex = months.indexOf(currentYearMonth);
+
   return {
     year: matrix.year,
     mode,
@@ -165,6 +203,13 @@ export function buildPLDisplay(
     isPast,
     rows,
     netLabel: matrix.scope === "business" ? "事業所得" : "収支",
+    asOfNote:
+      mode === "diff" && currentIndex >= 0
+        ? {
+            monthIndex: currentIndex,
+            label: `${formatMonthDay(today)} 時点`,
+          }
+        : null,
   };
 }
 

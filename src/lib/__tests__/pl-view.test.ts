@@ -7,7 +7,7 @@ import { buildPLDisplay, diffTone, selectableYears } from "../pl-view";
 
 /* ========================= 素材 ========================= */
 
-const NOW = "2026-06"; // 今月。1〜6月が過去、7〜12月が未来
+const NOW = "2026-06-30"; // 本日。1〜6月が過去、7〜12月が未来
 
 function ev(
   over: Partial<LedgerEvent> & Pick<LedgerEvent, "date" | "categoryCode">,
@@ -64,6 +64,7 @@ function display(mode: "mixed" | "plan" | "actual" | "diff") {
     actuals: ACTUALS,
     year: 2026,
     scope: "all",
+    today: NOW,
   });
   return buildPLDisplay(matrix, mode, NOW);
 }
@@ -122,6 +123,7 @@ describe("表示モード：実績", () => {
       ],
       year: 2026,
       scope: "all",
+      today: NOW,
     });
     const rent = buildPLDisplay(matrix, "actual", NOW).rows.find(
       (r) => r.key === "category:fixed:EXP-01",
@@ -187,6 +189,7 @@ describe("表示モード：差異", () => {
       ],
       year: 2026,
       scope: "all",
+      today: NOW,
     });
     const d = buildPLDisplay(matrix, "diff", NOW);
 
@@ -194,14 +197,79 @@ describe("表示モード：差異", () => {
     expect(diffTone(-30_000)).toBe("bad");
   });
 
-  it("未来月は出さない", () => {
+  /**
+   * AC-42。未来月が空になるのは期間で切っているからではなく、
+   * 比べる予定（予定日が本日以前のもの）が無いからである。
+   */
+  it("未来月は比べる予定が無いので0になる", () => {
     const d = display("diff");
-    expect(row(d, "category:fixed:EXP-01").monthly[m(9)]).toBeNull();
+    /* 9月に予定120,000があるが、予定日 9/27 は本日 6/30 より後 */
+    expect(row(d, "category:fixed:EXP-01").monthly[m(9)]).toBe(0);
+  });
+
+  it("当月に未到来の予定があっても差異に入らない", () => {
+    /* 本日 6/30。6/15 の予定は到来済み、6/28 に実績、6/30 の予定は未到来 */
+    const matrix = buildPLMatrix({
+      forecast: [
+        ev({ key: "p1", date: "2026-06-15", categoryCode: "EXP-01", amount: 100_000 }),
+        ev({ key: "p2", date: "2026-07-01", categoryCode: "EXP-14", amount: 30_000 }),
+      ],
+      actuals: [
+        ev({ key: "p1", date: "2026-06-28", categoryCode: "EXP-01", amount: 120_000, src: "actual" }),
+      ],
+      year: 2026,
+      scope: "all",
+      today: NOW,
+    });
+    const d = buildPLDisplay(matrix, "diff", NOW);
+
+    /* 予算超過なので負。未到来の 30,000 が乗って +10,000 になってはならない */
+    expect(row(d, "group:fixed").monthly[m(6)]).toBe(-20_000);
   });
 
   it("差が無い月は良し悪しを付けない", () => {
     expect(diffTone(0)).toBeNull();
     expect(diffTone(null)).toBeNull();
+  });
+});
+
+/* ========================= 当月の注記（AC-43） ========================= */
+
+describe("AC-43 当月の差異に基準日の注記を出す", () => {
+  it("差異モードでは当月の列に注記が付く", () => {
+    const d = display("diff");
+
+    expect(d.asOfNote).toEqual({ monthIndex: m(6), label: "6/30 時点" });
+  });
+
+  it("ほかのモードでは出さない", () => {
+    for (const mode of ["mixed", "plan", "actual"] as const) {
+      expect(display(mode).asOfNote).toBeNull();
+    }
+  });
+
+  it("当月がその年に無ければ出さない", () => {
+    const matrix = buildPLMatrix({
+      forecast: FORECAST,
+      actuals: ACTUALS,
+      year: 2027,
+      scope: "all",
+      today: NOW,
+    });
+
+    expect(buildPLDisplay(matrix, "diff", NOW).asOfNote).toBeNull();
+  });
+
+  it("日付はゼロ埋めしない", () => {
+    const matrix = buildPLMatrix({
+      forecast: FORECAST,
+      actuals: ACTUALS,
+      year: 2026,
+      scope: "all",
+      today: "2026-03-05",
+    });
+
+    expect(buildPLDisplay(matrix, "diff", "2026-03-05").asOfNote?.label).toBe("3/5 時点");
   });
 });
 
@@ -246,6 +314,7 @@ describe("行の並び（CL-5 手順5）", () => {
       actuals: ACTUALS,
       year: 2026,
       scope: "business",
+      today: NOW,
     });
     const d = buildPLDisplay(matrix, "plan", NOW);
 
@@ -255,7 +324,7 @@ describe("行の並び（CL-5 手順5）", () => {
 
   it("合算・家計では収支のまま", () => {
     for (const scope of ["all", "household"] as const) {
-      const matrix = buildPLMatrix({ forecast: FORECAST, actuals: ACTUALS, year: 2026, scope });
+      const matrix = buildPLMatrix({ forecast: FORECAST, actuals: ACTUALS, year: 2026, scope, today: NOW });
       expect(buildPLDisplay(matrix, "plan", NOW).netLabel).toBe("収支");
     }
   });
@@ -318,6 +387,7 @@ describe("純関数であること", () => {
       actuals: ACTUALS,
       year: 2026,
       scope: "all",
+      today: NOW,
     });
     const snapshot = structuredClone(matrix);
 
