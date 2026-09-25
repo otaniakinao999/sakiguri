@@ -112,9 +112,13 @@ padding: 15px;        /* スケール外の値を作らない */
 
 ### 2.7 依存を増やす前に確認する
 
-許可済み: `react` `next` `typescript` `tailwindcss` `recharts` `@supabase/supabase-js` `zod` `vitest` `@testing-library/react`
+許可済み: `react` `next` `typescript` `tailwindcss` `recharts` `@supabase/supabase-js` `zod` `vitest` `@testing-library/react` `jsdom`
 
 これ以外のライブラリを追加したいときは、**入れる前に理由と代替案を提示してください。** 特に日付ライブラリ（dayjs / date-fns）は 2.2 の規約と競合するため入れません。
+
+**レイアウト（横スクロール、折り返し、要素の重なり）は jsdom で検証できない。** jsdom にレイアウトエンジンがないため、`scrollWidth` や `getBoundingClientRect` は実際の値を返さず、これらを使ったテストは**中身を検証せずに通る。** レイアウトの確認は実機で行う。
+
+同じ理由で、「テストがある」ことと「確認した」ことを混同しない。純関数のテストが厚い箇所ほど、その外側（画面に出た数字、DBに届いた値）の確認が薄いことに気づきにくい。**計算が正しいことと、正しい数字が画面に出ていることは別の確認である。**
 
 ## 3. タスクの進め方
 
