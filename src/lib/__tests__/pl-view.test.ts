@@ -98,9 +98,37 @@ describe("表示モード：実績", () => {
     expect(row(d, "category:fixed:EXP-01").monthly[m(4)]).toBe(118_000);
   });
 
-  it("未来月は出さない", () => {
+  it("未来月に実績が無ければ0を出す", () => {
     const d = display("actual");
-    expect(row(d, "category:fixed:EXP-01").monthly[m(9)]).toBeNull();
+    expect(row(d, "category:fixed:EXP-01").monthly[m(9)]).toBe(0);
+  });
+
+  /**
+   * 手順3 は期間で絞らない。未来日の実績を隠すと、残高だけが合わない状態に
+   * なって原因が追えなくなる。最も多いのは日付の打ち間違いである。
+   */
+  it("未来月の実績を隠さない", () => {
+    const matrix = buildPLMatrix({
+      forecast: FORECAST,
+      actuals: [
+        ...ACTUALS,
+        ev({
+          key: "p3",
+          date: "2026-09-27",
+          categoryCode: "EXP-01",
+          amount: 125_000,
+          src: "actual",
+        }),
+      ],
+      year: 2026,
+      scope: "all",
+    });
+    const rent = buildPLDisplay(matrix, "actual", NOW).rows.find(
+      (r) => r.key === "category:fixed:EXP-01",
+    )!;
+
+    expect(rent.monthly[m(9)]).toBe(125_000);
+    expect(rent.yearTotal).toBe(243_000);
   });
 
   it("年計は見えている値だけを足す", () => {

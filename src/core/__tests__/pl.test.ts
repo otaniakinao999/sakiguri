@@ -442,9 +442,21 @@ describe("applyMode", () => {
     expect(applyMode("plan", "fixed", 100, 0, false)).toBe(100);
   });
 
-  it("actual は過去月だけ実績を返す", () => {
+  /**
+   * 手順3 は「実績側は実績のみを集計する」で、期間の限定がない。
+   * 過去／未来の切り分けは手順6 の `実績+予定` の定義に属する。
+   *
+   * 未来日の実績は実在する。前払い、CSVの先日付行、そして最も多いのは
+   * 日付の打ち間違い（2027年と打ってしまった実績）である。画面から消すと
+   * 残高だけが合わない状態になり、原因が追えない。
+   */
+  it("actual は未来月でも実績を返す", () => {
     expect(applyMode("actual", "fixed", 100, 90, true)).toBe(90);
-    expect(applyMode("actual", "fixed", 100, 0, false)).toBeNull();
+    expect(applyMode("actual", "fixed", 100, 90, false)).toBe(90);
+  });
+
+  it("actual は実績が無ければ未来月でも0を返す（null にしない）", () => {
+    expect(applyMode("actual", "fixed", 100, 0, false)).toBe(0);
   });
 
   it("mixed は過去月が実績、未来月が予定", () => {
