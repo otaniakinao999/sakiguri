@@ -617,6 +617,165 @@ describe("CL-7 取込行の組み立て", () => {
   });
 });
 
+/* ============ 照合と費目推定の優先順位（AC-45） ============ */
+
+describe("AC-45 照合が成立した行は予定から引き継ぐ", () => {
+  /** 事務所家賃。地代家賃・固定費・事業100% */
+  const rent = plan({
+    key: "p1",
+    date: "2026-10-20",
+    amount: 100_000,
+    name: "事務所家賃",
+    categoryCode: "EXP-01",
+    costType: "fixed",
+    bizRatio: 100,
+  });
+
+  /** 銀行CSVらしく摘要が半角カナ。「事務所家賃」の先頭4文字は含まれない */
+  const katakana = parseCsv("日付,摘要,入金,出金\n2026/10/20,ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ,,100000");
+
+  it("半角カナで名称の部分一致が成立しなくても引き継ぐ", () => {
+    const got = buildImportRows({
+      rows: katakana,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: [rent],
+    });
+
+    expect(got[0]).toMatchObject({
+      matchedKey: "p1",
+      categoryCode: "EXP-01",
+      costType: "fixed",
+      bizRatio: 100,
+    });
+  });
+
+  /**
+   * ここが AC-45 の肝。引き継がないと、照合できているのに雑費・変動費・
+   * 事業0% で取り込まれる。合計は合うが、CL-5 の差異が
+   * 地代家賃 +100,000 と 雑費 −100,000 に割れ、事業割合 100 → 0 で
+   * その額が事業から家計へ移る。
+   */
+  it("引き継がないと雑費・変動費・事業0%になる（照合先を渡さない場合）", () => {
+    const got = buildImportRows({
+      rows: katakana,
+      mapping: mapping(),
+      accountId: "a1",
+    });
+
+    expect(got[0]).toMatchObject({
+      matchedKey: null,
+      categoryCode: "EXP-20",
+      costType: "variable",
+      bizRatio: 0,
+    });
+  });
+
+  it("名称からの推定より照合先を優先する", () => {
+    /* 摘要に「事務所家賃」が入っていて、推定なら別の費目に当たる状況 */
+    const rows = parseCsv("日付,摘要,入金,出金\n2026/10/20,事務所家賃 10月分,,100000");
+    const history: HistoryEntry[] = [
+      { name: "事務所家賃", categoryCode: "EXP-20", costType: "variable", bizRatio: 0 },
+    ];
+
+    const got = buildImportRows({
+      rows,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: [rent],
+      history,
+    });
+
+    expect(got[0]).toMatchObject({
+      categoryCode: "EXP-01",
+      costType: "fixed",
+      bizRatio: 100,
+      /* 推定は使っていないので、推定元も残さない */
+      guessedFrom: null,
+    });
+  });
+
+  it("照合が成立しなかった行には従来の推定が働く", () => {
+    const rows = parseCsv(
+      "日付,摘要,入金,出金\n2026/10/20,ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ,,100000\n2026/10/21,通信費 10月分,,9800",
+    );
+    const history: HistoryEntry[] = [
+      { name: "通信費（携帯・回線）", categoryCode: "EXP-03", costType: "fixed", bizRatio: 40 },
+    ];
+
+    const got = buildImportRows({
+      rows,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: [rent],
+      history,
+    });
+
+    expect(got[0]).toMatchObject({ matchedKey: "p1", categoryCode: "EXP-01", guessedFrom: null });
+    expect(got[1]).toMatchObject({
+      matchedKey: null,
+      categoryCode: "EXP-03",
+      costType: "fixed",
+      bizRatio: 40,
+      guessedFrom: "通信費（携帯・回線）",
+    });
+  });
+
+  it("金額は実績の値を使う。予定と違ってよい", () => {
+    /* 照合は金額完全一致が条件なので、±12日の別日で同額の行を作る */
+    const rows = parseCsv("日付,摘要,入金,出金\n2026/10/25,ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ,,100000");
+    const got = buildImportRows({
+      rows,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: [rent],
+    });
+
+    expect(got[0]).toMatchObject({ matchedKey: "p1", amount: 100_000, date: "2026-10-25" });
+  });
+
+  it("事業割合0の予定に照合したら0を引き継ぐ", () => {
+    /* `??` で 0 が落ちて推定に流れないこと */
+    const rows = parseCsv("日付,摘要,入金,出金\n2026/10/20,食費 ｽｰﾊﾟｰ,,100000");
+    const history: HistoryEntry[] = [
+      { name: "食費", categoryCode: "EXP-21", costType: "variable", bizRatio: 80 },
+    ];
+
+    const got = buildImportRows({
+      rows,
+      mapping: mapping(),
+      accountId: "a1",
+      candidates: [plan({ ...rent, bizRatio: 0 })],
+      history,
+    });
+
+    expect(got[0]).toMatchObject({ categoryCode: "EXP-01", bizRatio: 0 });
+  });
+
+  it("収入の行では costType を null のままにする", () => {
+    const rows = parseCsv("日付,摘要,入金,出金\n2026/10/25,ﾌﾘｺﾐ ｶ)ｻｷｸﾞﾘ,500000,");
+    const sales = plan({
+      key: "p2",
+      date: "2026-10-25",
+      amount: 500_000,
+      name: "売上",
+      type: "income",
+      costType: null,
+      categoryCode: "INC-01",
+      bizRatio: 100,
+    });
+
+    expect(
+      buildImportRows({ rows, mapping: mapping(), accountId: "a1", candidates: [sales] })[0],
+    ).toMatchObject({
+      matchedKey: "p2",
+      categoryCode: "INC-01",
+      costType: null,
+      bizRatio: 100,
+    });
+  });
+});
+
 /* ========================= AC-07 通し ========================= */
 
 describe("AC-07 Shift_JIS の銀行CSVを取り込む", () => {

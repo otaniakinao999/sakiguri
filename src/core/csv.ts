@@ -440,6 +440,22 @@ export const NO_DESCRIPTION = "（摘要なし）";
  * 符号の解釈（CL-7）：
  *   入金列・出金列が分かれている場合は入金を正、出金を負とする
  *   1列の場合は `sign` に従う
+ *
+ * **照合と費目推定の優先順位（CL-7、AC-45）。** 照合が成立した行は
+ * 費目・固定変動区分・事業割合を**照合先の予定から引き継ぐ**。名称からの
+ * 推定は、照合が成立しなかった行にだけ当てる。
+ *
+ * 2つを独立に動かすと、照合できているのに費目が推定（多くは雑費）に
+ * なる。**銀行CSVの摘要は半角カナが多く、名称の先頭4文字の部分一致は
+ * 原理的に当たりにくい。** 「事務所家賃」は「ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ」に含まれない。
+ * 照合先の予定のほうが確実な情報である。
+ *
+ * 合計では見えない誤りになる。予定側は地代家賃・固定費、実績側は雑費・
+ * 変動費となり、CL-5 の差異が2つの費目に割れる。事業割合が 100 → 0 に
+ * なると、その額が事業から家計へ移る。
+ *
+ * 金額は実績の値を使う。予定と違ってよい（消し込みは `key` の一致だけで
+ * 決まる。CL-3）。
  */
 export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
   const { rows, mapping, accountId } = input;
@@ -462,21 +478,28 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
     const name =
       String(cells[mapping.name] ?? "").trim() || NO_DESCRIPTION;
 
-    const guess = guessFromHistory(name, history, type);
-    const categoryCode =
-      guess?.categoryCode ??
-      (type === "income" ? FALLBACK_INCOME : FALLBACK_EXPENSE);
-    const costType =
-      type === "income"
-        ? null
-        : (guess?.costType ?? categoryOf(categoryCode).recommendedCostType ?? "variable");
-
     const matched = matchPlan(
       { date, amount, type, accountId },
       candidates,
       claimed,
     );
     if (matched) claimed.add(matched.key);
+
+    /* 名称からの推定は、照合が成立しなかった行にだけ当てる（AC-45） */
+    const guess = matched ? null : guessFromHistory(name, history, type);
+
+    const categoryCode =
+      matched?.categoryCode ??
+      guess?.categoryCode ??
+      (type === "income" ? FALLBACK_INCOME : FALLBACK_EXPENSE);
+
+    const costType =
+      type === "income"
+        ? null
+        : (matched?.costType ??
+          guess?.costType ??
+          categoryOf(categoryCode).recommendedCostType ??
+          "variable");
 
     out.push({
       rowIndex,
@@ -487,9 +510,9 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       costType,
       categoryCode,
       /* 事業割合の初期値は0。費目マスタは事業割合を持たない
-         （要件定義書 §3.1.2 適用規則7）。過去の項目から推定できた
-         場合だけ、その値を引き継ぐ */
-      bizRatio: guess?.bizRatio ?? 0,
+         （要件定義書 §3.1.2 適用規則7）。照合先の予定か、過去の項目から
+         推定できた場合だけ、その値を引き継ぐ */
+      bizRatio: matched?.bizRatio ?? guess?.bizRatio ?? 0,
       amount,
       accountId,
       matchedKey: matched?.key ?? null,

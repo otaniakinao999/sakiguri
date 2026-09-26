@@ -286,4 +286,64 @@ describe("繰延で資金繰りと損益がずれる場合", () => {
 
     // 損益の月は動かないのに、現金の月は1ヶ月動く
   });
+
+  /**
+   * 引落日を利用日から数え直しているか。
+   *
+   * CL-2 手順2（引落日は利用日から求める）と FR-07（オーバーライド）は
+   * 仕様上べつべつに定義されている。**実装が元の利用日から引落日を
+   * 計算していると、利用日を動かしても引落日が動かない。**
+   *
+   * 締日を月末にして、繰延が締めの月をまたぐ形にする。
+   */
+  it("カード利用の繰延で、締めの月をまたぐと引落日も1ヶ月動く", () => {
+    const card = {
+      id: "c2",
+      name: "月末締めカード",
+      kind: "card" as const,
+      balance: 0,
+      closingDay: 31, // 月末
+      payMonthOffset: 1, // 翌月
+      payDay: 27,
+      settleAccountId: "a1",
+    };
+    const base: ForecastInput = {
+      recurring: [],
+      oneoffs: [
+        {
+          id: "o2",
+          date: "2026-09-20",
+          name: "備品",
+          type: "expense",
+          costType: "variable",
+          categoryCode: "EXP-07",
+          amount: 40_000,
+          bizRatio: 100,
+          accountId: "c2",
+        },
+      ],
+    };
+
+    const settleDates = (overrides?: Overrides) =>
+      buildBalanceSeries(
+        {
+          accounts: [seikatsu, card],
+          asOf: FROM,
+          forecast: buildForecast({ ...base, overrides }, FROM, TO),
+          actuals: [],
+        },
+        TO,
+        FROM,
+      ).projectedCash
+        .filter((e) => e.src === "settle" && e.amount === 40_000)
+        .map((e) => e.date);
+
+    /* 9/20 利用 → 9月締め → 10/27 引落 */
+    expect(settleDates()).toEqual(["2026-10-27"]);
+
+    /* 10/5 に繰延 → 10月締め → 11/27 引落。動かなければ 10/27 のまま */
+    expect(settleDates({ "o:o2": { date: "2026-10-05" } })).toEqual([
+      "2026-11-27",
+    ]);
+  });
 });
