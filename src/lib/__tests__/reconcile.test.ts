@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { buildBalanceSeries } from "@/core/balance";
+import { classificationChanges } from "@/core/classification";
 import { buildForecast } from "@/core/forecast";
 import type { Actual, DepositAccount, RecurringItem } from "@/core/types";
 
 import { emptyAppData, type AppData } from "../app-data";
-import { linkActualToPlan, setUnplanned } from "../mutations";
+import { describeInheritance } from "../classification-notice";
+import { linkActualToPlan, setUnplanned, settleAsPlanned } from "../mutations";
 import { findCandidates, isCandidate } from "../reconcile";
 
 /**
@@ -97,6 +99,10 @@ const found = (data: AppData) =>
     actuals: data.actuals,
     unmatchedForecast: series(data).unmatchedForecast,
   });
+
+/** 予定インスタンスをキーで引く。`linkActualToPlan` に渡す */
+const planOf = (data: AppData, key: string) =>
+  series(data).unmatchedForecast.find((p) => p.key === key)!;
 
 /* ========================= 二重計上そのもの ========================= */
 
@@ -205,7 +211,7 @@ describe("AC-30 自動では消し込まない", () => {
     const after = linkActualToPlan(
       before,
       candidate.actual.id,
-      candidate.plans[0].plan.key,
+      candidate.plans[0].plan,
     );
 
     expect(after.actuals[0].key).toBe("r:rent:2026-04-05");
@@ -213,12 +219,11 @@ describe("AC-30 自動では消し込まない", () => {
     expect(found(after)).toEqual([]);
   });
 
-  it("確定しても実績の中身は変わらない", () => {
+  it("確定しても日付・金額・口座・名称は変わらない", () => {
     const before = base([actual({ id: "x1", amount: 120_000, name: "四月家賃" })]);
-    const after = linkActualToPlan(before, "x1", "r:rent:2026-04-05");
+    const after = linkActualToPlan(before, "x1", planOf(before, "r:rent:2026-04-05"));
 
-    /* key と unplanned 以外は変わらない。紐づいた時点で「予定に対応しない」
-       ではなくなるので unplanned は下りる */
+    /* 分類は予定から引き継ぐが、事実は実績のまま（§3.3 前書き） */
     expect(after.actuals[0]).toEqual({
       ...before.actuals[0],
       key: "r:rent:2026-04-05",
@@ -231,7 +236,7 @@ describe("AC-30 自動では消し込まない", () => {
       actual({ id: "x1", amount: 120_000 }),
       actual({ id: "x2", amount: 3_000, date: "2026-04-11", name: "スーパー" }),
     ]);
-    const after = linkActualToPlan(before, "x1", "r:rent:2026-04-05");
+    const after = linkActualToPlan(before, "x1", planOf(before, "r:rent:2026-04-05"));
 
     expect(after.actuals[1]).toEqual(before.actuals[1]);
   });
@@ -240,9 +245,98 @@ describe("AC-30 自動では消し込まない", () => {
     const data = base([actual({ id: "x1" })]);
     const snapshot = structuredClone(data);
 
-    linkActualToPlan(data, "x1", "r:rent:2026-04-05");
+    linkActualToPlan(data, "x1", planOf(data, "r:rent:2026-04-05"));
 
     expect(data).toEqual(snapshot);
+  });
+});
+
+/* ============ 分類は予定が持つ（AC-46） ============ */
+
+describe("AC-46 候補の確定で分類を予定から引き継ぐ", () => {
+  /** 予定は 地代家賃・固定費・事業0%。実績は別の分類で入力してある */
+  const misfiled = actual({
+    id: "x1",
+    amount: 120_000,
+    name: "ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ",
+    categoryCode: "EXP-20", // 雑費
+    costType: "variable",
+    bizRatio: 0,
+  });
+
+  const link = (a: Actual) => {
+    const before = base([a]);
+    return linkActualToPlan(before, a.id, planOf(before, "r:rent:2026-04-05"))
+      .actuals[0];
+  };
+
+  it("手入力で別の費目を選んでいても引き継ぐ", () => {
+    expect(link(misfiled)).toMatchObject({
+      categoryCode: "EXP-01",
+      costType: "fixed",
+      bizRatio: 0,
+    });
+  });
+
+  it("事業割合も引き継ぐ", () => {
+    /* 予定は事業0%。実績に80%が入っていても予定に合わせる */
+    expect(link({ ...misfiled, bizRatio: 80 }).bizRatio).toBe(0);
+  });
+
+  it("金額・日付・口座は実績の値を保つ", () => {
+    const got = link({ ...misfiled, amount: 118_000, date: "2026-04-11" });
+
+    expect(got).toMatchObject({
+      amount: 118_000,
+      date: "2026-04-11",
+      accountId: "a1",
+      name: "ﾌﾘｺﾐ ｼﾞﾑｼｮﾔﾁﾝ",
+    });
+  });
+
+  it("「予定どおり」と同じ分類になる。経路で結果が変わらない", () => {
+    const plan = planOf(base([misfiled]), "r:rent:2026-04-05");
+    const viaLink = link(misfiled);
+    const viaSettle = settleAsPlanned(base([]), plan, "y1").actuals[0];
+
+    expect({
+      categoryCode: viaLink.categoryCode,
+      costType: viaLink.costType,
+      bizRatio: viaLink.bizRatio,
+    }).toEqual({
+      categoryCode: viaSettle.categoryCode,
+      costType: viaSettle.costType,
+      bizRatio: viaSettle.bizRatio,
+    });
+  });
+
+  /* ---------- 変わったことを画面に出す ---------- */
+
+  it("変わった項目だけを文にする", () => {
+    const plan = planOf(base([misfiled]), "r:rent:2026-04-05");
+
+    expect(
+      describeInheritance(plan.name, plan, classificationChanges(misfiled, plan)),
+    ).toBe(
+      "「家賃」に合わせて、費目を「地代家賃・住居費」、固定/変動を「固定費」に変えました。実績の編集から直せます。",
+    );
+  });
+
+  it("何も変わらなければ知らせない", () => {
+    const plan = planOf(base([misfiled]), "r:rent:2026-04-05");
+    const same = actual({ id: "x2", categoryCode: "EXP-01", costType: "fixed", bizRatio: 0 });
+
+    expect(classificationChanges(same, plan)).toEqual([]);
+    expect(describeInheritance(plan.name, plan, [])).toBeNull();
+  });
+
+  it("事業割合だけが変わったときは事業割合だけを言う", () => {
+    const plan = planOf(base([misfiled]), "r:rent:2026-04-05");
+    const only = actual({ id: "x3", categoryCode: "EXP-01", costType: "fixed", bizRatio: 60 });
+
+    expect(
+      describeInheritance(plan.name, plan, classificationChanges(only, plan)),
+    ).toBe("「家賃」に合わせて、事業割合を 0%に変えました。実績の編集から直せます。");
   });
 });
 
@@ -374,7 +468,7 @@ describe("AC-38 予定にない支出", () => {
 
   it("紐づけると unplanned は下りる", () => {
     const data = setUnplanned(base([actual({ id: "x1" })]), "x1", true);
-    const after = linkActualToPlan(data, "x1", "r:rent:2026-04-05");
+    const after = linkActualToPlan(data, "x1", planOf(base([actual({ id: "x1" })]), "r:rent:2026-04-05"));
 
     expect(after.actuals[0].unplanned).toBe(false);
     expect(after.actuals[0].key).toBe("r:rent:2026-04-05");

@@ -350,15 +350,24 @@ export function guessFromHistory(
 /** 自動照合で候補にできる最大の日数差（CL-7）。 */
 export const MATCH_WINDOW_DAYS = 12;
 
+/** 照合の判定に要る、実績またはCSV行の値。 */
+export interface MatchSubject {
+  date: DateStr;
+  amount: Yen;
+  type: EntryType;
+  accountId: string;
+}
+
 /**
- * 未消込の予定から自動照合の候補を1件選ぶ（CL-7 予定との自動照合）。
+ * 実績（またはCSVの1行）と予定インスタンスが同一取引でありうるか
+ * （CL-7 予定との自動照合）。
  *
- * 次の4つをすべて満たす最初の1件を返す。
+ * 次の4つをすべて満たすこと。
  *
  * - 金額が完全一致
  * - 日付の差が12日以内
  * - 収支の向きが一致
- * - **口座が一致**（予定の `accountId` が、取込対象として選んだ口座と同一）
+ * - **口座が一致**（予定の `accountId` が、実績の口座と同一）
  *
  * 口座を条件に入れるのは、**探す側の予定が全口座にまたがっている**ためで
  * ある。取込時に選ばせるのは取り込む実績の口座であって、候補の予定は
@@ -370,22 +379,38 @@ export const MATCH_WINDOW_DAYS = 12;
  * カードの引落は CL-2 で合算された1件として銀行に現れるため、個別の利用
  * 明細とは金額が一致しない。従来は金額不一致で偶然防がれていただけだった。
  *
+ * **この述語が唯一の定義である（CLAUDE.md §2.8）。** CL-7 の自動照合
+ * （`matchPlan`）も FR-46 の候補提示（`isCandidate`）もここを呼ぶ。
+ * 条件を2箇所に書くと、片方にだけ条件が増えて静かに食い違う。実際
+ * AC-33 の「口座が一致」は両方に手で足していた。
+ */
+export function planMatches(
+  subject: MatchSubject,
+  plan: ForecastInstance,
+): boolean {
+  if (plan.amount !== subject.amount) return false;
+  if (plan.type !== subject.type) return false;
+  if (plan.accountId !== subject.accountId) return false;
+  return daysBetween(plan.date, subject.date) <= MATCH_WINDOW_DAYS;
+}
+
+/**
+ * 未消込の予定から自動照合の候補を1件選ぶ（CL-7 予定との自動照合）。
+ *
+ * 条件は `planMatches`。最初に満たした1件を返す。
+ *
  * `claimed` に入っているキーは飛ばす。**1件の予定を2行が同時に消し込む
  * ことはできない。** 仕様は明記していないが、同じ予定に2つの実績が
  * 紐づくと消し込みの対応が崩れるため、1対1に制限している。
  */
 export function matchPlan(
-  row: { date: DateStr; amount: Yen; type: EntryType; accountId: string },
+  row: MatchSubject,
   candidates: ForecastInstance[],
   claimed: ReadonlySet<string> = new Set(),
 ): ForecastInstance | null {
   for (const plan of candidates) {
     if (claimed.has(plan.key)) continue;
-    if (plan.amount !== row.amount) continue;
-    if (plan.type !== row.type) continue;
-    if (plan.accountId !== row.accountId) continue;
-    if (daysBetween(plan.date, row.date) > MATCH_WINDOW_DAYS) continue;
-    return plan;
+    if (planMatches(row, plan)) return plan;
   }
   return null;
 }

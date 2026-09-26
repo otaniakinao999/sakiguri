@@ -8,10 +8,12 @@
  */
 
 import { categoriesInGroup } from "@/core/categories";
+import { applyClassification } from "@/core/classification";
 import type {
   Account,
   Actual,
   DateStr,
+  ForecastInstance,
   OneoffItem,
   Override,
   RecurringItem,
@@ -230,13 +232,21 @@ export function updateActual(
 export function linkActualToPlan(
   data: AppData,
   actualId: string,
-  planKey: string,
+  plan: ForecastInstance,
 ): AppData {
   return {
     ...data,
     actuals: data.actuals.map((a) =>
-      /* 紐づいた時点で「予定に対応しない」ではなくなる */
-      a.id === actualId ? { ...a, key: planKey, unplanned: false } : a,
+      a.id === actualId
+        ? {
+            /* 分類は予定から引き継ぐ（§3.3 前書き、AC-46）。
+               金額・日付・口座は実績の値のまま */
+            ...applyClassification(a, plan),
+            key: plan.key,
+            /* 紐づいた時点で「予定に対応しない」ではなくなる */
+            unplanned: false,
+          }
+        : a,
     ),
   };
 }

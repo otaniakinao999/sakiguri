@@ -21,7 +21,7 @@
  * 後者に候補を出し続けると、却下が機能していないように見える。
  */
 
-import { MATCH_WINDOW_DAYS } from "@/core/csv";
+import { planMatches } from "@/core/csv";
 import { daysBetween } from "@/core/date";
 import type { Actual, ForecastInstance } from "@/core/types";
 
@@ -48,19 +48,21 @@ export interface ReconcileInput {
 /**
  * 実績1件が予定1件の候補になるか（FR-46）。
  *
- * CL-7 の自動照合と同じ4条件（金額完全一致・日付±12日以内・収支の向き一致・
- * 同一口座）。
+ * 照合の条件そのものは CL-7 の `planMatches` を呼ぶ。**条件をここに書き
+ * 写さない（CLAUDE.md §2.8）。** 書き写すと、CL-7 に条件が増えたとき
+ * 候補側だけ古いまま残る。AC-33 の「口座が一致」は実際に両方へ手で
+ * 足していた。
  *
- * `unplanned` が立っている実績は、利用者が「どの予定でもない」と判定済みな
- * ので候補にしない。
+ * ここで足すのは、候補提示の文脈にだけ要る除外である。
+ *
+ * - `key` がある実績は消し込み済み
+ * - `unplanned` が立っている実績は、利用者が「どの予定でもない」と
+ *   判定済みなので候補にしない
  */
 export function isCandidate(actual: Actual, plan: ForecastInstance): boolean {
   if (actual.key !== null) return false;
   if (actual.unplanned) return false;
-  if (actual.amount !== plan.amount) return false;
-  if (actual.type !== plan.type) return false;
-  if (actual.accountId !== plan.accountId) return false;
-  return daysBetween(plan.date, actual.date) <= MATCH_WINDOW_DAYS;
+  return planMatches(actual, plan);
 }
 
 /**

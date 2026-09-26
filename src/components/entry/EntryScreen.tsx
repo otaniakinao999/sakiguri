@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 
 import { buildBalanceSeries } from "@/core/balance";
 import { categoryOf } from "@/core/categories";
+import { classificationChanges } from "@/core/classification";
 import { addDays } from "@/core/date";
 import { buildForecast } from "@/core/forecast";
 import type { Actual, ForecastInstance } from "@/core/types";
@@ -31,6 +32,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Notification } from "@/components/ui/Notification";
 import { KindTag, RatioTag } from "@/components/ui/Tag";
 import { buildActualList, MONTH_PAGE_SIZE } from "@/lib/actual-list";
+import { describeInheritance } from "@/lib/classification-notice";
 import {
   formatAmount,
   formatMonthDay,
@@ -73,6 +75,8 @@ export function EntryScreen() {
   /** 編集中の実績の id。新規入力なら null */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deferring, setDeferring] = useState<ForecastInstance | null>(null);
+  /* 候補の確定で分類を引き継いだときの知らせ（AC-46） */
+  const [inherited, setInherited] = useState<string | null>(null);
 
   /** 要対応リストを全件出すか（B-2） */
   const [showAllTodo, setShowAllTodo] = useState(false);
@@ -213,13 +217,25 @@ export function EntryScreen() {
     /* どちらも既存の実績を更新する操作であって、実績を記録していない。
        actual_recorded は使わない（実績入力の件数が水増しされるため） */
     linkTo: (row: TodoCandidateRow, planKey: string) => {
-      setData((d) => reconciled(linkActualToPlan(d, row.actual.id, planKey)));
+      const plan = row.plans.find((c) => c.plan.key === planKey)?.plan;
+      if (!plan) return;
+
+      setData((d) => reconciled(linkActualToPlan(d, row.actual.id, plan)));
+      /* 分類を予定から引き継ぐので、変わったことを画面に出す（AC-46） */
+      setInherited(
+        describeInheritance(
+          plan.name,
+          plan,
+          classificationChanges(row.actual, plan),
+        ),
+      );
       track(session?.user.id, "candidate_resolved", {
         confirmed: true,
         candidateCount: row.plans.length,
       });
     },
     markUnplanned: (row: TodoCandidateRow) => {
+      setInherited(null);
       setData((d) => reconciled(setUnplanned(d, row.actual.id, true)));
       track(session?.user.id, "candidate_resolved", {
         confirmed: false,
@@ -246,6 +262,13 @@ export function EntryScreen() {
               両方が残高に乗っているため、残高が実際より低く出ています。
               同じ取引なら「同じ取引」を押してください。
             </Notification>
+          </div>
+        )}
+
+        {/* 予定から分類を引き継いだことを黙って済ませない（AC-46） */}
+        {inherited && (
+          <div className="mb-12">
+            <Notification>{inherited}</Notification>
           </div>
         )}
 
