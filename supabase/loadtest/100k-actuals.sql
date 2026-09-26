@@ -9,7 +9,9 @@
 -- │ 1. 負荷試験用のアカウントを作る（アプリでサインアップ）         │
 -- │ 2. その id を調べる                                            │
 -- │      select id, email from auth.users order by created_at desc;│
--- │ 3. 下の LOAD_USER_ID を、その id に差し替える（1箇所だけ）      │
+-- │ 3. 下の load_user_id を、その id に差し替える                   │
+-- │    **3箇所ある**（投入の DO ブロック／後片付けの DO ブロック／  │
+-- │    最後の確認クエリ）。確認クエリは2行に書いてあるので計4箇所   │
 -- │ 4. Supabase ダッシュボードの SQL Editor に貼って実行する        │
 -- │ 5. 測り終わったらアカウントごと削除する。actuals も             │
 -- │    usage_events も on delete cascade で一緒に消える             │
@@ -39,8 +41,12 @@ declare
   jigyou   uuid := '22222222-2222-4222-8222-222222222222';
   card     uuid := '33333333-3333-4333-8333-333333333333';
 begin
-  if load_user_id = '00000000-0000-0000-0000-000000000000' then
-    raise exception 'load_user_id を差し替えてください';
+  -- **差し替え漏れの番人。** 未置換のゼロUUIDも、打ち間違えた id も、
+  -- どちらもここで止まる。**プレースホルダの値と比べない。** 比べると、
+  -- 一括置換したときに番人自身も書き換わって必ず落ちるようになる
+  -- （CLAUDE.md §2.8）。
+  if not exists (select 1 from auth.users where id = load_user_id) then
+    raise exception 'load_user_id が auth.users に見つかりません: %', load_user_id;
   end if;
 
   -- 設定。基準日と生活防衛ライン
@@ -58,6 +64,17 @@ begin
     (jigyou,   load_user_id, '事業口座',     'bank',  800000, null, null, null, null),
     (card,     load_user_id, 'メインカード', 'card',  142000,   15,    1,   10, seikatsu)
   on conflict (id) do nothing;
+
+  -- **前回の負荷試験の残りを踏まない。** 口座の id は固定値なので、
+  -- 同じ id の行が別の利用者に残っていると `on conflict do nothing` が
+  -- 黙って飛ばし、10万件が他人の口座を指したまま入る。
+  if (
+    select count(*) from public.accounts
+    where id in (seikatsu, jigyou, card) and user_id = load_user_id
+  ) <> 3 then
+    raise exception
+      '口座 id が別の利用者に使われています。前回の負荷試験の行を消してから実行してください';
+  end if;
 
   -- 実績10万件 --------------------------------------------------------------
   --
@@ -146,8 +163,12 @@ declare
   load_user_id uuid := '00000000-0000-0000-0000-000000000000';
   removed integer;
 begin
-  if load_user_id = '00000000-0000-0000-0000-000000000000' then
-    raise exception 'load_user_id を差し替えてください';
+  -- **差し替え漏れの番人。** 未置換のゼロUUIDも、打ち間違えた id も、
+  -- どちらもここで止まる。**プレースホルダの値と比べない。** 比べると、
+  -- 一括置換したときに番人自身も書き換わって必ず落ちるようになる
+  -- （CLAUDE.md §2.8）。
+  if not exists (select 1 from auth.users where id = load_user_id) then
+    raise exception 'load_user_id が auth.users に見つかりません: %', load_user_id;
   end if;
 
   -- 1万行ずつ消す。1トランザクションで10万行消してタイムアウトするのを避ける

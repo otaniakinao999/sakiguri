@@ -50,6 +50,31 @@ export function oneoffKey(oneoffId: string): string {
 }
 
 /**
+ * 予定インスタンスキーが指す元レコードの id。形式が違えば null。
+ *
+ * `recurringKey` / `oneoffKey` の逆である。**キーの形を知るのはこの
+ * 3関数だけにする**（CLAUDE.md §2.8）。元レコードを消すときに、その
+ * キーを持つオーバーライドも一緒に消すために要る（AC-47）。
+ *
+ * id は UUID で `:` を含まないが、日付側にも `-` しか無いので、
+ * 末尾の `:` で切れば定期項目の id が取れる。
+ */
+export function planKeySource(
+  key: string,
+): { src: "recurring" | "oneoff"; id: string } | null {
+  if (key.startsWith("r:")) {
+    const rest = key.slice(2);
+    const at = rest.lastIndexOf(":");
+    return at > 0 ? { src: "recurring", id: rest.slice(0, at) } : null;
+  }
+  if (key.startsWith("o:")) {
+    const id = key.slice(2);
+    return id.length > 0 ? { src: "oneoff", id } : null;
+  }
+  return null;
+}
+
+/**
  * 定期項目1件を、対象期間にかかる各月ぶんに展開する（CL-1 手順1〜2）。
  *
  * - `active` が false の項目は展開しない

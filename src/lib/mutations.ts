@@ -9,6 +9,7 @@
 
 import { categoriesInGroup } from "@/core/categories";
 import { applyClassification } from "@/core/classification";
+import { planKeySource } from "@/core/forecast";
 import type {
   Account,
   Actual,
@@ -84,7 +85,43 @@ export function updateAccount(
  * CL-2 が「イベントの口座が見つかりません」で落ちるため。
  * カードを消すときは、そのカードを引落元にしている設定も外す。
  */
+/**
+ * 口座を消すときに巻き添えで消える `AppData` のコレクション。
+ *
+ * **テストが `AppData` の全コレクションとこの一覧を突き合わせる。**
+ * コレクションが1つ増えたときにそのテストが落ちるようにしてある。
+ * 削除の範囲を手で並べている以上、並べ忘れは必ず起きる（CLAUDE.md §2.8）。
+ * 実際 `overrides` が漏れていて、口座を消すたびに「元の予定が見つかり
+ * ません」と出る行が残っていた（AC-47）。
+ */
+export const ACCOUNT_SCOPED_COLLECTIONS = [
+  "accounts",
+  "recurring",
+  "oneoffs",
+  "actuals",
+  "overrides",
+] as const;
+
 export function removeAccount(data: AppData, id: string): AppData {
+  const uses = (item: { accountId: string; toAccountId?: string }) =>
+    item.accountId === id || item.toAccountId === id;
+
+  const recurring = data.recurring.filter((r) => !uses(r));
+  const oneoffs = data.oneoffs.filter((o) => !uses(o));
+
+  /* 消える予定の元レコード。そのキーを持つオーバーライドも道連れにする */
+  const goneIds = new Set<string>([
+    ...data.recurring.filter(uses).map((r) => r.id),
+    ...data.oneoffs.filter(uses).map((o) => o.id),
+  ]);
+
+  const overrides = Object.fromEntries(
+    Object.entries(data.overrides).filter(([key]) => {
+      const source = planKeySource(key);
+      return !(source && goneIds.has(source.id));
+    }),
+  );
+
   return {
     ...data,
     accounts: data.accounts
@@ -94,15 +131,10 @@ export function removeAccount(data: AppData, id: string): AppData {
           ? { ...a, settleAccountId: "" }
           : a,
       ),
-    recurring: data.recurring.filter(
-      (r) => r.accountId !== id && r.toAccountId !== id,
-    ),
-    oneoffs: data.oneoffs.filter(
-      (o) => o.accountId !== id && o.toAccountId !== id,
-    ),
-    actuals: data.actuals.filter(
-      (a) => a.accountId !== id && a.toAccountId !== id,
-    ),
+    recurring,
+    oneoffs,
+    actuals: data.actuals.filter((a) => !uses(a)),
+    overrides,
   };
 }
 

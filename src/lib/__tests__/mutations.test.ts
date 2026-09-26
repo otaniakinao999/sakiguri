@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildBalanceSeries } from "@/core/balance";
-import { buildForecast } from "@/core/forecast";
+import { buildForecast, oneoffKey, recurringKey } from "@/core/forecast";
 import { buildPLMatrix } from "@/core/pl";
 import { actualToEvent } from "@/core/cash";
 import type { CardAccount, DepositAccount, RecurringItem } from "@/core/types";
@@ -17,6 +17,7 @@ import {
   blankRecurring,
   clearOverride,
   removeAccount,
+  ACCOUNT_SCOPED_COLLECTIONS,
   removeActual,
   removeOneoff,
   removeRecurring,
@@ -133,6 +134,86 @@ describe("口座・カード", () => {
     expect(after.recurring).toEqual([]);
     expect(after.oneoffs).toEqual([]);
     expect(after.actuals).toEqual([]);
+  });
+
+  /**
+   * AC-47。オーバーライドは `plan_key` で予定インスタンスを指しており
+   * 外部キーではないので、DB の cascade には任せられない。消し忘れると
+   * 「元の予定が見つかりません」と表示される行が、口座を消すたびに増える。
+   */
+  describe("AC-47 消える予定のオーバーライドも消える", () => {
+    const withOverrides = () => {
+      const data = {
+        ...base(),
+        oneoffs: [blankOneoff("o1", "a1", ASOF)],
+      };
+      return {
+        ...data,
+        overrides: {
+          [recurringKey("rent", ASOF)]: { date: "2026-04-20" },
+          [oneoffKey("o1")]: { amount: 9_000 },
+        },
+      };
+    };
+
+    it("定期項目のオーバーライドが消える", () => {
+      const after = removeAccount(withOverrides(), "a1");
+      expect(after.overrides[recurringKey("rent", ASOF)]).toBeUndefined();
+    });
+
+    it("単発予定のオーバーライドが消える", () => {
+      const after = removeAccount(withOverrides(), "a1");
+      expect(after.overrides[oneoffKey("o1")]).toBeUndefined();
+    });
+
+    it("元の予定が見つからない行が1件も残らない", () => {
+      const after = removeAccount(withOverrides(), "a1");
+      expect(Object.keys(after.overrides)).toEqual([]);
+    });
+
+    it("他の口座の予定のオーバーライドは残す", () => {
+      const data = {
+        ...withOverrides(),
+        recurring: [rent, { ...rent, id: "other", accountId: "c1" }],
+        overrides: {
+          [recurringKey("rent", ASOF)]: { date: "2026-04-20" },
+          [recurringKey("other", ASOF)]: { date: "2026-04-21" },
+        },
+      };
+
+      expect(Object.keys(removeAccount(data, "a1").overrides)).toEqual([
+        recurringKey("other", ASOF),
+      ]);
+    });
+
+    /**
+     * **削除の範囲を手で並べている以上、並べ忘れは必ず起きる。**
+     * コレクションが1つ増えたらここが落ちる（CLAUDE.md §2.8）。
+     */
+    it("AppData の全コレクションが削除の対象に入っている", () => {
+      const collections = Object.entries(emptyAppData(ASOF))
+        .filter(([, value]) => typeof value === "object" && value !== null)
+        .map(([key]) => key)
+        .sort();
+
+      expect(collections).toEqual([...ACCOUNT_SCOPED_COLLECTIONS].sort());
+    });
+
+    it("並べた全コレクションが実際に空になる", () => {
+      const data = {
+        ...withOverrides(),
+        actuals: [blankActual("x1", "a1", ASOF)],
+      };
+      const after = removeAccount(data, "a1");
+
+      for (const name of ACCOUNT_SCOPED_COLLECTIONS) {
+        const value = after[name];
+        const count = Array.isArray(value)
+          ? value.filter((v) => "id" in v && v.id === "a1").length
+          : Object.keys(value).length;
+        expect([name, count]).toEqual([name, 0]);
+      }
+    });
   });
 
   it("振替先に指定されている口座も消える対象になる", () => {
