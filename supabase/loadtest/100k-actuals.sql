@@ -76,6 +76,87 @@ begin
       '口座 id が別の利用者に使われています。前回の負荷試験の行を消してから実行してください';
   end if;
 
+  -- 定期項目50件 --------------------------------------------------------------
+  --
+  -- **実績だけ入れても測りたい経路を通らない。** 予定インスタンスが0件だと
+  -- CL-1 の展開も、FR-46 の候補照合（実績 × 未消込予定）も、FR-43 の
+  -- 未消し込み件数も空振りする。§5.1 の目標値も「定期項目50件」込みで
+  -- 書かれているので、無いと測っている対象が違う。
+  --
+  -- 50件 × 24ヶ月（FORECAST_HORIZON_MONTHS）で予定インスタンスは約1,200件。
+  -- 実績10万件がすべて `plan_key = null`（未判定）なので、候補照合は
+  -- 10万 × 1,200 の総当たりになる。**ここが一番重い。**
+  --
+  -- id は決定的に作る。`gen_random_uuid()` だと再実行で重複して増える。
+  insert into public.recurring_items
+    (id, user_id, name, type, cost_type, category_code, amount, biz_ratio,
+     account_id, to_account_id, day, months, active)
+  select
+    ('44444444-4444-4444-8444-' || lpad(i::text, 12, '0'))::uuid,
+    load_user_id,
+    '負荷試験 定期 ' || i,
+    case when i % 10 = 0 then 'income' else 'expense' end,
+    case
+      when i % 10 = 0 then null            -- 収入は cost_type を持たない
+      when i % 3 = 0  then 'fixed'
+      else 'variable'
+    end,
+    case
+      when i % 10 = 0 then 'INC-01'        -- 事業売上
+      when i % 3 = 0  then 'EXP-01'        -- 地代家賃・住居費（固定）
+      when i % 7 = 0  then 'EXP-03'        -- 通信費
+      when i % 5 = 0  then 'EXP-02'        -- 水道光熱費
+      else 'EXP-21'                        -- 食費（変動）
+    end,
+    case when i % 10 = 0 then 400000 + i * 1000 else 3000 + i * 700 end,
+    case when i % 4 = 0 then 100 when i % 6 = 0 then 40 else 0 end,
+    -- 4件はカード払い。CL-2 の引落ラグを予定側でも通す
+    case
+      when i % 11 = 0 then card
+      when i % 4  = 0 then jigyou
+      else seikatsu
+    end,
+    null,
+    -- 発生日は 1〜28 に散らし、4件だけ 31（月末の丸めを通す。CL-1）
+    case when i % 12 = 0 then 31 else 1 + (i % 28) end,
+    -- 2件だけ対象月を絞る（住民税のような年数回の項目。CL-1 の months 分岐）
+    case when i % 17 = 0 then array[1, 6, 8, 10]::smallint[] else null end,
+    -- 2件は停止。active の絞り込みを通す
+    i % 20 <> 0
+  from generate_series(1, 50) as i
+  on conflict (id) do nothing;
+
+  -- 単発予定40件 --------------------------------------------------------------
+  --
+  -- CL-1 は定期項目と単発予定で経路が分かれる。両方を通す。
+  -- 17日おきに置いて、24ヶ月の予測期間の全体に散らす。
+  insert into public.oneoff_items
+    (id, user_id, date, name, type, cost_type, category_code, amount,
+     biz_ratio, account_id, to_account_id)
+  select
+    ('55555555-5555-4555-8555-' || lpad(i::text, 12, '0'))::uuid,
+    load_user_id,
+    as_of + (i * 17),
+    '負荷試験 単発 ' || i,
+    case when i % 8 = 0 then 'income' else 'expense' end,
+    case
+      when i % 8 = 0 then null
+      when i % 3 = 0 then 'fixed'
+      else 'variable'
+    end,
+    case
+      when i % 8 = 0 then 'INC-02'         -- 雑収入
+      when i % 3 = 0 then 'EXP-14'         -- 租税公課（固定）
+      when i % 5 = 0 then 'EXP-07'         -- 消耗品費
+      else 'EXP-04'                        -- 旅費交通費
+    end,
+    12000 + i * 1300,
+    case when i % 3 = 0 then 100 else 0 end,
+    case when i % 9 = 0 then card else seikatsu end,
+    null
+  from generate_series(1, 40) as i
+  on conflict (id) do nothing;
+
   -- 実績10万件 --------------------------------------------------------------
   --
   -- 基準日から1,000日ぶんに散らす（2026-01-01 〜 2028-09-26）。1日あたり
@@ -136,6 +217,13 @@ select
 from public.actuals
 group by user_id
 order by 件数 desc;
+
+-- 予定側。定期項目50件・単発予定40件が入っていること。
+-- **0件のまま測ると、候補照合も未消し込み件数も空振りする。**
+select
+  (select count(*) from public.recurring_items where user_id = '00000000-0000-0000-0000-000000000000') as 定期項目,
+  (select count(*) filter (where active) from public.recurring_items where user_id = '00000000-0000-0000-0000-000000000000') as うち有効,
+  (select count(*) from public.oneoff_items    where user_id = '00000000-0000-0000-0000-000000000000') as 単発予定;
 
 -- 1ヶ月あたりの件数。FR-42 のページング（200件）と FR-47 の分割取得
 -- （1,000件）の両方を超えることを確かめる。
