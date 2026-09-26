@@ -6,12 +6,14 @@ import { emptyAppData, type AppData } from "../app-data";
 import {
   addAccount,
   addRecurring,
+  markReconciled,
   removeRecurring,
   setOverride,
   setReserveLine,
   updateRecurring,
 } from "../mutations";
 import { diffAppData } from "../supabase/diff";
+import { settingsPayload } from "../supabase/rows";
 import {
   fromAccount,
   fromActual,
@@ -76,6 +78,42 @@ describe("diffAppData", () => {
   it("同じ中身の別オブジェクトでも送らない", () => {
     const diff = diffAppData(base(), base());
     expect(diff.empty).toBe(true);
+  });
+
+  /**
+   * settings の項目を1つでも変えたら送る。
+   *
+   * **項目名を並べて比べる書き方をしない。** `lastReconciledAt` を足した
+   * とき差分側が古いまま残り、画面では変わるのに保存されない状態になって
+   * いた。FR-43 の警告が永久に「一度も消し込んでいない」を指し続ける
+   * （CLAUDE.md §2.8）。
+   */
+  describe("settings の変更を取りこぼさない", () => {
+    it("基準日", () => {
+      const diff = diffAppData(base(), { ...base(), asOf: "2026-05-01" });
+      expect(diff.settingsChanged).toBe(true);
+    });
+
+    it("防衛ライン", () => {
+      const diff = diffAppData(base(), setReserveLine(base(), 700_000));
+      expect(diff.settingsChanged).toBe(true);
+    });
+
+    it("最後に消し込んだ日", () => {
+      const diff = diffAppData(base(), markReconciled(base(), "2026-04-30"));
+
+      expect(diff.settingsChanged).toBe(true);
+      expect(diff.empty).toBe(false);
+    });
+
+    it("SettingsRow の全項目が差分の対象になっている", () => {
+      /* 列を足したときにここが落ちる。落ちたら diff も直す */
+      expect(Object.keys(settingsPayload(base())).sort()).toEqual([
+        "as_of",
+        "last_reconciled_at",
+        "reserve_line",
+      ]);
+    });
   });
 
   it("変わった行だけを送る", () => {

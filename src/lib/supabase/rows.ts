@@ -174,13 +174,24 @@ export function toOverrides(rows: OverrideRow[]): Overrides {
 
 /* ========================= アプリ → 行 ========================= */
 
-export function fromSettings(data: AppData, userId: string): SettingsRow {
+/**
+ * settings の、`user_id` を除いた中身。
+ *
+ * **差分の判定もここを見る（`diffAppData`）。** 項目を1つ足したときに
+ * 差分側が古いまま残ると、その項目は画面では変わるのに保存されない。
+ * 実際 `last_reconciled_at` がその状態にあり、FR-43 の警告が永久に
+ * 「一度も消し込んでいない」を指し続けていた（CLAUDE.md §2.8）。
+ */
+export function settingsPayload(data: AppData): Omit<SettingsRow, "user_id"> {
   return {
-    user_id: userId,
     as_of: data.asOf,
     reserve_line: data.reserveLine,
     last_reconciled_at: data.lastReconciledAt,
   };
+}
+
+export function fromSettings(data: AppData, userId: string): SettingsRow {
+  return { user_id: userId, ...settingsPayload(data) };
 }
 
 export function fromAccount(account: Account, userId: string): AccountRow {

@@ -14,6 +14,7 @@ import type { Actual, OneoffItem, Overrides, RecurringItem } from "@/core/types"
 import type { Account } from "@/core/types";
 
 import type { AppData } from "../app-data";
+import { settingsPayload } from "./rows";
 
 /** 何を upsert し、何を delete するか。 */
 export interface TableDiff<T> {
@@ -89,10 +90,11 @@ export function diffAppData(previous: AppData | null, next: AppData): DataDiff {
   const actuals = diffById(base?.actuals ?? [], next.actuals);
   const overrides = diffOverrides(base?.overrides ?? {}, next.overrides);
 
+  /* **項目を並べ直さない。** 送る中身そのものを比べる。ここに項目名を
+     書き写すと、settings に列が増えたときに片方だけ古くなる
+     （CLAUDE.md §2.8）。`last_reconciled_at` が実際にそうなっていた */
   const settingsChanged =
-    base === null ||
-    base.asOf !== next.asOf ||
-    base.reserveLine !== next.reserveLine;
+    base === null || !same(settingsPayload(base), settingsPayload(next));
 
   return {
     settingsChanged,
