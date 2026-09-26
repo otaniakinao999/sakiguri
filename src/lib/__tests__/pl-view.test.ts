@@ -150,7 +150,65 @@ describe("表示モード：実績+予定", () => {
     expect(rent.yearTotal).toBe(238_000);
   });
 
-  it("過去月に添える予定額を持つ", () => {
+  /**
+   * AC-44。各セルは「発生日が本日以前の実績 ＋ 未消し込みの予定」。
+   *
+   * 過去の未消し込みの予定を予定額のまま残すのは CL-3 と同じ扱いで、
+   * 残高予測と年月別収支が「見込み」について同じことを言うようになる。
+   */
+  describe("AC-44 見込み = 本日までの実績 ＋ 未消し込みの予定", () => {
+    /** 本日 6/30。6/15 の予定と 6/28 の予定、6/20 の実績 */
+    const june = (actuals: LedgerEvent[]) =>
+      buildPLDisplay(
+        buildPLMatrix({
+          forecast: [
+            ev({ key: "p1", date: "2026-06-15", categoryCode: "EXP-01", amount: 100_000 }),
+            ev({ key: "p2", date: "2026-06-28", categoryCode: "EXP-01", amount: 30_000 }),
+          ],
+          actuals,
+          year: 2026,
+          scope: "all",
+          today: NOW,
+        }),
+        "mixed",
+        NOW,
+      );
+
+    const rent = (d: ReturnType<typeof june>) =>
+      row(d, "category:fixed:EXP-01").monthly[m(6)];
+
+    it("過去月に未消し込みの予定があれば、その予定額が入る", () => {
+      /* どちらも未消し込み。CL-3 の予測系列と同じく予定額のまま残る */
+      expect(rent(june([]))).toBe(130_000);
+    });
+
+    it("消し込んだぶんは実績に置き換わる", () => {
+      const d = june([
+        ev({ key: "p1", date: "2026-06-20", categoryCode: "EXP-01", amount: 120_000, src: "actual" }),
+      ]);
+
+      /* 実績120,000 ＋ 未消し込みの予定30,000 */
+      expect(rent(d)).toBe(150_000);
+    });
+
+    it("予定にない支出は上乗せされる", () => {
+      const d = june([
+        ev({ key: null, date: "2026-06-22", categoryCode: "EXP-01", amount: 5_000, src: "actual" }),
+      ]);
+
+      expect(rent(d)).toBe(135_000);
+    });
+
+    it("本日より後の実績は入らない", () => {
+      const d = june([
+        ev({ key: null, date: "2026-07-05", categoryCode: "EXP-01", amount: 9_000, src: "actual" }),
+      ]);
+
+      expect(rent(d)).toBe(130_000);
+    });
+  });
+
+  it("当初予算を添える", () => {
     const d = display("mixed");
     expect(row(d, "category:fixed:EXP-01").planMonthly?.[m(4)]).toBe(120_000);
   });
@@ -225,6 +283,45 @@ describe("表示モード：差異", () => {
 
     /* 予算超過なので負。未到来の 30,000 が乗って +10,000 になってはならない */
     expect(row(d, "group:fixed").monthly[m(6)]).toBe(-20_000);
+  });
+
+  /**
+   * AC-42 の差し替え分。予定側だけを本日で切ると
+   * 「本日までの予定 対 月全体の実績」になり、向きが逆なだけで
+   * 両辺の期間が揃っていない点は元の欠陥と同じになる。
+   */
+  it("未来日の実績は未来月の差異に現れない", () => {
+    const matrix = buildPLMatrix({
+      forecast: [ev({ key: "p", date: "2026-10-20", categoryCode: "EXP-01", amount: 100_000 })],
+      actuals: [
+        ev({ key: null, date: "2026-10-20", categoryCode: "EXP-01", amount: 125_000, src: "actual" }),
+      ],
+      year: 2026,
+      scope: "all",
+      today: NOW,
+    });
+    const d = buildPLDisplay(matrix, "diff", NOW);
+
+    /* 両辺とも空。−125,000 の予算超過として出してはならない */
+    expect(row(d, "category:fixed:EXP-01").monthly[m(10)]).toBe(0);
+    expect(row(d, "net").monthly[m(10)]).toBe(0);
+  });
+
+  it("当月は両辺とも本日まで。実績側だけ月全体にしない", () => {
+    /* 本日 6/30。6/20 の実績と 7/2 の実績（＝翌月・本日より後） */
+    const matrix = buildPLMatrix({
+      forecast: [ev({ key: "p1", date: "2026-06-15", categoryCode: "EXP-01", amount: 100_000 })],
+      actuals: [
+        ev({ key: "p1", date: "2026-06-20", categoryCode: "EXP-01", amount: 120_000, src: "actual" }),
+      ],
+      year: 2026,
+      scope: "all",
+      today: "2026-06-19",
+    });
+    const d = buildPLDisplay(matrix, "diff", "2026-06-19");
+
+    /* 6/19 時点では実績がまだ無い。予定100,000 のみが立っている */
+    expect(row(d, "category:fixed:EXP-01").monthly[m(6)]).toBe(100_000);
   });
 
   it("差が無い月は良し悪しを付けない", () => {
@@ -341,11 +438,12 @@ describe("列（CL-5 手順5）", () => {
     expect(d.months[11]).toBe("2026-12");
   });
 
-  it("今月以前を過去として扱う", () => {
-    const d = display("plan");
-
-    expect(d.isPast.slice(0, 6)).toEqual([true, true, true, true, true, true]);
-    expect(d.isPast.slice(6)).toEqual([false, false, false, false, false, false]);
+  /**
+   * 過去月・未来月という区別を表示モデルが持たない。どのモードも
+   * 「どの面を見るか」だけで決まる（ADR-0019）。
+   */
+  it("月を過去と未来に分ける情報を持たない", () => {
+    expect(display("plan")).not.toHaveProperty("isPast");
   });
 
   it("すべての行が12ヶ月ぶんの値を持つ", () => {

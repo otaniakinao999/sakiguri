@@ -10,7 +10,14 @@
 
 import { categoryOf } from "@/core/categories";
 import { toYearMonth } from "@/core/date";
-import { applyMode, PL_GROUPS, type PLGroup, type PLMatrix, type PLMode } from "@/core/pl";
+import {
+  applyMode,
+  PL_GROUPS,
+  type PLGroup,
+  type PLMatrix,
+  type PLMode,
+  type PLSide,
+} from "@/core/pl";
 import type { DateStr, Yen, YearMonth } from "@/core/types";
 import { formatMonthDay } from "@/lib/format";
 
@@ -44,8 +51,11 @@ export interface PLDisplayRow {
   /** 画面に出ている値の合計。見えているものを足すと年計になる */
   yearTotal: Yen;
   /**
-   * 予実併記（`mixed`）のときに、過去月へ小さく添える予定額。
+   * 予実併記（`mixed`）のときに小さく添える、当初予算（手順2の予定）。
    * それ以外のモードでは undefined。
+   *
+   * **見込みと当初予算が違う月にだけ出す。** 同じ月に出すと同じ数字が
+   * 2つ並ぶ。期間では出し分けない。
    */
   planMonthly?: (Yen | null)[];
 }
@@ -55,8 +65,6 @@ export interface PLDisplay {
   mode: PLMode;
   /** 1月〜12月 */
   months: YearMonth[];
-  /** その月が今月以前か。表示モードの判定に使う */
-  isPast: boolean[];
   rows: PLDisplayRow[];
   /** 収支の行のラベル。事業ビューでは「事業所得」 */
   netLabel: string;
@@ -105,40 +113,50 @@ export function buildPLDisplay(
   mode: PLMode,
   today: DateStr,
 ): PLDisplay {
-  const currentYearMonth = toYearMonth(today);
   const months = Array.from(
     { length: 12 },
     (_, i) => `${matrix.year}-${String(i + 1).padStart(2, "0")}`,
   );
-  const isPast = months.map((m) => m <= currentYearMonth);
+
+  /**
+   * 5つの面から同じ場所の月別配列を取り出す。
+   *
+   * 面ごとに別々に取り出すと取り違えられる。1つのセレクタから5面ぶんを
+   * まとめて作り、`applyMode` に揃った形で渡す。
+   */
+  const pick = (select: (side: PLSide) => Yen[]) => ({
+    plan: select(matrix.plan),
+    actual: select(matrix.actual),
+    planToDate: select(matrix.planToDate),
+    actualToDate: select(matrix.actualToDate),
+    outlook: select(matrix.outlook),
+  });
 
   const cells = (
     group: PLGroup,
-    plan: Yen[],
-    planToDate: Yen[],
-    actual: Yen[],
+    monthlies: ReturnType<typeof pick>,
   ): (Yen | null)[] =>
     months.map((_, i) =>
-      applyMode(
-        mode,
-        group,
-        { plan: plan[i], planToDate: planToDate[i], actual: actual[i] },
-        isPast[i],
-      ),
+      applyMode(mode, group, {
+        plan: monthlies.plan[i],
+        actual: monthlies.actual[i],
+        planToDate: monthlies.planToDate[i],
+        actualToDate: monthlies.actualToDate[i],
+        outlook: monthlies.outlook[i],
+      }),
     );
+
+  const blockOf = (side: PLSide, group: PLGroup) =>
+    side.groups.find((g) => g.group === group)!;
 
   const rows: PLDisplayRow[] = [];
 
   for (const group of PL_GROUPS) {
-    const planBlock = matrix.plan.groups.find((g) => g.group === group)!;
-    const toDateBlock = matrix.planToDate.groups.find((g) => g.group === group)!;
-    const actualBlock = matrix.actual.groups.find((g) => g.group === group)!;
+    const planBlock = blockOf(matrix.plan, group);
 
     const groupMonthly = cells(
       group,
-      planBlock.monthly,
-      toDateBlock.monthly,
-      actualBlock.monthly,
+      pick((side) => blockOf(side, group).monthly),
     );
     rows.push({
       key: `group:${group}`,
@@ -151,13 +169,9 @@ export function buildPLDisplay(
     });
 
     planBlock.rows.forEach((planRow, index) => {
-      const actualRow = actualBlock.rows[index];
-      const toDateRow = toDateBlock.rows[index];
       const monthly = cells(
         group,
-        planRow.monthly,
-        toDateRow.monthly,
-        actualRow.monthly,
+        pick((side) => blockOf(side, group).rows[index].monthly),
       );
       rows.push({
         key: `category:${group}:${planRow.categoryCode}`,
@@ -172,17 +186,9 @@ export function buildPLDisplay(
   }
 
   /* 収支。差異モードでは「良い方向が正」を保つため収入と同じ向きで見る */
-  const netMonthly = months.map((_, i) =>
-    applyMode(
-      mode,
-      "income",
-      {
-        plan: matrix.plan.netMonthly[i],
-        planToDate: matrix.planToDate.netMonthly[i],
-        actual: matrix.actual.netMonthly[i],
-      },
-      isPast[i],
-    ),
+  const netMonthly = cells(
+    "income",
+    pick((side) => side.netMonthly),
   );
   rows.push({
     key: "net",
@@ -194,13 +200,12 @@ export function buildPLDisplay(
     planMonthly: mode === "mixed" ? matrix.plan.netMonthly : undefined,
   });
 
-  const currentIndex = months.indexOf(currentYearMonth);
+  const currentIndex = months.indexOf(toYearMonth(today));
 
   return {
     year: matrix.year,
     mode,
     months,
-    isPast,
     rows,
     netLabel: matrix.scope === "business" ? "事業所得" : "収支",
     asOfNote:

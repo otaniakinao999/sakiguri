@@ -523,87 +523,228 @@ describe("planToDate", () => {
   });
 });
 
+/* ============ 本日までの実績（AC-42・両辺の期間を揃える） ============ */
+
+describe("actualToDate", () => {
+  const act = (date: string, amount: number) =>
+    ev({
+      key: null,
+      date,
+      categoryCode: "EXP-01",
+      costType: "fixed",
+      amount,
+      src: "actual",
+    });
+
+  /**
+   * ここが AC-42 の肝。予定側だけを本日で切ると
+   * 「本日までの予定 対 月全体の実績」になり、向きが逆なだけで
+   * 両辺の期間が揃っていない点は元の欠陥と同じになる。
+   */
+  it("発生日が本日以前の実績だけを集計する", () => {
+    const got = buildPLMatrix(
+      input({
+        actuals: [act("2026-09-20", 120_000), act("2026-09-30", 40_000)],
+        today: "2026-09-25",
+      }),
+    );
+
+    expect(block(got.actualToDate, "fixed").monthly[month(9)]).toBe(120_000);
+    /* 実績側そのものは全実績のまま（手順3） */
+    expect(block(got.actual, "fixed").monthly[month(9)]).toBe(160_000);
+  });
+
+  it("未来日の実績は差異に現れない", () => {
+    /* 10月に予定100,000と未来日の実績125,000。両辺とも空になる */
+    const got = buildPLMatrix(
+      input({
+        forecast: [
+          ev({ key: "p", date: "2026-10-20", categoryCode: "EXP-01", costType: "fixed", amount: 100_000 }),
+        ],
+        actuals: [act("2026-10-20", 125_000)],
+        today: "2026-09-25",
+      }),
+    );
+
+    expect(block(got.planToDate, "fixed").monthly[month(10)]).toBe(0);
+    expect(block(got.actualToDate, "fixed").monthly[month(10)]).toBe(0);
+  });
+
+  it("本日ちょうどの実績は含む", () => {
+    const got = buildPLMatrix(
+      input({ actuals: [act("2026-09-25", 120_000)], today: "2026-09-25" }),
+    );
+
+    expect(block(got.actualToDate, "fixed").monthly[month(9)]).toBe(120_000);
+  });
+});
+
+/* ============ 見込み（AC-44・実績+予定モードの中身） ============ */
+
+describe("outlook", () => {
+  const plan = (key: string, date: string, amount: number) =>
+    ev({ key, date, categoryCode: "EXP-01", costType: "fixed", amount });
+
+  const done = (key: string | null, date: string, amount: number) =>
+    ev({
+      key,
+      date,
+      categoryCode: "EXP-01",
+      costType: "fixed",
+      amount,
+      src: "actual",
+    });
+
+  const TODAY = "2026-09-25";
+  const at = (m: PLMatrix) => block(m.outlook, "fixed").monthly[month(9)];
+
+  it("消し込み済みの予定は実績に置き換わる", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-09-20", 100_000)],
+        actuals: [done("p1", "2026-09-20", 120_000)],
+        today: TODAY,
+      }),
+    );
+
+    expect(at(got)).toBe(120_000);
+  });
+
+  /**
+   * ここが AC-44 の肝。過去の未消し込みの予定を予定額のまま残すのは
+   * CL-3 の予測系列と同じ扱いで、残高予測と年月別収支が「見込み」に
+   * ついて同じことを言うようになる。
+   */
+  it("過去の未消し込みの予定は予定額のまま残る", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-09-20", 100_000)],
+        actuals: [],
+        today: TODAY,
+      }),
+    );
+
+    expect(at(got)).toBe(100_000);
+  });
+
+  it("当月は 本日までの実績 ＋ 未到来の予定 になる", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-09-20", 100_000), plan("p2", "2026-09-30", 30_000)],
+        actuals: [done("p1", "2026-09-20", 120_000)],
+        today: TODAY,
+      }),
+    );
+
+    /* 実績120,000 ＋ 未到来の予定30,000 */
+    expect(at(got)).toBe(150_000);
+  });
+
+  it("未来月は予定のみになる", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-10-20", 100_000)],
+        today: TODAY,
+      }),
+    );
+
+    expect(block(got.outlook, "fixed").monthly[month(10)]).toBe(100_000);
+  });
+
+  it("未来日の実績は見込みに入らない。消し込んだ予定も落ちる", () => {
+    /* 10/20 の予定を、未来日の実績で消し込んだ状態。
+       実績は本日以前ではないので入らず、予定は消し込み済みなので落ちる */
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-10-20", 100_000)],
+        actuals: [done("p1", "2026-10-20", 125_000)],
+        today: TODAY,
+      }),
+    );
+
+    expect(block(got.outlook, "fixed").monthly[month(10)]).toBe(0);
+  });
+
+  it("予定にない支出（key が null）は何も消し込まない", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-09-20", 100_000)],
+        actuals: [done(null, "2026-09-22", 3_000)],
+        today: TODAY,
+      }),
+    );
+
+    /* 未消し込みの予定100,000 ＋ 突発の実績3,000 */
+    expect(at(got)).toBe(103_000);
+  });
+
+  it("消し込みは key の一致だけで決まる。日付や金額はずれてよい", () => {
+    const got = buildPLMatrix(
+      input({
+        forecast: [plan("p1", "2026-09-20", 100_000)],
+        actuals: [done("p1", "2026-09-24", 98_000)],
+        today: TODAY,
+      }),
+    );
+
+    expect(at(got)).toBe(98_000);
+  });
+});
+
 /* ========================= 表示モード（手順6） ========================= */
 
 describe("applyMode", () => {
-  /** 予定・本日までの予定・実績 */
-  const v = (plan: number, planToDate: number, actual: number) => ({
-    plan,
-    planToDate,
-    actual,
+  /** 5つの面の、同じセルぶんの値 */
+  const v = (over: Partial<Parameters<typeof applyMode>[2]> = {}) => ({
+    plan: 0,
+    actual: 0,
+    planToDate: 0,
+    actualToDate: 0,
+    outlook: 0,
+    ...over,
   });
 
   it("plan は予定を返す。本日までに絞らない", () => {
-    expect(applyMode("plan", "fixed", v(100, 40, 90), true)).toBe(100);
-    expect(applyMode("plan", "fixed", v(100, 0, 0), false)).toBe(100);
+    expect(applyMode("plan", "fixed", v({ plan: 100, planToDate: 40 }))).toBe(100);
   });
 
   /**
    * 手順3 は「実績側は実績のみを集計する」で、期間の限定がない。
-   * 過去／未来の切り分けは手順6 の `実績+予定` の定義に属する。
    *
-   * 未来日の実績は実在する。前払い、CSVの先日付行、そして最も多いのは
-   * 日付の打ち間違い（2027年と打ってしまった実績）である。画面から消すと
+   * 未来日の実績は実在する。前払い、CSVの予約振込行、そして日付の
+   * 打ち間違い（2027年と打ってしまった実績）である。画面から消すと
    * 残高だけが合わない状態になり、原因が追えない。
    */
-  it("actual は未来月でも実績を返す", () => {
-    expect(applyMode("actual", "fixed", v(100, 100, 90), true)).toBe(90);
-    expect(applyMode("actual", "fixed", v(100, 0, 90), false)).toBe(90);
+  it("actual は実績を返す。本日までに絞らない", () => {
+    expect(applyMode("actual", "fixed", v({ actual: 90, actualToDate: 0 }))).toBe(90);
   });
 
-  it("actual は実績が無ければ未来月でも0を返す（null にしない）", () => {
-    expect(applyMode("actual", "fixed", v(100, 0, 0), false)).toBe(0);
-  });
-
-  it("mixed は過去月が実績、未来月が予定。予定は本日までに絞らない", () => {
-    expect(applyMode("mixed", "fixed", v(100, 100, 90), true)).toBe(90);
-    expect(applyMode("mixed", "fixed", v(100, 0, 0), false)).toBe(100);
+  it("mixed は見込みを返す", () => {
+    expect(applyMode("mixed", "fixed", v({ plan: 100, outlook: 130 }))).toBe(130);
   });
 
   it("diff は正が良い方向。収入は 実績−予定、費用は 予定−実績", () => {
+    const d = (group: PLGroup, planToDate: number, actualToDate: number) =>
+      applyMode("diff", group, v({ planToDate, actualToDate }));
+
     // 収入が予定より多い → 良い
-    expect(applyMode("diff", "income", v(400_000, 400_000, 450_000), true)).toBe(50_000);
+    expect(d("income", 400_000, 450_000)).toBe(50_000);
     // 収入が予定より少ない → 悪い
-    expect(applyMode("diff", "income", v(450_000, 450_000, 400_000), true)).toBe(-50_000);
+    expect(d("income", 450_000, 400_000)).toBe(-50_000);
     // 費用が予定より少ない → 良い
-    expect(applyMode("diff", "fixed", v(120_000, 120_000, 118_000), true)).toBe(2_000);
+    expect(d("fixed", 120_000, 118_000)).toBe(2_000);
     // 費用が予定より多い → 悪い
-    expect(applyMode("diff", "variable", v(68_000, 68_000, 72_000), true)).toBe(-4_000);
+    expect(d("variable", 68_000, 72_000)).toBe(-4_000);
   });
 
   /**
-   * AC-42。差異は「予定日が本日以前の予定」と実績を比べる。
+   * **どのモードも月が過去か未来かを見ない。**
    *
-   * ここに「未来月なら null」のような期間の分岐を足さないこと。当月の
-   * 未到来分も未来月も、比較の相手が `planToDate` であることから落ちる。
+   * 引数に期間が無いことがその保証になっている。必要な切り分けは、
+   * どの面を見るかだけで決まる（ADR-0019）。
    */
-  describe("AC-42 差異は本日までに予定日が来た予定と比べる", () => {
-    it("当月の未到来の予定は差異に入らない", () => {
-      /* 予定 159,800 のうち、本日までに来ているのは 129,800。
-         実績 152,000 は予算超過なので、差異は負でなければならない */
-      expect(applyMode("diff", "fixed", v(159_800, 129_800, 152_000), true))
-        .toBe(-22_200);
-    });
-
-    it("未到来の予定を予定側に入れると符号が反転する（入れてはいけない）", () => {
-      /* 同じ状態で全予定と比べると +7,800。3費目で予算超過なのに
-         「良い方向」に見える。これを避けるための規則である */
-      expect(applyMode("diff", "fixed", v(159_800, 159_800, 152_000), true))
-        .toBe(7_800);
-    });
-
-    it("未来月は期間の分岐ではなく、比べる予定が無いことで空になる", () => {
-      /* isPast = false でも分岐しない。planToDate が0だから0になる */
-      expect(applyMode("diff", "fixed", v(129_800, 0, 0), false)).toBe(0);
-      expect(applyMode("diff", "income", v(500_000, 0, 0), false)).toBe(0);
-    });
-
-    it("未来月に実績だけあれば、予定外の支出として差異に出る", () => {
-      /* 未来日の実績（前払い、日付の打ち間違い）は隠さない。
-         比べる予定が無いので、まるごと予定超過として出る */
-      expect(applyMode("diff", "fixed", v(100_000, 0, 125_000), false))
-        .toBe(-125_000);
-    });
+  it("引数に期間を取らない", () => {
+    expect(applyMode).toHaveLength(3);
   });
 });
 

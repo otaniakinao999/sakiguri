@@ -64,11 +64,11 @@ function Cell({
       ) : (
         <span className={bold ? "font-semibold" : ""}>{formatAmount(value)}</span>
       )}
-      {/* 予実併記。過去月に予定額を小さく添える */}
+      {/* 予実併記。見込みが当初予算と違う月にだけ、当初予算を小さく添える */}
       {display.mode === "mixed" &&
-        display.isPast[index] &&
         plan != null &&
-        plan !== 0 && (
+        plan !== 0 &&
+        plan !== value && (
           <span className="text-object-base-mid block text-body-xxs">
             予 {formatAmount(plan)}
           </span>
