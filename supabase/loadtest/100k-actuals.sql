@@ -126,6 +126,23 @@ begin
   from generate_series(1, 50) as i
   on conflict (id) do nothing;
 
+  -- 振替3件 --------------------------------------------------------------------
+  --
+  -- CL-2・CL-3 に振替の分岐がある（合計残高に対して増減0、口座別には
+  -- 付け替え）。**通らないまま「落ちない」と言えないので3件だけ入れる。**
+  -- 件数を絞っているのは、測りたいのは所要時間ではなく通ることだから。
+  insert into public.recurring_items
+    (id, user_id, name, type, cost_type, category_code, amount, biz_ratio,
+     account_id, to_account_id, day, months, active)
+  values
+    ('66666666-6666-4666-8666-000000000001', load_user_id, '負荷試験 振替 1',
+     'transfer', null, 'TRF-01', 60000, 0, seikatsu, jigyou,  5, null, true),
+    ('66666666-6666-4666-8666-000000000002', load_user_id, '負荷試験 振替 2',
+     'transfer', null, 'TRF-02', 80000, 0, jigyou,   seikatsu, 15, null, true),
+    ('66666666-6666-4666-8666-000000000003', load_user_id, '負荷試験 振替 3',
+     'transfer', null, 'TRF-01', 30000, 0, seikatsu, jigyou,  31, null, true)
+  on conflict (id) do nothing;
+
   -- 単発予定40件 --------------------------------------------------------------
   --
   -- CL-1 は定期項目と単発予定で経路が分かれる。両方を通す。
@@ -223,6 +240,7 @@ order by 件数 desc;
 select
   (select count(*) from public.recurring_items where user_id = '00000000-0000-0000-0000-000000000000') as 定期項目,
   (select count(*) filter (where active) from public.recurring_items where user_id = '00000000-0000-0000-0000-000000000000') as うち有効,
+  (select count(*) filter (where type = 'transfer') from public.recurring_items where user_id = '00000000-0000-0000-0000-000000000000') as うち振替,
   (select count(*) from public.oneoff_items    where user_id = '00000000-0000-0000-0000-000000000000') as 単発予定;
 
 -- 1ヶ月あたりの件数。FR-42 のページング（200件）と FR-47 の分割取得
