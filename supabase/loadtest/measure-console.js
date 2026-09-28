@@ -97,13 +97,15 @@
   say(`基準日 ${asOf} ／ サインイン ${sess.user?.email ?? "-"}`);
 
   const tHead = [], tBody = [], tParse = [];
-  let offset = 0, pages = 0, rows = 0, bytes = 0;
+  let offset = 0, pages = 0, rows = 0, bytes = 0, enc = null;
   const bWall0 = performance.now();
 
   for (let i = 0; i < 500; i++) {
     const t0 = performance.now();
     const r = await fetch(url, { headers: range(offset) });
     const t1 = performance.now();
+    /* 圧縮されていなければ、転送量がそのまま本文受信の時間になる */
+    if (enc === null) enc = r.headers.get("content-encoding") ?? "(なし)";
     /* `r.json()` を text + JSON.parse に割る。ここでしか分けられない */
     const text = await r.text();
     const t2 = performance.now();
@@ -127,7 +129,9 @@
   say("");
   say(`往復回数        ${pages}`);
   say(`取得件数        ${rows.toLocaleString()}`);
-  say(`受け取った文字数 ${mb(bytes)}（JSON テキスト。圧縮前）`);
+  say(`受け取った文字数 ${mb(bytes)}（JSON テキスト。展開後）`);
+  say(`Content-Encoding ${enc}   ${enc === "(なし)" ? "← 非圧縮。転送量がそのまま時間になる" : ""}`);
+  say(`実効スループット ${(bytes / 1024 / 1024 / (sum(tBody) / 1000)).toFixed(1)} MB/s（展開後の量 ÷ 本文受信の時間）`);
   say(`通し時間        ${num(bWall)} ms`);
   say("");
   say("                    合計ms     中央値ms   割合");
