@@ -112,6 +112,23 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const dataRef = useRef(data);
   dataRef.current = data;
 
+  /**
+   * 読み込み・保存が見る「誰か」。**セッションのオブジェクトではなく id。**
+   *
+   * `session` を依存に置くと、中身が同じでもオブジェクトが別なら
+   * `Object.is` が false になって effect が再実行される。起動時は
+   * `getSession()` と `onAuthStateChange` が別々にセッションを渡すので
+   * それだけで複数回走り、さらに **supabase-js がトークンを定期更新する
+   * たびに `TOKEN_REFRESHED` で新しいオブジェクトが来る。**
+   *
+   * 実測で、実績10万件の利用者が起動時に3回・24.4秒かけて同じデータを
+   * 取り直していた。トークン更新でも同じことが起き、そちらは**画面を
+   * 触っている最中に起きる。**
+   *
+   * id なら、別の利用者でサインインし直したときだけ変わる。
+   */
+  const userId = session?.user.id ?? null;
+
   const seqRef = useRef(0);
   const toState = useCallback(
     (next: SaveStatePayload) => setSaveState({ ...next, seq: ++seqRef.current }),
@@ -162,7 +179,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------- 読み込み ---------- */
   useEffect(() => {
-    if (!session || !today) return;
+    if (!userId || !today) return;
     let cancelled = false;
 
     setLoadError(null);
@@ -185,7 +202,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         /* 分割取得のバグを検知するカナリア（§5.1.2）。件数だけを残す。
            金額・費目名・口座名は入れない（ADR-0013） */
         if (e instanceof IncompleteLoadError) {
-          track(session.user.id, "load_incomplete", {
+          track(userId, "load_incomplete", {
             expected: e.expected,
             received: e.received,
           });
@@ -198,7 +215,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session, today, toState, loadAttempt]);
+    /* **`session` を入れない。** 上の `userId` のコメントを読むこと */
+  }, [userId, today, toState, loadAttempt]);
 
   const retryLoad = useCallback(() => setLoadAttempt((n) => n + 1), []);
 
@@ -212,7 +230,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    * 無ければ何もしない。
    */
   const runSave = useCallback(async () => {
-    if (!session || !loadedRef.current) return;
+    if (!userId || !loadedRef.current) return;
 
     const target = dataRef.current;
     const diff = diffAppData(savedRef.current, target);
@@ -220,7 +238,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     toState({ status: "saving" });
     try {
-      await saveDiff(getSupabase(), session.user.id, diff, target);
+      await saveDiff(getSupabase(), userId, diff, target);
       /* 成功したときだけ基準を進める。失敗したら次回まとめて送り直す */
       savedRef.current = target;
       toState({ status: "saved" });
@@ -230,16 +248,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         message: e instanceof Error ? e.message : String(e),
       });
     }
-  }, [session, toState]);
+  }, [userId, toState]);
 
   /* 400ms デバウンス（要件定義書 §5.2） */
   useEffect(() => {
-    if (!session || !loadedRef.current) return;
+    if (!userId || !loadedRef.current) return;
     if (diffAppData(savedRef.current, data).empty) return;
 
     const timer = setTimeout(() => void runSave(), SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [data, session, runSave]);
+  }, [data, userId, runSave]);
 
   const retrySave = useCallback(() => void runSave(), [runSave]);
 
