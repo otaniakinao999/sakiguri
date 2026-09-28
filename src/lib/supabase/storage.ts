@@ -30,6 +30,7 @@ import {
   toOneoff,
   toOverrides,
   toRecurring,
+  SETTINGS_COLUMNS,
   type AccountRow,
   type ActualRow,
   type OneoffRow,
@@ -58,10 +59,14 @@ export async function loadAppData(
   fallbackAsOf: string,
 ): Promise<AppData> {
   /* 段階1：基準日を確定させる。以降の絞り込みの基準になる */
-  const settings = await supabase.from("settings").select("*").maybeSingle();
+  const settings = await supabase
+    .from("settings")
+    .select(SETTINGS_COLUMNS)
+    .maybeSingle();
   if (settings.error) throw new Error(settings.error.message);
 
-  const settingsRow = settings.data as SettingsRow | null;
+  /* user_id は取っていないので、型にも持たせない */
+  const settingsRow = settings.data as Omit<SettingsRow, "user_id"> | null;
   const asOf = settingsRow?.as_of ?? fallbackAsOf;
   const since = { column: "date", value: asOf };
 

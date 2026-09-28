@@ -7,6 +7,8 @@
  * の4段。機械が違うので絶対値は実機と一致しない。**比率と桁**を見る。
  */
 
+import { gzipSync } from "node:zlib";
+
 import { describe, it } from "vitest";
 
 import { buildBalanceSeries } from "@/core/balance";
@@ -99,7 +101,64 @@ describe("読み込み後のコスト（ローカル再現）", () => {
     const rows = makeRows();
     /* 実際に送られてくるのは 1000 件 × 100 ページ。まとめて測る */
     const text = JSON.stringify(rows);
-    console.log(`  JSON テキスト                      ${(text.length / 1024 / 1024).toFixed(1)} MB`);
+
+    /* `select("*")` だったころの本文と比べる。DB はどのテーブルにも
+       created_at と updated_at を持つが、Row 型にはどちらも無い。
+       **時刻は行ごとに散らす。** 投入 SQL は1文で入れたので全行が同じ値に
+       なるが、それだと gzip に有利すぎて実利用の判断材料にならない */
+    const stamp = (i: number) =>
+      new Date(Date.UTC(2026, 0, 1, 0, 0, 0) + i * 137_000).toISOString();
+    const withUnused = JSON.stringify(
+      rows.map((r, i) => ({
+        ...r,
+        created_at: stamp(i),
+        updated_at: stamp(i + 3),
+      })),
+    );
+    /* 投入SQLどおり全行が同じ時刻の場合。負荷試験の実測はこちらになる */
+    const withUnusedFlat = JSON.stringify(
+      rows.map((r) => ({
+        ...r,
+        created_at: stamp(0),
+        updated_at: stamp(0),
+      })),
+    );
+    const narrowed = JSON.stringify(
+      rows.map((r) => {
+        const rest: Partial<ActualRow> = { ...r };
+        delete rest.user_id;
+        return rest;
+      }),
+    );
+    const mbOf = (n: number) => (n / 1024 / 1024).toFixed(1).padStart(5) + " MB";
+    /* **圧縮後で比べないと意味がない。** user_id と created_at は行ごとに
+       ほぼ同じ文字列なので、gzip だとほとんど場所を取らない。生の削減幅を
+       そのまま転送時間の削減として読むと過大評価になる */
+    const gz = (s: string) => gzipSync(Buffer.from(s), { level: 6 }).length;
+    const pct = (a: number, b: number) => {
+      const r = 100 - (a / b) * 100;
+      return r >= 0 ? `−${r.toFixed(0)}%` : `+${(-r).toFixed(0)}%（増える）`;
+    };
+    console.log("  列を絞るとどれだけ減るか                 生       gzip");
+    console.log(
+      `    select(*) 相当・時刻が行ごとに違う   ${mbOf(withUnused.length)} ${mbOf(gz(withUnused))}   ← 実利用`,
+    );
+    console.log(
+      `    select(*) 相当・全行が同じ時刻       ${mbOf(withUnusedFlat.length)} ${mbOf(gz(withUnusedFlat))}   ← 投入SQLのデータ`,
+    );
+    console.log(`    読む列だけ                           ${mbOf(narrowed.length)} ${mbOf(gz(narrowed))}`);
+    console.log(
+      `      実利用に対して   生 ${pct(narrowed.length, withUnused.length)} / gzip ${pct(gz(narrowed), gz(withUnused))}`,
+    );
+    console.log(
+      `      投入SQLに対して  生 ${pct(narrowed.length, withUnusedFlat.length)} / gzip ${pct(gz(narrowed), gz(withUnusedFlat))}` +
+        "   ← **負荷試験の実測はこちら。効きを過小に見せる**",
+    );
+    console.log(`  以降の計測に使う本文                   ${mbOf(text.length)}`);
+    console.log(
+      "    ※ 作り物のデータは同じ文字列の繰り返しが多く、gzip の絶対値は実機より\n" +
+        "      小さく出る。ここで意味があるのは3行の**比**だけ。",
+    );
 
     const parsed = at("JSON.parse", () => JSON.parse(text) as ActualRow[]);
     const mapped = at("toActual の変換（10万件）", () =>

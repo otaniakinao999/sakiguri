@@ -84,6 +84,99 @@ export interface OverrideRow {
   note: string | null;
 }
 
+/* ========================= 取得する列 ========================= */
+
+/**
+ * 取得する列を列挙する。
+ *
+ * **`select("*")` を使わない。** 読み込みは本文の転送が律速で（`docs/受入
+ * 基準の充足状況.md`「パースは律速ではない」）、送るバイト数がそのまま
+ * 時間になる。どのテーブルも `created_at` と `updated_at` を持つが、
+ * どちらも読んでいない。`user_id` も読んでいない（行を絞るのは RLS の
+ * 仕事で、アプリは受け取った行をそのまま使う）。この3列で1行あたり
+ * 100バイト以上ある。
+ *
+ * **列を1つでも書き落とすと型エラーになる。** `Record<keyof Row, true>`
+ * はキーの過不足を許さないので、`Row` に項目を足したときにここが落ちる
+ * （CLAUDE.md §2.8）。DB に列を足しても `Row` に足さなければ落ちないが、
+ * その列は誰も読んでいないので取る必要もない。
+ */
+function columns<Row>(map: Record<keyof Omit<Row, "user_id">, true>): string {
+  return Object.keys(map).join(",");
+}
+
+/** `settings` は1行なので `fetchAll` を通さない。列は同じ考えで絞る */
+export const SETTINGS_COLUMNS = columns<SettingsRow>({
+  as_of: true,
+  reserve_line: true,
+  last_reconciled_at: true,
+});
+
+/** `fetchAll` が引くテーブルと、その取得列。 */
+export const SELECT_COLUMNS = {
+  accounts: columns<AccountRow>({
+    id: true,
+    name: true,
+    kind: true,
+    balance: true,
+    unbilled_balance: true,
+    closing_day: true,
+    pay_month_offset: true,
+    pay_day: true,
+    settle_account_id: true,
+  }),
+  recurring_items: columns<RecurringRow>({
+    id: true,
+    name: true,
+    type: true,
+    cost_type: true,
+    category_code: true,
+    amount: true,
+    biz_ratio: true,
+    account_id: true,
+    to_account_id: true,
+    day: true,
+    months: true,
+    active: true,
+  }),
+  oneoff_items: columns<OneoffRow>({
+    id: true,
+    name: true,
+    type: true,
+    cost_type: true,
+    category_code: true,
+    amount: true,
+    biz_ratio: true,
+    account_id: true,
+    to_account_id: true,
+    date: true,
+  }),
+  actuals: columns<ActualRow>({
+    id: true,
+    name: true,
+    type: true,
+    cost_type: true,
+    category_code: true,
+    amount: true,
+    biz_ratio: true,
+    account_id: true,
+    to_account_id: true,
+    date: true,
+    plan_key: true,
+    unplanned: true,
+  }),
+  overrides: columns<OverrideRow>({
+    plan_key: true,
+    date: true,
+    amount: true,
+    skipped: true,
+    note: true,
+  }),
+} as const;
+
+/** `fetchAll` が引けるテーブル。列を定義していないテーブルは引けない */
+export type FetchTable = keyof typeof SELECT_COLUMNS;
+
 /* ========================= 行 → アプリ ========================= */
 
 export function toAccount(row: AccountRow): Account {

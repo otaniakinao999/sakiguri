@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fetchAll, IncompleteLoadError, PAGE_SIZE } from "../supabase/fetch-all";
+import { SELECT_COLUMNS, SETTINGS_COLUMNS } from "../supabase/rows";
 
 /**
  * FR-47 / AC-34・AC-35。
@@ -49,6 +50,8 @@ interface FakeOptions {
 function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
   const maxRows = opts.maxRows ?? PAGE_SIZE;
   const calls: { from: number; to: number; ordered: string[] }[] = [];
+  /** `select` に渡された列。`*` に戻っていないことを確かめる */
+  const selects: string[] = [];
 
   const client = {
     from() {
@@ -57,7 +60,8 @@ function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
       const ordered: string[] = [];
 
       const builder = {
-        select() {
+        select(columns: string) {
+          selects.push(columns);
           return builder;
         },
         gte(column: string, value: string) {
@@ -104,7 +108,7 @@ function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
     },
   };
 
-  return { client: client as never, calls };
+  return { client: client as never, calls, selects };
 }
 
 /* ========================= 分割取得 ========================= */
@@ -268,5 +272,43 @@ describe("AC-35 切り捨てを検知する", () => {
     const { client } = fakeSupabase(makeRows(10), { error: "boom" });
 
     await expect(fetchAll<Row>(client, "actuals")).rejects.toThrow("boom");
+  });
+});
+
+/**
+ * 転送量。
+ *
+ * 読み込みの律速は本文の転送で、送るバイト数がそのまま時間になる
+ * （`docs/受入基準の充足状況.md`）。列の過不足は `rows.ts` の
+ * `Record<keyof Row, true>` が型で捕まえるので、ここで見るのは
+ * **読んでいない列が混ざっていないこと**と、**`*` に戻っていないこと**
+ * の2点だけ。
+ */
+describe("取得する列", () => {
+  /** どのテーブルも持っているが、アプリが一度も読まない列 */
+  const UNUSED = ["user_id", "created_at", "updated_at"];
+
+  it.each(Object.entries(SELECT_COLUMNS))(
+    "%s は読まない列を取らない",
+    (_table, columns) => {
+      const list = columns.split(",");
+      expect(list.filter((c) => UNUSED.includes(c))).toEqual([]);
+      expect(list.length).toBeGreaterThan(0);
+    },
+  );
+
+  it("settings も読まない列を取らない", () => {
+    const list = SETTINGS_COLUMNS.split(",");
+    expect(list.filter((c) => UNUSED.includes(c))).toEqual([]);
+  });
+
+  it("fetchAll は `*` ではなくテーブルの列を渡す", async () => {
+    const { client, selects } = fakeSupabase(makeRows(10));
+
+    await fetchAll<Row>(client, "actuals");
+
+    expect(selects.length).toBeGreaterThan(0);
+    expect(selects).not.toContain("*");
+    for (const s of selects) expect(s).toBe(SELECT_COLUMNS.actuals);
   });
 });

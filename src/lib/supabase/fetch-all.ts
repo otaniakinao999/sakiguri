@@ -20,6 +20,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { SELECT_COLUMNS, type FetchTable } from "./rows";
+
 /**
  * 1回の取得件数。
  *
@@ -76,7 +78,7 @@ export interface FetchAllOptions {
  */
 export async function fetchAll<Row>(
   supabase: SupabaseClient,
-  table: string,
+  table: FetchTable,
   { since, idColumn = "id" }: FetchAllOptions = {},
 ): Promise<Row[]> {
   const rows: Row[] = [];
@@ -94,7 +96,8 @@ export async function fetchAll<Row>(
   for (let page = 0; page < MAX_PAGES; page++) {
     let query = supabase
       .from(table)
-      .select("*", { count: "exact" })
+      /* `*` ではなく読む列だけ。転送量が律速なので効く（rows.ts） */
+      .select(SELECT_COLUMNS[table], { count: "exact" })
       .range(offset, offset + PAGE_SIZE - 1);
 
     if (since) query = query.gte(since.column, since.value);
