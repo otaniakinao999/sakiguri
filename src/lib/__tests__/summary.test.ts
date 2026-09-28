@@ -72,6 +72,7 @@ describe("残高ヘッダーの数字（SC-01）", () => {
       in30: 0,
       in90: 0,
       cardDue: 0,
+      unrecorded: { amount: 0, count: 0 },
     });
   });
 
@@ -83,6 +84,8 @@ describe("残高ヘッダーの数字（SC-01）", () => {
       in30: 1_000_000,
       in90: 1_000_000,
       cardDue: 0,
+      /* 未消し込みの予定が無いので内訳も出ない */
+      unrecorded: { amount: 0, count: 0 },
     });
   });
 
@@ -154,5 +157,92 @@ describe("残高ヘッダーの数字（SC-01）", () => {
     expect(computeBalanceSummary(arg, TODAY)).toEqual(
       computeBalanceSummary(arg, TODAY),
     );
+  });
+});
+
+/* ============ 残高はすべて予測系列（AC-49） ============ */
+
+describe("AC-49 残高はすべて予測系列から取る", () => {
+  /**
+   * 基準日 9/1、今日 9/14。9/5 の予定120,000 が未消し込みで、
+   * 9/8 に実績5,000 だけがある状態。
+   *
+   * 予測系列 = 1,000,000 − 120,000 − 5,000 = 875,000
+   * 実績系列 = 1,000,000 − 5,000            = 995,000
+   *
+   * ヘッダーが実績系列だと、口座一覧（予測系列しか無い）と
+   * 120,000 ずれたまま並ぶ。
+   */
+  const withBacklog = () =>
+    data({
+      asOf: "2026-09-01",
+      accounts: [bank],
+      recurring: [recurring({ id: "r1", day: 5 })],
+      actuals: [
+        {
+          id: "x1",
+          key: null,
+          date: "2026-09-08",
+          name: "買い物",
+          type: "expense",
+          costType: "variable",
+          categoryCode: "EXP-21",
+          amount: 5_000,
+          bizRatio: 0,
+          accountId: "a1",
+        },
+      ],
+    });
+
+  it("現預金の見込みは予測系列。実績系列を使わない", () => {
+    expect(computeBalanceSummary(withBacklog(), TODAY).current).toBe(875_000);
+  });
+
+  it("未記録の予定の額と件数を出す", () => {
+    const got = computeBalanceSummary(withBacklog(), TODAY);
+
+    /* 予測 875,000 − 実績 995,000 = −120,000。残高を押し下げている */
+    expect(got.unrecorded).toEqual({ amount: -120_000, count: 1 });
+  });
+
+  it("未消し込みが無ければ出さない", () => {
+    const settled = {
+      ...withBacklog(),
+      actuals: [
+        {
+          id: "x2",
+          key: "r:r1:2026-09-05",
+          date: "2026-09-05",
+          name: "家賃",
+          type: "expense" as const,
+          costType: "fixed" as const,
+          categoryCode: "EXP-01",
+          amount: 120_000,
+          bizRatio: 0,
+          accountId: "a1",
+        },
+      ],
+    };
+
+    const got = computeBalanceSummary(settled, TODAY);
+
+    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    /* 消し込みが済んでいれば2つの系列は一致する */
+    expect(got.current).toBe(880_000);
+  });
+
+  it("カード払いの未消し込みは引落日で数える", () => {
+    /* 9/10 のカード利用（締日15）→ 10/10 引落。今日 9/14 時点では
+       まだ現金が動いていないので、残高にも件数にも入らない */
+    const onCard = data({
+      asOf: "2026-09-01",
+      accounts: [bank, { ...card, balance: 0 }],
+      recurring: [recurring({ id: "r2", day: 10, accountId: "c1" })],
+    });
+
+    const got = computeBalanceSummary(onCard, TODAY);
+
+    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    expect(got.current).toBe(1_000_000);
   });
 });

@@ -14,10 +14,18 @@ import { isCard } from "@/core/types";
 import type { DateStr, Yen } from "@/core/types";
 
 import type { AppData } from "./app-data";
+import { NONE, unrecordedInBalance, type Unrecorded } from "./unrecorded";
 
-/** ヘッダーに並べる4つの数字。 */
+/** ヘッダーに並べる数字。 */
 export interface BalanceSummary {
-  /** 現預金残高（今日時点）。実績が入っていればその値 */
+  /**
+   * 現預金の見込み（今日時点）。**予測系列から取る**（CL-3 手順3）。
+   *
+   * 実績系列を使わない。実績系列の用途はグラフで線を切ることだけで
+   * （手順4）、残高として定義されているのは予測系列である。口座別には
+   * 実績系列がそもそも無いため、実績系列を使うとヘッダーと口座一覧が
+   * 永久に一致しない（AC-49）。
+   */
   current: Yen;
   /** 30日後の予測残高 */
   in30: Yen;
@@ -25,9 +33,17 @@ export interface BalanceSummary {
   in90: Yen;
   /** カードの未払残高の合計。カードが無ければ0 */
   cardDue: Yen;
+  /** 残高のうち、まだ記録されていない予定から来ている額と件数 */
+  unrecorded: Unrecorded;
 }
 
-const EMPTY: BalanceSummary = { current: 0, in30: 0, in90: 0, cardDue: 0 };
+const EMPTY: BalanceSummary = {
+  current: 0,
+  in30: 0,
+  in90: 0,
+  cardDue: 0,
+  unrecorded: NONE,
+};
 
 /**
  * 残高ヘッダーの数字を求める。
@@ -76,10 +92,10 @@ export function computeBalanceSummary(
     : data.accounts.filter(isCard).reduce((sum, c) => sum + c.balance, 0);
 
   return {
-    /* 実績が入っている範囲では実績残高、その先は予測 */
-    current: todayRow ? (todayRow.act ?? todayRow.proj) : 0,
+    current: todayRow?.proj ?? 0,
     in30: rowAt(in30)?.proj ?? todayRow?.proj ?? 0,
     in90: rowAt(in90)?.proj ?? todayRow?.proj ?? 0,
     cardDue,
+    unrecorded: unrecordedInBalance(series, data.accounts, today),
   };
 }

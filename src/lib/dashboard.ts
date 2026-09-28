@@ -16,6 +16,8 @@ import type { BalanceSeries } from "@/core/balance";
 import { addDays } from "@/core/date";
 import type { ShortfallKind } from "@/core/monthly";
 import { isCard } from "@/core/types";
+
+import { unrecordedInBalance, type Unrecorded } from "./unrecorded";
 import type {
   Account,
   CardAccount,
@@ -48,7 +50,13 @@ export interface CardBalance {
 }
 
 export interface Dashboard {
-  /** 今日の現預金残高。実績があればその値 */
+  /**
+   * 今日の現預金の見込み。**予測系列から取る**（CL-3 手順3、AC-49）。
+   *
+   * 実績系列を使わない。使うと「最低残高（予測）」と系列が違うものを
+   * 並べることになり、90日の最小値が現在より大きいという読めない表示に
+   * なる（CLAUDE.md §2.10）。
+   */
   current: Yen;
   /** 今後90日の最低残高と、その日 */
   lowest: { balance: Yen; date: DateStr };
@@ -58,8 +66,10 @@ export interface Dashboard {
   unfilled: ForecastInstance[];
   accounts: AccountBalance[];
   cards: CardBalance[];
-  /** 現預金の合計（今日時点） */
+  /** 現預金の合計（今日時点）。`current` と一致する */
   total: Yen;
+  /** 残高のうち、まだ記録されていない予定から来ている額と件数 */
+  unrecorded: Unrecorded;
 }
 
 export interface DashboardInput {
@@ -130,12 +140,13 @@ export function buildDashboard(input: DashboardInput): Dashboard {
   });
 
   return {
-    current: todayRow ? (todayRow.act ?? todayRow.proj) : 0,
+    current: todayRow?.proj ?? 0,
     lowest,
     warning,
     unfilled,
     accounts: accountBalances,
     cards: cardBalances,
     total: accountBalances.reduce((sum, a) => sum + a.balance, 0),
+    unrecorded: unrecordedInBalance(series, accounts, today),
   };
 }

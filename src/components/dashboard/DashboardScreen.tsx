@@ -27,7 +27,7 @@ import { track } from "@/lib/analytics/track";
 import { isEmpty } from "@/lib/app-data";
 import { buildDashboard, DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
 import { buildReconcileWarnings, STRANDED_DAYS } from "@/lib/reconcile-warnings";
-import { formatAmount, formatMonthDay, formatYen } from "@/lib/format";
+import { formatAmount, formatMonthDay, formatSignedYen, formatYen } from "@/lib/format";
 import { forecastEnd } from "@/lib/period";
 
 const CELL = "border-b-border-base-low border-b px-8 py-8";
@@ -118,10 +118,20 @@ export function DashboardScreen() {
           >
             {formatYen(lowest.balance)}
           </div>
+          {/* 「現在」も予測系列。最低残高と同じ系列でないと比べられない（AC-49） */}
           <p className="text-object-base-mid mt-8 text-body-xxs">
             {lowest.date.slice(0, 4)}年{formatMonthDay(lowest.date)} 時点 ／ 現在{" "}
             {formatYen(dashboard.current)}
           </p>
+          {dashboard.unrecorded.count > 0 && (
+            <p className="text-object-base-mid mt-4 text-body-xxs">
+              どちらにも、まだ記録されていない予定{" "}
+              <span className="num">
+                {formatSignedYen(dashboard.unrecorded.amount)}
+              </span>
+              （{dashboard.unrecorded.count}件）が含まれています。
+            </p>
+          )}
 
           <div className="mt-12">
             {warning === null ? (

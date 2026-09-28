@@ -38,6 +38,11 @@ export function formatSigned(amount: Yen): string {
   return (amount < 0 ? MINUS : "+") + digits(amount);
 }
 
+/** 符号つきに ¥ を付ける。+¥1,234 / −¥1,234 の形 */
+export function formatSignedYen(amount: Yen): string {
+  return (amount < 0 ? MINUS : "+") + "¥" + digits(amount);
+}
+
 /** '2026-09-14' → '9/14' */
 export function formatMonthDay(date: DateStr): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;

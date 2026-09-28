@@ -11,7 +11,7 @@
 import { useMemo } from "react";
 
 import { useAppData } from "./AppDataProvider";
-import { formatMonthDay, formatYen } from "@/lib/format";
+import { formatMonthDay, formatSignedYen, formatYen } from "@/lib/format";
 import { computeBalanceSummary } from "@/lib/summary";
 
 function Figure({
@@ -57,11 +57,21 @@ export function BalanceHeader() {
     >
       <div>
         <div className="text-object-base-mid text-body-xxs tracking-wide">
-          現預金残高{today ? `（${formatMonthDay(today)}）` : ""}
+          現預金 見込み{today ? `（${formatMonthDay(today)}）` : ""}
         </div>
         <div className="num text-object-base-high mt-4 text-headline-lg leading-none font-semibold tracking-tight wide:text-headline-xlg">
           {summary ? formatYen(summary.current) : "—"}
         </div>
+        {/* 見込みの内訳。消し込みが済んでいれば出さない（AC-49） */}
+        {summary !== null && summary.unrecorded.count > 0 && (
+          <div className="text-object-base-mid mt-4 text-body-xxs leading-none">
+            うち未記録の予定{" "}
+            <span className="num">
+              {formatSignedYen(summary.unrecorded.amount)}
+            </span>
+            （{summary.unrecorded.count}件）
+          </div>
+        )}
       </div>
 
       <Figure

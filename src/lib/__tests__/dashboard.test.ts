@@ -359,3 +359,75 @@ describe("純関数であること", () => {
     expect(got.total).toBe(0);
   });
 });
+
+/* ============ 残高はすべて予測系列（AC-49） ============ */
+
+describe("AC-49 画面に出る残高が1つの系列から来ている", () => {
+  /** 4/5 の予定100,000 が未消し込み。4/8 に別の実績5,000 */
+  const backlog = () =>
+    run({
+      accounts: [seikatsu, jigyou],
+      recurring: [recurring({ id: "r1", day: 5 })],
+      actuals: [
+        {
+          id: "x1",
+          key: null,
+          date: "2026-04-08",
+          name: "買い物",
+          type: "expense",
+          costType: "variable",
+          categoryCode: "EXP-21",
+          amount: 5_000,
+          bizRatio: 0,
+          accountId: "a1",
+        },
+      ],
+    });
+
+  /**
+   * ここが AC-49 の肝。口座別には実績系列がそもそも無いので、
+   * `current` を実績系列にすると口座一覧と永久に一致しない。
+   */
+  it("現在の残高と口座一覧の合計が一致する", () => {
+    const got = backlog();
+    expect(got.current).toBe(got.total);
+  });
+
+  it("最低残高が現在以下になる", () => {
+    const got = backlog();
+    expect(got.lowest.balance).toBeLessThanOrEqual(got.current);
+  });
+
+  it("未記録の予定の額と件数を出す", () => {
+    /* 予測 1,500,000 − 100,000 − 5,000 = 1,395,000
+       実績 1,500,000 − 5,000            = 1,495,000 */
+    const got = backlog();
+
+    expect(got.current).toBe(1_395_000);
+    expect(got.unrecorded).toEqual({ amount: -100_000, count: 1 });
+  });
+
+  it("消し込みが済んでいれば内訳を出さない", () => {
+    const got = run({
+      accounts: [seikatsu, jigyou],
+      recurring: [recurring({ id: "r1", day: 5 })],
+      actuals: [
+        {
+          id: "x2",
+          key: "r:r1:2026-04-05",
+          date: "2026-04-05",
+          name: "支出",
+          type: "expense",
+          costType: "variable",
+          categoryCode: "EXP-21",
+          amount: 100_000,
+          bizRatio: 0,
+          accountId: "a1",
+        },
+      ],
+    });
+
+    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    expect(got.current).toBe(got.total);
+  });
+});
