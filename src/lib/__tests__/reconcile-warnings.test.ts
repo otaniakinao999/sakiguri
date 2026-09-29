@@ -38,6 +38,8 @@ const run = (over: Partial<Parameters<typeof buildReconcileWarnings>[0]> = {}) =
     lastReconciledAt: null,
     asOf: ASOF,
     unmatchedForecast: [],
+    /* 既定は口座あり。0件の扱いは AC-29d で見る */
+    accountCount: 1,
     today: TODAY,
     ...over,
   });
@@ -222,6 +224,7 @@ describe("純関数であること", () => {
       lastReconciledAt: "2026-06-01",
       asOf: ASOF,
       unmatchedForecast: [plan("2026-05-01")],
+      accountCount: 1,
       today: TODAY,
     };
 
@@ -253,5 +256,36 @@ describe("AC-29c 一度も消し込んでいないケースを区別する", () 
     /* 文面は違っても、何日経ったかは両方に必要 */
     expect(run({ lastReconciledAt: null, asOf: ASOF }).stalled?.sinceDays).toBe(153);
     expect(run({ lastReconciledAt: "2026-06-01" }).stalled?.sinceDays).toBe(92);
+  });
+});
+
+/* ========================= 口座0件（AC-29d） ========================= */
+
+describe("AC-29d 口座が1件も無いときは評価しない", () => {
+  /**
+   * **担保を関数側に置く。**
+   *
+   * 画面側（`DashboardScreen`）にも early return があるが、条件式だけで
+   * 止めると別の呼び出し元から素通りする。初期設定を終えていない利用者に
+   * 「消し込みが止まっています」と出すのは、消し込む対象が無いのだから
+   * 誤りである（CLAUDE.md §2.8）。
+   */
+  it("45日を過ぎていても「止まっている」を出さない", () => {
+    /* 口座があれば必ず出る条件。153日経過・一度も消し込んでいない */
+    expect(run({ accountCount: 1 }).stalled).not.toBeNull();
+
+    expect(run({ accountCount: 0 }).stalled).toBeNull();
+  });
+
+  it("60日以上前の未消込があっても「取り残し」を出さない", () => {
+    const stranded = { unmatchedForecast: [plan("2026-05-01")] };
+
+    expect(run({ ...stranded, accountCount: 1 }).stranded).not.toBeNull();
+
+    expect(run({ ...stranded, accountCount: 0 }).stranded).toBeNull();
+  });
+
+  it("口座が1件でもあれば通常どおり評価する", () => {
+    expect(run({ accountCount: 1 }).stalled?.sinceDays).toBe(153);
   });
 });

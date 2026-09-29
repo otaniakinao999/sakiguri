@@ -64,6 +64,8 @@ export function DashboardScreen() {
         lastReconciledAt: data.lastReconciledAt,
         asOf: data.asOf,
         unmatchedForecast: series.unmatchedForecast,
+        /* AC-29d。下の early return でも止まるが、担保は関数側にある */
+        accountCount: data.accounts.length,
         today,
       }),
     };
@@ -123,13 +125,15 @@ export function DashboardScreen() {
             {lowest.date.slice(0, 4)}年{formatMonthDay(lowest.date)} 時点 ／ 現在{" "}
             {formatYen(dashboard.current)}
           </p>
+          {/* 件数を並べない（AC-49d）。件数は隣のカード
+              「実績が未入力の予定（N件）」が唯一の出しどころ */}
           {dashboard.unrecorded.count > 0 && (
             <p className="text-object-base-mid mt-4 text-body-xxs">
               どちらにも、まだ記録されていない予定{" "}
               <span className="num">
                 {formatSignedYen(dashboard.unrecorded.amount)}
               </span>
-              （{dashboard.unrecorded.count}件）が含まれています。
+              が含まれています。
             </p>
           )}
 

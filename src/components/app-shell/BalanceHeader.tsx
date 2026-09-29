@@ -62,14 +62,16 @@ export function BalanceHeader() {
         <div className="num text-object-base-high mt-4 text-headline-lg leading-none font-semibold tracking-tight wide:text-headline-xlg">
           {summary ? formatYen(summary.current) : "—"}
         </div>
-        {/* 見込みの内訳。消し込みが済んでいれば出さない（AC-49） */}
+        {/* 見込みの内訳。消し込みが済んでいれば出さない（AC-49b）。
+            **件数を並べない（AC-49d）。** 金額は現金が動く日で数えるが、
+            件数は発生日で数えるため、並べると内訳に見えて値が食い違う。
+            件数を出すのは「実績が未入力の予定」1箇所だけ */}
         {summary !== null && summary.unrecorded.count > 0 && (
           <div className="text-object-base-mid mt-4 text-body-xxs leading-none">
             うち未記録の予定{" "}
             <span className="num">
               {formatSignedYen(summary.unrecorded.amount)}
             </span>
-            （{summary.unrecorded.count}件）
           </div>
         )}
       </div>

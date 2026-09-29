@@ -31,7 +31,12 @@ import {
 import type { BalanceRow } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
-import { formatMonthDay, formatYearMonthLabel, formatYen } from "@/lib/format";
+import {
+  formatMonthDay,
+  formatSignedYen,
+  formatYearMonthLabel,
+  formatYen,
+} from "@/lib/format";
 
 /**
  * グラフの色。
@@ -62,6 +67,71 @@ interface Point {
   inflow?: Yen;
   outflow?: Yen;
   lowest?: Yen;
+}
+
+/**
+ * ツールチップ（AC-49c）
+ *
+ * **1つの日付について、残高の金額は1つだけ出す。** 予測系列と実績系列を
+ * 並べて金額で印字しない。線は2本のままでよい（CL-3 手順4 の用途は
+ * 「線を切る位置を決めること」で、金額の表示ではない）。
+ *
+ * 実績系列との差は捨てずに「うち未記録の予定」として出す。これは
+ * ヘッダーの同名の値を、その日について見たものである。**語と符号を
+ * ヘッダーに揃える**（`formatSignedYen`）。揃えないと、同じものを別の
+ * 指標だと思わせる。
+ */
+function ChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { payload: Point }[];
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+
+  const text = String(label ?? "");
+  const heading = text.length === 7 ? formatYearMonthLabel(text) : text;
+
+  /* 残高に含まれている、まだ記録されていない予定額。実績系列が
+     切れている日（act === null）は差が定義できないので出さない */
+  const unrecorded = point.act === null ? null : point.proj - point.act;
+
+  /* 月次では下の月次資金繰り表と同じ語にする。同じ値に2つの名前を
+     付けない。日次はヘッダーと同じ「見込み」を使う */
+  const rows: { name: string; value: string }[] = [
+    {
+      name: point.inflow === undefined ? "残高見込み" : "月末残高",
+      value: formatYen(point.proj),
+    },
+  ];
+  if (unrecorded !== null && unrecorded !== 0) {
+    rows.push({ name: "うち未記録の予定", value: formatSignedYen(unrecorded) });
+  }
+  if (point.inflow !== undefined) {
+    rows.push({ name: "入金", value: formatYen(point.inflow) });
+  }
+  if (point.outflow !== undefined) {
+    rows.push({ name: "出金", value: formatYen(Math.abs(point.outflow)) });
+  }
+  if (point.lowest !== undefined) {
+    rows.push({ name: "月中最低", value: formatYen(point.lowest) });
+  }
+
+  return (
+    <div className="border-border-base-high bg-surface-base-low rounded-[var(--radius)] border px-8 py-8 text-body-xxs">
+      <div className="text-object-base-mid mb-4">{heading}</div>
+      {rows.map((row) => (
+        <div key={row.name} className="flex justify-between gap-16">
+          <span className="text-object-base-mid">{row.name}</span>
+          <span className="num text-object-base-high">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** 万・億でまとめた軸のラベル。桁が多いと軸が読めない */
@@ -134,22 +204,8 @@ export function BalanceChart({
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip
-            formatter={(value) =>
-              value === null ? "—" : formatYen(Number(value))
-            }
-            labelFormatter={(label) => {
-              const text = String(label ?? "");
-              return text.length === 7 ? formatYearMonthLabel(text) : text;
-            }}
-            contentStyle={{
-              fontSize: 12,
-              borderRadius: "var(--radius)",
-              border: "1px solid var(--border-base-high)",
-              fontFamily: "var(--family-ui)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          />
+          {/* 残高の金額は1つだけ出す。既定の表示は系列を全部並べる（AC-49c） */}
+          <Tooltip content={<ChartTooltip />} />
           <Legend wrapperStyle={{ fontSize: 12, fontFamily: "var(--family-ui)" }} />
 
           {/* 残高がマイナスになる帯を薄く塗る */}

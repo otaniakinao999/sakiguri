@@ -2,7 +2,7 @@
  * 消し込みの停止・取り残しの警告（FR-43）
  *
  * 一次情報：docs/要件定義書.md §3.1 FR-43、§3.2 Settings
- * 対応する受入基準：AC-29a、AC-29b
+ * 対応する受入基準：AC-29a、AC-29b、AC-29c、AC-29d
  *
  * **2つは別の警告である。** 意味も、利用者が取るべき行動も違う。
  *
@@ -38,8 +38,18 @@ export interface ReconcileWarningsInput {
   asOf: DateStr;
   /** CL-3 の出力。消し込まれずに残っている予定インスタンス */
   unmatchedForecast: ForecastInstance[];
+  /**
+   * 登録されている口座の数（AC-29d）。
+   *
+   * **0 なら警告を出さない。** 初期設定を終えていない利用者に消し込みを
+   * 促しても、消し込む対象がない。画面側の条件式で止めると、別の
+   * 呼び出し元から素通りする（CLAUDE.md §2.8）。
+   */
+  accountCount: number;
   today: DateStr;
 }
+
+const NO_WARNINGS: ReconcileWarnings = { stalled: null, stranded: null };
 
 export interface ReconcileWarnings {
   /**
@@ -75,8 +85,12 @@ export function buildReconcileWarnings({
   lastReconciledAt,
   asOf,
   unmatchedForecast,
+  accountCount,
   today,
 }: ReconcileWarningsInput): ReconcileWarnings {
+  /* AC-29d。口座が1件も無いなら、そもそも消し込む対象がない */
+  if (accountCount === 0) return NO_WARNINGS;
+
   const from = lastReconciledAt ?? asOf;
   /* 起点が未来（基準日を先に置いた）なら経過0として扱う */
   const sinceDays = from > today ? 0 : daysBetween(from, today);
