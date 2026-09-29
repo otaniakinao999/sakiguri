@@ -197,33 +197,8 @@ describe("CL-6 各列の算出", () => {
     expect(at(rows, "2026-04").lowestDate).toBe("2026-04-10");
   });
 
-  it("振替は入金にも出金にも数えない", () => {
-    const rows = monthly(
-      input({
-        accounts: [seikatsu, jigyou],
-        forecast: [
-          plan({
-            key: "t1",
-            date: "2026-04-26",
-            type: "transfer",
-            categoryCode: "TRF-02",
-            costType: null,
-            amount: 380_000,
-            accountId: "a1",
-            toAccountId: "a2",
-          }),
-        ],
-      }),
-      "2026-04-30",
-    );
-
-    expect(at(rows, "2026-04")).toMatchObject({
-      inflow: 0,
-      outflow: 0,
-      net: 0,
-      closing: 1_000_000,
-    });
-  });
+  /* 振替が入金・出金に入らないことは AC-20c で見る（口座別の符号と同じ
+     1つのデータから確かめたいため、そちらにまとめてある） */
 
   it("行が無ければ空", () => {
     expect(buildMonthlyCashflow({ rows: [], unmatchedForecast: [], actualEnd: "2026-04-01", projectedCash: [], actualCash: [] }, 0)).toEqual([]);
@@ -259,9 +234,9 @@ describe("CL-6 カード引落は引落日で出金に計上する", () => {
   });
 });
 
-/* ========================= AC-20 後半 ========================= */
+/* ========================= AC-20b ========================= */
 
-describe("AC-20 後半 TRF グループは月次資金繰り表の出金に含まれる", () => {
+describe("AC-20b カード引落と借入返済の元金が月次資金繰り表の出金に含まれる", () => {
   it("借入返済の元金（TRF-06）が出金に入る", () => {
     const rows = monthly(
       input({
@@ -320,6 +295,58 @@ describe("AC-20 後半 TRF グループは月次資金繰り表の出金に含�
     );
 
     expect(at(rows, "2026-04").inflow).toBe(5_000_000);
+  });
+});
+
+/* ========================= AC-20c ========================= */
+
+describe("AC-20c 口座間振替は出金に含まれず、口座別では符号が分かれる", () => {
+  /**
+   * **2つの条項を1つのデータで見る。**
+   *
+   * 「出金に含まれない」と「口座別では送金元がマイナス・送金先がプラス」は
+   * 同じ1件の振替について同時に成り立たなければならない。別々のデータで
+   * 確かめると、合計だけ0で口座別が動いていない実装（＝振替が消えている）
+   * を両方のテストが通してしまう。
+   */
+  const series = buildBalanceSeries(
+    input({
+      accounts: [seikatsu, jigyou],
+      forecast: [
+        plan({
+          key: "t1",
+          date: "2026-04-26",
+          type: "transfer",
+          categoryCode: "TRF-02",
+          costType: null,
+          amount: 380_000,
+          accountId: "a1",
+          toAccountId: "a2",
+        }),
+      ],
+    }),
+    "2026-04-30",
+    "2026-04-01",
+  );
+
+  it("入金にも出金にも数えない。合計残高は動かない", () => {
+    const rows = buildMonthlyCashflow(series, 0);
+
+    expect(at(rows, "2026-04")).toMatchObject({
+      inflow: 0,
+      outflow: 0,
+      net: 0,
+      closing: 1_000_000,
+    });
+  });
+
+  it("口座別では送金元がマイナス・送金先がプラス", () => {
+    const row = series.rows.find((r) => r.date === "2026-04-30");
+
+    expect(row?.byAccount).toEqual({
+      a1: 1_000_000 - 380_000,
+      a2: 0 + 380_000,
+    });
   });
 });
 

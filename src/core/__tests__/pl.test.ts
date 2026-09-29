@@ -217,11 +217,11 @@ describe("AC-19 後半 借入返済の元金と利息（v1.0 で検証できる�
   });
 });
 
-/* ========================= AC-20 ========================= */
+/* ========================= AC-20a ========================= */
 
-describe("AC-20 前半 TRF グループは年月別収支に現れない（CL-5）", () => {
-  /* AC-20 の後半「月次資金繰り表の出金に含まれること（CL-6）」は
-     CL-6 の実装後（フェーズ1・タスク#5）に検証する。 */
+describe("AC-20a TRF グループは年月別収支に現れない（CL-5 手順1）", () => {
+  /* AC-20b（出金に含まれる）と AC-20c（振替は含まれない）は CL-6 側。
+     monthly.test.ts を参照。 */
   const trfEvents = [
     ev({ key: "t1", date: "2026-04-26", categoryCode: "TRF-01", type: "transfer", costType: null, amount: 380_000 }),
     ev({ key: "t2", date: "2026-04-26", categoryCode: "TRF-02", type: "transfer", costType: null, amount: 200_000 }),
