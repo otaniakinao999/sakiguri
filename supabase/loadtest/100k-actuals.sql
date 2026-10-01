@@ -17,6 +17,23 @@
 -- │    usage_events も on delete cascade で一緒に消える             │
 -- └──────────────────────────────────────────────────────────────┘
 --
+-- ┌──────────────────────────────────────────────────────────────┐
+-- │ **次回の負荷試験では `+loadtest` を含むメールアドレスで         │
+-- │   アカウントを作る。**                                         │
+-- │                                                                │
+-- │     otani.akinao+loadtest1@showtime.design                     │
+-- │                                                                │
+-- │ このファイルの後片付けブロックは6テーブルから行を消す。        │
+-- │ **実データの入ったアカウントの id をここに入れて実行すると、    │
+-- │ その利用者のデータが消える。** 取り違えを id の見た目だけで     │
+-- │ 防ぐのは無理なので、メールアドレスで止める。投入側と削除側の    │
+-- │ 両方の先頭に、`+loadtest` を含まなければ例外にするガードを      │
+-- │ 入れてある。                                                   │
+-- │                                                                │
+-- │ Gmail 形式の `+` 付きアドレスは同じ受信箱に届くので、新しい    │
+-- │ メールアドレスを用意する必要はない。                           │
+-- └──────────────────────────────────────────────────────────────┘
+--
 -- **検証用アカウントには入れないこと。** PoC の指標（csv_imported の
 -- matched / rows 比）に負荷試験ぶんが混ざると読めなくなる。
 --
@@ -31,6 +48,9 @@ declare
   -- ここだけ差し替える ----------------------------------------------------
   load_user_id uuid := '00000000-0000-0000-0000-000000000000';
   -- ------------------------------------------------------------------------
+
+  -- 上の id のメールアドレス。ガードが使う
+  target_email text;
 
   -- 基準日。**投入する日付はすべてこの日以降にする。**
   -- FR-47 が実績を基準日以降に絞るため、これより前に入れると読み込み対象が
@@ -47,6 +67,14 @@ begin
   -- （CLAUDE.md §2.8）。
   if not exists (select 1 from auth.users where id = load_user_id) then
     raise exception 'load_user_id が auth.users に見つかりません: %', load_user_id;
+  end if;
+
+  -- **取り違えの番人。** 実在する id であることだけでは足りない。実データの
+  -- 入ったアカウントの id も実在するからである。**負荷試験用のアカウントで
+  -- あることをメールアドレスで確かめる**（冒頭の枠を参照）。
+  select email into target_email from auth.users where id = load_user_id;
+  if target_email is null or position('+loadtest' in target_email) = 0 then
+    raise exception '負荷試験用アカウントではありません: %', coalesce(target_email, '(見つからない)');
   end if;
 
   -- 設定。基準日と生活防衛ライン
@@ -268,6 +296,8 @@ do $$
 declare
   load_user_id uuid := '00000000-0000-0000-0000-000000000000';
   removed integer;
+  -- 上の id のメールアドレス。ガードが使う
+  target_email text;
 begin
   -- **差し替え漏れの番人。** 未置換のゼロUUIDも、打ち間違えた id も、
   -- どちらもここで止まる。**プレースホルダの値と比べない。** 比べると、
@@ -275,6 +305,14 @@ begin
   -- （CLAUDE.md §2.8）。
   if not exists (select 1 from auth.users where id = load_user_id) then
     raise exception 'load_user_id が auth.users に見つかりません: %', load_user_id;
+  end if;
+
+  -- **取り違えの番人。** 実在する id であることだけでは足りない。実データの
+  -- 入ったアカウントの id も実在するからである。**負荷試験用のアカウントで
+  -- あることをメールアドレスで確かめる**（冒頭の枠を参照）。
+  select email into target_email from auth.users where id = load_user_id;
+  if target_email is null or position('+loadtest' in target_email) = 0 then
+    raise exception '負荷試験用アカウントではありません: %', coalesce(target_email, '(見つからない)');
   end if;
 
   -- 1万行ずつ消す。1トランザクションで10万行消してタイムアウトするのを避ける
