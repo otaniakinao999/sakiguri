@@ -20,7 +20,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { SELECT_COLUMNS, type FetchTable } from "./rows";
+/* **拡張子を書く。** これが無いと Node から直接 import できず、負荷試験の
+   スクリプト（scripts/loadtest/）が PAGE_SIZE と SELECT_COLUMNS を写し
+   取ることになる。写すと、片方を直したときにもう片方が古いまま残る
+   （CLAUDE.md §2.8）。tsconfig の allowImportingTsExtensions で許可している */
+import { SELECT_COLUMNS, type FetchTable } from "./rows.ts";
 
 /**
  * 1回の取得件数。
