@@ -15,6 +15,7 @@
     "loadtest:seed": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/seed.ts",
     "loadtest:teardown": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/teardown.ts",
     "loadtest:ac34": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/ac34.ts",
+    "e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^20",

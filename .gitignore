@@ -35,3 +35,9 @@ yarn-debug.log*
 
 # OS
 .DS_Store
+
+# Playwright（AC-28a / AC-28b のためだけ。CLAUDE.md §2.7）
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
