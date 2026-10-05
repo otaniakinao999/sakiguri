@@ -18,6 +18,7 @@
  *   通すため
  */
 
+import { recurringKey } from "../../src/core/forecast.ts";
 import { addDays, arg, fail, signInAsLoadtest } from "./client.ts";
 
 const AS_OF = "2026-01-01";
@@ -149,19 +150,15 @@ async function main(): Promise<void> {
    * `plan_key`（text）を使う。ほかの4テーブルは `id`（uuid）である。
    * 0件のまま通しても何も確かめていない（要件定義書 §9.1）。
    *
-   * `plan_key` は CL-1 が展開する予定インスタンスのキー。形式は AC-50 が
-   * 直書きのテストで固定しているので、ここで組み立てる。
-   * **`forecast.ts` から import できない**（`./date` を拡張子なしで
-   * import しているため Node が解決できない）。形式を変えるときは
-   * AC-50 のテストが落ちるので、そのときここも直す。
+   * `plan_key` は CL-1 が展開する予定インスタンスのキー。**本番の
+   * `recurringKey` をそのまま呼ぶ。文字列を組み立てない。** 組み立てると、
+   * 形式を変えたときに AC-50 のテストは落ちるがこのスクリプトは落ちず、
+   * 古い形式のキーを作り続ける（CLAUDE.md §2.8）。
    *
    * **同じ plan_key が2件できない組み合わせを選ぶ。** そこが一意性の
    * 確認対象なので、作る側が重複を作ってしまうと検査にならない。
    * 定期項目 1〜20 × 2ヶ月 = 40件で、(id, 発生日) の組が重複しない。
    */
-  const planKey = (recurringIndex: number, date: string) =>
-    `r:${uuid("44444444-4444-4444-8444", recurringIndex)}:${date}`;
-
   const overrides = [2026 * 12 + 2, 2026 * 12 + 5].flatMap((ym) =>
     Array.from({ length: 20 }, (_, k) => {
       const i = k + 1;
@@ -173,7 +170,7 @@ async function main(): Promise<void> {
       const deferral = i % 2 === 0;
       return {
         user_id: userId,
-        plan_key: planKey(i, occursOn),
+        plan_key: recurringKey(uuid("44444444-4444-4444-8444", i), occursOn),
         date: deferral ? addDays(occursOn, 5) : null,
         amount: deferral ? null : 1_000 + i * 137,
         skipped: null,

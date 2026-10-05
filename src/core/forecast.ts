@@ -16,7 +16,8 @@ import {
   eachMonth,
   isWithin,
   parseDate,
-} from "./date";
+} from "./date.ts";  /* 拡張子は scripts/ から plain Node で読むため。
+                        外すと pnpm check:node-import が落ちる（CLAUDE.md §2.8） */
 import type {
   DateStr,
   ForecastInstance,

@@ -120,7 +120,17 @@ export function buildBalanceSeries(
   const depositAccounts = accounts.filter((a) => !isCard(a));
   const cards = accounts.filter(isCard);
 
-  /* 手順2：実績が持つキーの予定を予測から除外する（消し込み） */
+  /**
+   * 手順2：実績が持つキーの予定を予測から除外する（消し込み）。
+   *
+   * **`unmatchedForecast` は `forecast` の部分集合であり、実績を含まない。**
+   * FR-43 の警告件数も AC-49d の件数もこの集合から数えるので、「`unplanned`
+   * （実績の属性）を数えない」は**データでは破れない**。`filter` が要素を
+   * 増やさないことによる（要件定義書 §9.1「構造上成立」）。
+   *
+   * この性質は `balance.test.ts`「unmatchedForecast は実績を含まない」で
+   * 固定してある。**集合の作り方を変えたら落ちる。**
+   */
   const matched = new Set(
     actuals.map((a) => a.key).filter((k): k is string => k !== null),
   );

@@ -1,82 +1,152 @@
 /**
- * plain Node から本番の定数を import できることを検査する
+ * plain Node から本番モジュールを import できることを検査する
  *
  *     pnpm check:node-import     （`pnpm test` の前に自動で走る）
  *
+ * ## なぜ要るか
+ *
+ * `scripts/` の測定スクリプトは**本番の定数と関数をそのまま使う。** 写し
+ * 取ると、本番を直したときにスクリプトが古いまま残り、**本番と違うものを
+ * 測っていることに気づけない**（CLAUDE.md §2.8）。
+ *
+ * そのために、下に挙げたモジュールだけは import に拡張子（`.ts`）を
+ * 付けてある。Node の ESM は拡張子を省略できないためである。
+ * **リポジトリの中でそこだけが違う流儀になるので、「統一しよう」で
+ * 外される。** 外れた時点でスクリプトが動かなくなるが、気づくのは次に
+ * 測定を流すときで、それは数ヶ月後になる。
+ *
  * ## なぜ vitest のテストにしないか
  *
- * **vitest は独自に解決する。** 拡張子が無くても、`@/` の別名でも通す。
- * だから vitest のテストでは、plain Node が壊れていることを検知できない。
- * ここで検査したいのは「Node の ESM の規則で読めるか」なので、**vitest を
- * 通さずに node で実行する。**
+ * **vitest は独自に解決する。** 拡張子が無くても `@/` の別名でも通す。
+ * だから vitest では plain Node が壊れていることを検知できない。
+ * ここで見たいのは「Node の ESM の規則で読めるか」なので、node で動かす。
  *
- * ## 何が壊れるのを防いでいるか
+ * ## 一覧は `scripts/` の実際の import と突き合わせる
  *
- * `src/lib/supabase/fetch-all.ts` は `./rows.ts` を拡張子付きで import して
- * いる。リポジトリでここだけが拡張子付きなので、**統一しようとして外される
- * 可能性がある。** 外れると `scripts/loadtest/` が動かなくなるが、気づくのは
- * 次に測定を流すときで、それは数ヶ月後になる。
- *
- * 測定スクリプトの価値は**本番と同じ定数で動くこと**にある。写し取る形に
- * すると、片方を直したときにもう片方が古いまま残る（CLAUDE.md §2.8）。
- *
- * ## 条件
- *
- * オフラインで数百msで終わること。ネットワークにも DB にも触らない。
- * `fetch-all.ts` の実行時の依存は `rows.ts` だけで、`@supabase/supabase-js`
- * は型だけ（import type なので実行時には消える）。
+ * 下の `MODULES` は手で並べた列挙である。**列挙は必ず漏れる**ので、
+ * `scripts/` を走査して「スクリプトが import しているのに一覧に無い」
+ * モジュールがあれば落とす（CLAUDE.md §2.8）。
  */
 
-import { PAGE_SIZE } from "../src/lib/supabase/fetch-all.ts";
-import { SELECT_COLUMNS, SETTINGS_COLUMNS } from "../src/lib/supabase/rows.ts";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join, relative, resolve } from "node:path";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "..");
+
+/** scripts/ から plain Node で読む本番モジュールと、読めるべき export */
+const MODULES: { path: string; exports: string[] }[] = [
+  {
+    path: "src/lib/supabase/fetch-all.ts",
+    exports: ["PAGE_SIZE", "fetchAll", "IncompleteLoadError"],
+  },
+  {
+    path: "src/lib/supabase/rows.ts",
+    exports: ["SELECT_COLUMNS", "SETTINGS_COLUMNS"],
+  },
+  {
+    path: "src/core/forecast.ts",
+    exports: ["recurringKey", "oneoffKey", "planKeySource"],
+  },
+];
 
 const problems: string[] = [];
 
-if (typeof PAGE_SIZE !== "number" || PAGE_SIZE <= 0) {
-  problems.push(`PAGE_SIZE が読めません: ${String(PAGE_SIZE)}`);
+/* ---------- 1. 一覧のモジュールが plain Node で読めるか ---------- */
+
+for (const mod of MODULES) {
+  let loaded: Record<string, unknown>;
+  try {
+    loaded = (await import(`${ROOT}/${mod.path}`)) as Record<string, unknown>;
+  } catch (e) {
+    problems.push(
+      `${mod.path} を plain Node から import できません\n` +
+        `    ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`,
+    );
+    continue;
+  }
+  for (const name of mod.exports) {
+    if (loaded[name] === undefined) {
+      problems.push(`${mod.path} から ${name} が読めません`);
+    }
+  }
 }
 
-/** `fetchAll` が引けるテーブル。増えたらここも増やす */
+/* ---------- 2. scripts/ の実際の import と突き合わせる ---------- */
+
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return filesUnder(full);
+    return full.endsWith(".ts") ? [full] : [];
+  });
+}
+
+const declared = new Set(MODULES.map((m) => m.path));
+const used = new Set<string>();
+
+const SELF = fileURLToPath(import.meta.url);
+
+for (const file of filesUnder(HERE)) {
+  /* 自分自身は走査しない。この下のコメントや文字列を import と
+     読み違える（実際に一度読み違えた） */
+  if (file === SELF) continue;
+
+  const text = readFileSync(file, "utf8");
+  for (const line of text.split("\n")) {
+    /* 型だけの import は実行時に消えるので対象外 */
+    if (/^\s*import\s+type\b/.test(line)) continue;
+    /* コメント行を外す。説明文に import の例を書くことがある */
+    if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;
+
+    const hit = line.match(/\bfrom\s+"([^"]*\/src\/[^"]+)"/);
+    if (!hit) continue;
+    used.add(relative(ROOT, resolve(dirname(file), hit[1])));
+  }
+}
+
+for (const path of used) {
+  if (!declared.has(path)) {
+    problems.push(
+      `scripts/ が ${path} を import していますが、MODULES に入っていません\n` +
+        `    このファイルの MODULES に足してください（読めるべき export も）`,
+    );
+  }
+}
+
+/* ---------- 3. 列挙そのものの突き合わせ（§2.8） ---------- */
+
+const { SELECT_COLUMNS } = await import(`${ROOT}/src/lib/supabase/rows.ts`);
 const TABLES = [
   "accounts",
   "recurring_items",
   "oneoff_items",
   "actuals",
   "overrides",
-] as const;
-
-for (const table of TABLES) {
-  const columns = SELECT_COLUMNS[table];
-  if (typeof columns !== "string" || columns.length === 0) {
-    problems.push(`SELECT_COLUMNS.${table} が読めません`);
-  }
-}
-
-/* 列挙を集合と突き合わせる（CLAUDE.md §2.8）。テーブルが増えたら落ちる */
-const defined = Object.keys(SELECT_COLUMNS).sort();
-const expected = [...TABLES].sort();
-if (defined.join(",") !== expected.join(",")) {
+];
+const defined = Object.keys(SELECT_COLUMNS as object).sort();
+if (defined.join(",") !== [...TABLES].sort().join(",")) {
   problems.push(
     `SELECT_COLUMNS のテーブルが変わりました\n` +
-      `  このファイル: ${expected.join(", ")}\n` +
-      `  rows.ts:      ${defined.join(", ")}`,
+      `    このファイル: ${[...TABLES].sort().join(", ")}\n` +
+      `    rows.ts:      ${defined.join(", ")}`,
   );
 }
 
-if (typeof SETTINGS_COLUMNS !== "string" || SETTINGS_COLUMNS.length === 0) {
-  problems.push("SETTINGS_COLUMNS が読めません");
-}
+/* ---------- 結果 ---------- */
 
 if (problems.length > 0) {
-  console.error("\n✗ plain Node から本番の定数を読めません\n");
+  console.error("\n✗ plain Node から本番モジュールを読めません\n");
   for (const p of problems) console.error(`  ${p}`);
   console.error(
-    "\n  src/lib/supabase/fetch-all.ts の import から拡張子（.ts）を" +
-      "\n  外していないか見てください。外すと scripts/loadtest が動きません。\n",
+    "\n  import から拡張子（.ts）を外していないか見てください。" +
+      "\n  外すと scripts/loadtest が動きません（CLAUDE.md §2.8）。\n",
   );
   process.exit(1);
 }
 
 console.log(
-  `✓ plain Node から読めます（PAGE_SIZE=${PAGE_SIZE}、${TABLES.length}テーブル）`,
+  `✓ plain Node から読めます（${MODULES.length}モジュール / ` +
+    `scripts が使うのは ${used.size}）`,
 );

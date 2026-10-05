@@ -584,3 +584,77 @@ describe("純関数であること", () => {
     );
   });
 });
+
+/* ============ unmatchedForecast は実績を含まない（§9.1 構造上成立） ============ */
+
+/**
+ * **AC-49d と AC-29b の `unplanned` 条項が依存している構造上の事実。**
+ *
+ * > 件数を数える集合（`unmatchedForecast`）は予定インスタンスのみで構成され、
+ * > 実績を含まない。`unplanned` は実績の属性なので入りようがない。
+ *
+ * この2条項は「`unplanned = true` の実績を数えないこと」を要求している。
+ * **データでは破れない。** `filter` が `forecast` の要素を増やさないからで
+ * ある。だから §9.1 では「構造上成立」として掲げている。
+ *
+ * **ただし構造は変えられる。** OI-16（`key` を持たない実績と未消込の予定が
+ * 同一取引を指す場合の扱い）と OI-4（自動スキップ）を決めた時点で、
+ * 未消込の集合に実績を混ぜる設計に倒す可能性がある。そうなると条項は
+ * 破れるようになるが、**何も落ちない。**
+ *
+ * このテストがその役を負う。**集合の作り方を変えたら落ちる。**
+ * 落ちたときは、`unplanned` の2条項を「構造上成立」で掲げ続けられない。
+ * 充足状況を「条件付き」に落とし、データで確かめる形に変えること。
+ */
+describe("unmatchedForecast は実績を含まない（§9.1 構造上成立の前提）", () => {
+  const withBoth = input({
+    forecast: [
+      plan({ key: "r:rh1:2026-04-27", date: "2026-04-27" }),
+      plan({ key: "r:rh2:2026-04-28", date: "2026-04-28", amount: 30_000 }),
+    ],
+    actuals: [
+      /* 消し込み済み */
+      actual({ id: "a", date: "2026-04-27", key: "r:rh1:2026-04-27" }),
+      /* 未判定 */
+      actual({ id: "b", date: "2026-04-10", key: null, amount: 5_000 }),
+      /* **予定にないと確定済み。これが混ざってはならない** */
+      actual({ id: "c", date: "2026-04-12", key: null, unplanned: true, amount: 7_000 }),
+    ],
+  });
+
+  const got = buildBalanceSeries(withBoth, "2026-04-30", "2026-04-30");
+
+  it("要素がすべて入力の forecast に由来する", () => {
+    const forecastKeys = new Set(withBoth.forecast.map((f) => f.key));
+
+    expect(got.unmatchedForecast.length).toBeGreaterThan(0);
+    for (const item of got.unmatchedForecast) {
+      expect(forecastKeys.has(item.key)).toBe(true);
+    }
+  });
+
+  it("実績の id を持つ要素が1つも無い", () => {
+    const actualIds = new Set(withBoth.actuals.map((a) => a.id));
+    const leaked = got.unmatchedForecast.filter((f) =>
+      actualIds.has((f as unknown as { id?: string }).id ?? ""),
+    );
+
+    expect(leaked).toEqual([]);
+  });
+
+  it("`unplanned` を持つ要素が1つも無い", () => {
+    /* 実績だけが持つ属性。**1件でもあれば実績が混ざっている** */
+    const withUnplanned = got.unmatchedForecast.filter(
+      (f) => "unplanned" in (f as object),
+    );
+
+    expect(withUnplanned).toEqual([]);
+  });
+
+  it("件数が forecast の件数を超えない", () => {
+    /* 部分集合であることの別の見方。増える経路があれば超える */
+    expect(got.unmatchedForecast.length).toBeLessThanOrEqual(
+      withBoth.forecast.length,
+    );
+  });
+});
