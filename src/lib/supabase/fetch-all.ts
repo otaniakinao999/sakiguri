@@ -20,10 +20,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/* **拡張子を書く。** これが無いと Node から直接 import できず、負荷試験の
-   スクリプト（scripts/loadtest/）が PAGE_SIZE と SELECT_COLUMNS を写し
-   取ることになる。写すと、片方を直したときにもう片方が古いまま残る
-   （CLAUDE.md §2.8）。tsconfig の allowImportingTsExtensions で許可している */
+/* **拡張子を外さないこと。外すと scripts/loadtest が動かなくなる。**
+   このファイルは plain Node から直接 import される（測定スクリプトが
+   PAGE_SIZE と SELECT_COLUMNS を本番と同じ値で使うため）。Node の ESM は
+   拡張子を省略できない。写し取る形にすると、片方を直したときにもう片方が
+   古いまま残る（CLAUDE.md §2.8）。
+   **このリポジトリで拡張子付きの import はここだけ。** 統一しようとして
+   外すと、気づくのは次に測定を流すとき（数ヶ月後）になる。だから
+   `pnpm check:node-import` が plain Node で読めることを検査していて、
+   外すとゲートで落ちる。tsconfig の allowImportingTsExtensions で許可。 */
 import { SELECT_COLUMNS, type FetchTable } from "./rows.ts";
 
 /**

@@ -7,6 +7,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
+    "check:node-import": "node --experimental-transform-types --no-warnings scripts/check-node-import.ts",
+    "pretest": "pnpm check:node-import",
     "test": "vitest run",
     "bench": "vitest run --config supabase/loadtest/bench.config.mts",
     "loadtest:account": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/ensure-account.ts",

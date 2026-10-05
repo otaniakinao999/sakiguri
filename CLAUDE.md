@@ -161,6 +161,8 @@ DOM が要るテストだけ、ファイルの先頭で環境を切り替える�
 
 対象の集合を手で列挙するコード（差分の判定、削除の範囲、保存する項目）は、要素が増えたときに漏れる。列挙を避けられない場合は、**集合の全体と突き合わせるテストを置き、要素が増えたときに落ちるようにする。**
 
+**測定スクリプトは本番の定数を import する。写し取らない。** 写すと、本番を直したときにスクリプトが古いまま残り、**本番と違うものを測っていることに気づけない。** そのために本番側の import 形式を変えることは認める（`src/lib/supabase/fetch-all.ts` の拡張子付き import がこれ）。ただし**その1本だけが違う流儀になるので、外されたら落ちる検査を置く**（`pnpm check:node-import`）。vitest のテストにはしない。vitest は独自に解決するため、plain Node が壊れていても通る。
+
 ### 2.9 2つの機構が同じ対象に当たるときは優先順位を書く
 
 仕様が2つの機構を独立に定義していて、同じ対象に両方が当たるときの優先順位が書かれていない場合、実装は「両方を独立に動かす」を選ぶ。それぞれが仕様どおりでも、組み合わせた結果が誤る。**気づいたら実装せずに優先順位を確認する。**
@@ -256,11 +258,18 @@ props に入れてよいのは件数・期間の長さ・種別・真偽値な�
 
 ```bash
 pnpm dev            # 開発サーバー
-pnpm test           # Vitest（core のテスト）
+pnpm test           # Vitest（core のテスト）。前に check:node-import が走る
 pnpm test:watch
 pnpm typecheck      # tsc --noEmit
 pnpm lint
+pnpm bench          # 10万件のローカル再現（通常のテストには混ぜない）
 pnpm db:migrate     # Supabase マイグレーション
+
+pnpm check:node-import   # plain Node から本番の定数を読めるか（§2.8）
+pnpm loadtest:account    # 負荷試験アカウントを用意する（冪等）
+pnpm loadtest:seed       # 投入（--rows / --span）
+pnpm loadtest:ac34       # AC-34 重複・欠落・並びの逆転
+pnpm loadtest:teardown   # 行だけ消す。アカウントは残す
 ```
 
 PRを出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認してください。
