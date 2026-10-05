@@ -142,6 +142,56 @@ async function main(): Promise<void> {
   });
   await check("oneoff_items", (await supabase.from("oneoff_items").upsert(oneoffs)).error);
 
+  /* ---------- オーバーライド40件（FR-07） ----------
+   *
+   * **AC-34 の「全テーブルで並び替えキーが一意」を、このテーブルで実際に
+   * 試せる状態にするために入れる。** `overrides` だけが並び替えキーに
+   * `plan_key`（text）を使う。ほかの4テーブルは `id`（uuid）である。
+   * 0件のまま通しても何も確かめていない（要件定義書 §9.1）。
+   *
+   * `plan_key` は CL-1 が展開する予定インスタンスのキー。形式は AC-50 が
+   * 直書きのテストで固定しているので、ここで組み立てる。
+   * **`forecast.ts` から import できない**（`./date` を拡張子なしで
+   * import しているため Node が解決できない）。形式を変えるときは
+   * AC-50 のテストが落ちるので、そのときここも直す。
+   *
+   * **同じ plan_key が2件できない組み合わせを選ぶ。** そこが一意性の
+   * 確認対象なので、作る側が重複を作ってしまうと検査にならない。
+   * 定期項目 1〜20 × 2ヶ月 = 40件で、(id, 発生日) の組が重複しない。
+   */
+  const planKey = (recurringIndex: number, date: string) =>
+    `r:${uuid("44444444-4444-4444-8444", recurringIndex)}:${date}`;
+
+  const overrides = [2026 * 12 + 2, 2026 * 12 + 5].flatMap((ym) =>
+    Array.from({ length: 20 }, (_, k) => {
+      const i = k + 1;
+      const month = `${Math.floor(ym / 12)}-${String((ym % 12) + 1).padStart(2, "0")}`;
+      const day = String((i % 28) + 1).padStart(2, "0");
+      const occursOn = `${month}-${day}`;
+
+      /* **繰延と金額変更の両方を入れる。** 片方だけだと形が偏る */
+      const deferral = i % 2 === 0;
+      return {
+        user_id: userId,
+        plan_key: planKey(i, occursOn),
+        date: deferral ? addDays(occursOn, 5) : null,
+        amount: deferral ? null : 1_000 + i * 137,
+        skipped: null,
+        note: deferral ? `負荷試験 繰延 ${i}` : null,
+      };
+    }),
+  );
+
+  await check("overrides", (await supabase.from("overrides").upsert(overrides)).error);
+
+  const uniqueKeys = new Set(overrides.map((o) => o.plan_key));
+  if (uniqueKeys.size !== overrides.length) {
+    fail(
+      `作った plan_key が重複しています（${overrides.length}件中 ${uniqueKeys.size}種）。` +
+        `一意性を確かめる側が重複を作っては検査にならない`,
+    );
+  }
+
   /* ---------- 実績 ---------- */
   const actuals = Array.from({ length: rows }, (_, i) => {
     const income = i % 20 === 0;
@@ -180,6 +230,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("投入結果");
   console.log(`  実績           ${await count("actuals")}`);
+  console.log(`  オーバーライド ${await count("overrides")}（繰延20・金額変更20）`);
   console.log(`  定期項目       ${await count("recurring_items")}（うち振替3）`);
   console.log(`  単発予定       ${await count("oneoff_items")}`);
   console.log(`  口座           ${await count("accounts")}`);
@@ -190,6 +241,7 @@ async function main(): Promise<void> {
   console.log(`  分割取得（1,000件）  ${actuals.length > 1000 ? `通る（${Math.ceil(actuals.length / 1000)}ページ）` : "**通らない**"}`);
   console.log(`  月内ページング（200件）  ${perMonth > 200 ? "通る" : `**通らない**（--span を小さくする）`}`);
   console.log(`  振替の純額  生活 ${-60_000 + 80_000 - 30_000} / 事業 ${60_000 - 80_000 + 30_000}（どちらも0でない）`);
+  console.log(`  overrides の行  ${await count("overrides")}件（0件だと並び替えキーの一意性を試せない。§9.1）`);
 }
 
 await main();
