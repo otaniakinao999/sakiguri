@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACTION_LABEL,
+  confirmFailure,
+  confirmTypeUnknown,
+  passwordUpdated,
   resendNotice,
   signInFailure,
   signUpFailure,
@@ -65,6 +68,10 @@ const ALL: { name: string; message: AuthMessage }[] = [
   { name: "signUpFailure(validation_failed)", message: signUpFailure("validation_failed") },
   { name: "signUpFailure(user_already_exists)", message: signUpFailure("user_already_exists") },
   { name: "signUpFailure(undefined)", message: signUpFailure(undefined) },
+  { name: "confirmFailure(otp_expired)", message: confirmFailure("otp_expired") },
+  { name: "confirmFailure(undefined)", message: confirmFailure(undefined) },
+  { name: "confirmTypeUnknown", message: confirmTypeUnknown() },
+  { name: "passwordUpdated", message: passwordUpdated() },
 ];
 
 describe("AC-51/AC-53 どの文面もアカウントの状態を漏らさない", () => {
@@ -128,6 +135,19 @@ describe("AC-53 区別してよいものとよくないもの", () => {
 
     expect(actions).toContain<AuthAction>("signin");
     expect(actions).toContain<AuthAction>("reset");
+  });
+});
+
+describe("AC-52 受け口の文面はリンクについて書く", () => {
+  it("アカウントの有無に触れない", () => {
+    for (const message of [confirmFailure("otp_expired"), confirmFailure(undefined)]) {
+      expect(message.text).toContain("リンク");
+      expect(message.text).not.toContain("アカウント");
+    }
+  });
+
+  it("知らない type は既定で通さない", () => {
+    expect(confirmTypeUnknown().text).toContain("扱えません");
   });
 });
 

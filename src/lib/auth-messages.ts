@@ -135,6 +135,50 @@ export function signUpFailure(code: string | undefined): AuthMessage {
   };
 }
 
+/**
+ * 確認リンクの受け口（`/auth/confirm`）での失敗（AC-52）。
+ *
+ * **リンクについて書き、アカウントについて書かない。** 「そのアカウントは
+ * 存在しません」と書くと、リンクを組み立てて登録の有無を調べられる。
+ * 原則は §5.3 と同じで、**こちらが行った動作（検証）の結果だけを書く。**
+ */
+export function confirmFailure(code: string | undefined): AuthMessage {
+  if (code === "otp_expired") {
+    return {
+      text:
+        "リンクの有効期限が切れているか、すでに使われています。" +
+        "サインインを試すか、確認メールを送り直してください。",
+      actions: ["signin"],
+    };
+  }
+  return {
+    text:
+      "リンクを確認できませんでした。" +
+      "メールのリンクをもう一度開くか、サインインを試してください。",
+    actions: ["signin"],
+  };
+}
+
+/**
+ * `type` が想定外のとき。
+ *
+ * **既定で通さない。** 知らない種類の検証を実行しない。
+ */
+export function confirmTypeUnknown(): AuthMessage {
+  return {
+    text: "このリンクは扱えません。メールのリンクをそのまま開いてください。",
+    actions: ["signin"],
+  };
+}
+
+/** パスワードを設定し直したあと */
+export function passwordUpdated(): AuthMessage {
+  return {
+    text: "新しいパスワードを設定しました。",
+    actions: [],
+  };
+}
+
 /** 確認メールを再送したあと。**送ったという動作だけを書く** */
 export function resendNotice(): AuthMessage {
   return {
