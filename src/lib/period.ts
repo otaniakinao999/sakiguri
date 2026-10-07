@@ -6,13 +6,17 @@
  *   切り替えられる。任意指定では基準日以降の任意の過去月を選べる。
  */
 
+/* **別名（@/）ではなく相対＋拡張子。外すと scripts/loadtest が動かなく
+   なる。** 測定スクリプトが `FORECAST_HORIZON_MONTHS` と `forecastEnd` を
+   本番と同じ値で使うため、plain Node から import できる必要がある
+   （CLAUDE.md §2.8）。`pnpm check:node-import` が検査している */
 import {
   formatYearMonth,
   parseDate,
   shiftMonth,
   toYearMonth,
-} from "@/core/date";
-import type { DateStr, YearMonth } from "@/core/types";
+} from "../core/date.ts";
+import type { DateStr, YearMonth } from "../core/types.ts";
 
 /**
  * 予測期間。基準日から何ヶ月ぶんの行を作るか。

@@ -18,10 +18,34 @@
  *   通すため
  */
 
-import { recurringKey } from "../../src/core/forecast.ts";
+import { buildForecast, recurringKey } from "../../src/core/forecast.ts";
+import { forecastEnd } from "../../src/lib/period.ts";
 import { addDays, arg, fail, signInAsLoadtest } from "./client.ts";
 
-const AS_OF = "2026-01-01";
+/** 基準日の既定。`--as-of=today` で今日にできる（AC-29a） */
+const DEFAULT_AS_OF = "2026-01-01";
+
+/** 今日の日付。CLAUDE.md §2.2（UTC 変換を伴う API を使わない） */
+function todayStr(): string {
+  const d = new Date();
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** `--as-of=2026-01-01` または `--as-of=today` */
+function asOfArg(): string {
+  const hit = process.argv.find((a) => a.startsWith("--as-of="));
+  if (!hit) return DEFAULT_AS_OF;
+  const value = hit.split("=")[1];
+  if (value === "today") return todayStr();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    fail(`--as-of は YYYY-MM-DD か today を指定してください: ${hit}`);
+  }
+  return value;
+}
+
+/** `--empty` なら実績・定期・単発・変更を作らず、口座と設定だけ入れる */
+const EMPTY = process.argv.includes("--empty");
 
 /* 口座 id は固定。teardown と突き合わせられるようにする */
 const SEIKATSU = "11111111-1111-4111-8111-111111111111";
@@ -35,12 +59,17 @@ const uuid = (prefix: string, i: number) =>
   `${prefix}-${String(i).padStart(12, "0")}`;
 
 async function main(): Promise<void> {
-  const rows = arg("rows", 3000);
+  const AS_OF = asOfArg();
+  const rows = EMPTY ? 0 : arg("rows", 3000);
   const span = arg("span", 550);
 
   const { supabase, userId, email } = await signInAsLoadtest();
   console.log(`投入先 ${email}`);
-  console.log(`実績 ${rows.toLocaleString()}件 / ${span}日 / 基準日 ${AS_OF}`);
+  console.log(
+    EMPTY
+      ? `**--empty**。口座と設定だけ作る（基準日 ${AS_OF}）`
+      : `実績 ${rows.toLocaleString()}件 / ${span}日 / 基準日 ${AS_OF}`,
+  );
 
   const check = async (label: string, error: { message: string } | null) => {
     if (error) fail(`${label}: ${error.message}`);
@@ -121,7 +150,9 @@ async function main(): Promise<void> {
     };
   }
 
-  await check("recurring_items", (await supabase.from("recurring_items").upsert(recurring)).error);
+  if (!EMPTY) {
+    await check("recurring_items", (await supabase.from("recurring_items").upsert(recurring)).error);
+  }
 
   /* ---------- 単発予定40件 ---------- */
   const oneoffs = Array.from({ length: 40 }, (_, k) => {
@@ -141,7 +172,9 @@ async function main(): Promise<void> {
       to_account_id: null,
     };
   });
-  await check("oneoff_items", (await supabase.from("oneoff_items").upsert(oneoffs)).error);
+  if (!EMPTY) {
+    await check("oneoff_items", (await supabase.from("oneoff_items").upsert(oneoffs)).error);
+  }
 
   /* ---------- オーバーライド40件（FR-07） ----------
    *
@@ -179,7 +212,9 @@ async function main(): Promise<void> {
     }),
   );
 
-  await check("overrides", (await supabase.from("overrides").upsert(overrides)).error);
+  if (!EMPTY) {
+    await check("overrides", (await supabase.from("overrides").upsert(overrides)).error);
+  }
 
   const uniqueKeys = new Set(overrides.map((o) => o.plan_key));
   if (uniqueKeys.size !== overrides.length) {
@@ -210,7 +245,7 @@ async function main(): Promise<void> {
     };
   });
 
-  for (let at = 0; at < actuals.length; at += CHUNK) {
+  for (let at = 0; !EMPTY && at < actuals.length; at += CHUNK) {
     const slice = actuals.slice(at, at + CHUNK);
     await check(`actuals[${at}]`, (await supabase.from("actuals").upsert(slice)).error);
     process.stdout.write(`\r  実績 ${Math.min(at + CHUNK, actuals.length)} / ${actuals.length}`);
@@ -222,7 +257,7 @@ async function main(): Promise<void> {
     (await supabase.from(table).select("*", { count: "exact", head: true })).count;
 
   const months = new Set(actuals.map((a) => a.date.slice(0, 7)));
-  const perMonth = Math.round(actuals.length / months.size);
+  const perMonth = months.size ? Math.round(actuals.length / months.size) : 0;
 
   console.log("");
   console.log("投入結果");
@@ -231,8 +266,27 @@ async function main(): Promise<void> {
   console.log(`  定期項目       ${await count("recurring_items")}（うち振替3）`);
   console.log(`  単発予定       ${await count("oneoff_items")}`);
   console.log(`  口座           ${await count("accounts")}`);
-  console.log(`  期間           ${actuals[0].date} 〜 ${actuals.at(-1)!.date}（${months.size}ヶ月）`);
-  console.log(`  1ヶ月あたり    約${perMonth}件`);
+  if (actuals.length > 0) {
+    console.log(`  期間           ${actuals[0].date} 〜 ${actuals.at(-1)!.date}（${months.size}ヶ月）`);
+    console.log(`  1ヶ月あたり    約${perMonth}件`);
+  }
+  /* **予定インスタンスを本番と同じ関数・同じ期間で数える**（AC-48）。
+     「1,200件」は未消込の数であって、展開した総数ではない。
+     消し込み済みを含めて掲げると §9.1 の3つ目を踏む */
+  const to = forecastEnd(AS_OF);
+  const forecast = EMPTY
+    ? []
+    : buildForecast({ recurring, oneoffs, overrides: {} } as never, AS_OF, to);
+  /* 実績はすべて `plan_key = null` なので、消し込まれる予定は無い */
+  const reconciled = 0;
+
+  console.log("");
+  console.log(`予定インスタンス（CL-1。基準日 ${AS_OF} 〜 ${to}）`);
+  console.log(`  展開した総数   ${forecast.length}`);
+  console.log(`  うち消し込み済 ${reconciled}`);
+  console.log(`  **うち未消込** ${forecast.length - reconciled}`);
+  console.log(`  AC-48 の条件   1,200件 ${forecast.length - reconciled >= 1200 ? "**満たす**" : "**満たさない**（定期項目を増やす）"}`);
+
   console.log("");
   console.log("測りたい差が出るか（CLAUDE.md §2.11）");
   console.log(`  分割取得（1,000件）  ${actuals.length > 1000 ? `通る（${Math.ceil(actuals.length / 1000)}ページ）` : "**通らない**"}`);

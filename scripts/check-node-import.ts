@@ -43,11 +43,15 @@ const MODULES: { path: string; exports: string[] }[] = [
   },
   {
     path: "src/lib/supabase/rows.ts",
-    exports: ["SELECT_COLUMNS", "SETTINGS_COLUMNS"],
+    exports: ["SELECT_COLUMNS", "SETTINGS_COLUMNS", "toRecurring", "toOneoff", "toOverrides"],
   },
   {
     path: "src/core/forecast.ts",
-    exports: ["recurringKey", "oneoffKey", "planKeySource"],
+    exports: ["recurringKey", "oneoffKey", "planKeySource", "buildForecast"],
+  },
+  {
+    path: "src/lib/period.ts",
+    exports: ["FORECAST_HORIZON_MONTHS", "forecastEnd"],
   },
 ];
 
