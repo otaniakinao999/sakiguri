@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_LABEL,
   confirmFailure,
+  confirmRejected,
   confirmTypeUnknown,
   passwordUpdated,
   resendNotice,
@@ -71,6 +72,9 @@ const ALL: { name: string; message: AuthMessage }[] = [
   { name: "confirmFailure(otp_expired)", message: confirmFailure("otp_expired") },
   { name: "confirmFailure(undefined)", message: confirmFailure(undefined) },
   { name: "confirmTypeUnknown", message: confirmTypeUnknown() },
+  { name: "confirmRejected(linkError)", message: confirmRejected("linkError") },
+  { name: "confirmRejected(unknownType)", message: confirmRejected("unknownType") },
+  { name: "confirmRejected(missing)", message: confirmRejected("missing") },
   { name: "passwordUpdated", message: passwordUpdated() },
 ];
 
@@ -148,6 +152,17 @@ describe("AC-52 受け口の文面はリンクについて書く", () => {
 
   it("知らない type は既定で通さない", () => {
     expect(confirmTypeUnknown().text).toContain("扱えません");
+  });
+
+  it("**拒んだ理由を画面に出し分けない**", () => {
+    /* 「種別が未知」と「値が足りない」を区別して見せても利用者には
+       使えず、リンクを組み立てる側にだけ手がかりを与える */
+    expect(confirmRejected("unknownType")).toEqual(confirmRejected("missing"));
+  });
+
+  it("期限切れだけは分ける（利用者が対処できる）", () => {
+    expect(confirmRejected("linkError").text).toContain("有効期限");
+    expect(confirmRejected("linkError")).not.toEqual(confirmRejected("missing"));
   });
 });
 

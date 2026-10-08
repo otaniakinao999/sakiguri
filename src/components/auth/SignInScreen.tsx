@@ -29,6 +29,22 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup";
 
+/**
+ * メールのリンクの戻り先（AC-52）。
+ *
+ * **テンプレートを編集せずにリンクの着地点を決める手段。** 既定の
+ * テンプレートの `{{ .ConfirmationURL }}` はここを `redirect_to` に
+ * 載せるので、確認が済んだあと `/auth/confirm` に戻ってくる。
+ *
+ * **固定の URL を書かない。** 書くと、ローカルで登録したときに本番へ
+ * 飛ばされる。`origin` を使えば、本番は本番に、`127.0.0.1` は
+ * `127.0.0.1` に戻る（どちらも許可リストを通ることを確認済み）。
+ * `localhost` は許可リストに無いので Site URL に落ちる。
+ */
+function confirmUrl(): string {
+  return `${window.location.origin}/auth/confirm`;
+}
+
 const CONTROL =
   "border-border-base-high bg-surface-base-primary text-object-base-high w-full rounded-base border px-8 py-4 text-body-xs leading-normal";
 
@@ -70,7 +86,10 @@ export function SignInScreen() {
       return;
     }
 
-    const { error: failed } = await supabase.auth.signUp(credentials);
+    const { error: failed } = await supabase.auth.signUp({
+      ...credentials,
+      options: { emailRedirectTo: confirmUrl() },
+    });
     if (failed) {
       setError(signUpFailure(failed.code));
     } else {
@@ -96,6 +115,7 @@ export function SignInScreen() {
     const { error: failed } = await getSupabase().auth.resend({
       type: "signup",
       email: email.trim(),
+      options: { emailRedirectTo: confirmUrl() },
     });
     /* 失敗しても「そのアドレスは無い」とは言わない。送信の制限だけ伝える */
     setNotice(failed ? signUpFailure(failed.code) : resendNotice());
@@ -119,6 +139,7 @@ export function SignInScreen() {
     setError(null);
     const { error: failed } = await getSupabase().auth.resetPasswordForEmail(
       email.trim(),
+      { redirectTo: confirmUrl() },
     );
     setNotice(
       failed

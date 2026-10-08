@@ -160,7 +160,7 @@ export function confirmFailure(code: string | undefined): AuthMessage {
 }
 
 /**
- * `type` が想定外のとき。
+ * `type` が想定外のとき、または値が足りないとき。
  *
  * **既定で通さない。** 知らない種類の検証を実行しない。
  */
@@ -169,6 +169,18 @@ export function confirmTypeUnknown(): AuthMessage {
     text: "このリンクは扱えません。メールのリンクをそのまま開いてください。",
     actions: ["signin"],
   };
+}
+
+/**
+ * 受け口が何も実行しなかったときの文面（AC-52）。
+ *
+ * `reason` は `resolveAuthLink` の判断。**画面には理由を出さない。**
+ * 「種別が未知」と「値が足りない」を区別して見せても利用者には使えず、
+ * リンクを組み立てる側にだけ手がかりを与える。
+ */
+export function confirmRejected(reason: "linkError" | "unknownType" | "missing"): AuthMessage {
+  /* 期限切れは利用者が対処できる。そこだけ分ける */
+  return reason === "linkError" ? confirmFailure("otp_expired") : confirmTypeUnknown();
 }
 
 /** パスワードを設定し直したあと */
