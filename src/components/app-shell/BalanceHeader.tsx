@@ -10,6 +10,7 @@
 
 import { useMemo } from "react";
 
+import { UNRECORDED_LABEL } from "@/lib/unrecorded";
 import { useAppData } from "./AppDataProvider";
 import { formatMonthDay, formatSignedYen, formatYen } from "@/lib/format";
 import { computeBalanceSummary } from "@/lib/summary";
@@ -68,7 +69,7 @@ export function BalanceHeader() {
             件数を出すのは「実績が未入力の予定」1箇所だけ */}
         {summary !== null && summary.unrecorded.count > 0 && (
           <div className="text-object-base-mid mt-4 text-body-xxs leading-none">
-            うち未記録の予定{" "}
+            {UNRECORDED_LABEL}{" "}
             <span className="num">
               {formatSignedYen(summary.unrecorded.amount)}
             </span>

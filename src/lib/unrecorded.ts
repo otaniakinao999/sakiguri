@@ -25,6 +25,20 @@ import { settleDateOf } from "@/core/cash";
 import { isCard } from "@/core/types";
 import type { Account, DateStr, ForecastInstance, Yen } from "@/core/types";
 
+/**
+ * この値を画面に出すときの語（AC-49e）。
+ *
+ * **3箇所で同じ値を出す。** ヘッダー（SC-01）、ダッシュボード（SC-02）、
+ * 残高推移グラフのツールチップ（SC-03）。
+ *
+ * 文字列をそれぞれに書くと、**片方だけ言い回しが変わる。** 実際、
+ * ダッシュボードだけ「まだ記録されていない予定」になっていて、
+ * マニュアルの「うち未記録の予定」を探しても見つからない状態だった。
+ *
+ * 同じ値には同じ名前を付ける（要件定義書 §3.3・AC-49e、CLAUDE.md §2.12）。
+ */
+export const UNRECORDED_LABEL = "うち未記録の予定";
+
 export interface Unrecorded {
   /**
    * 残高に含まれている、記録ではなく予定から来ている額。**符号つき。**

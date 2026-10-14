@@ -48,6 +48,19 @@ export function formatMonthDay(date: DateStr): string {
   return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 }
 
+/**
+ * '2026-09-14' → '2026年9月14日'
+ *
+ * 日付を取り違えさせたくない場面で使う。`formatMonthDay`（9/14）は
+ * 年が落ちるので、**戻すための控えには使えない。**
+ */
+export function formatYearMonthDay(date: DateStr): string {
+  return (
+    `${date.slice(0, 4)}年${Number(date.slice(5, 7))}月` +
+    `${Number(date.slice(8, 10))}日`
+  );
+}
+
 /** '2026-09' → '2026年9月' */
 export function formatYearMonthLabel(yearMonth: string): string {
   return `${yearMonth.slice(0, 4)}年${Number(yearMonth.slice(5, 7))}月`;

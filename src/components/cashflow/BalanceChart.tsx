@@ -31,6 +31,7 @@ import {
 import type { BalanceRow } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
+import { UNRECORDED_LABEL } from "@/lib/unrecorded";
 import {
   formatMonthDay,
   formatSignedYen,
@@ -109,7 +110,7 @@ function ChartTooltip({
     },
   ];
   if (unrecorded !== null && unrecorded !== 0) {
-    rows.push({ name: "うち未記録の予定", value: formatSignedYen(unrecorded) });
+    rows.push({ name: UNRECORDED_LABEL, value: formatSignedYen(unrecorded) });
   }
   if (point.inflow !== undefined) {
     rows.push({ name: "入金", value: formatYen(point.inflow) });

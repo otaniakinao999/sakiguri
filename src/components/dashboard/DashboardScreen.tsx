@@ -29,6 +29,7 @@ import { buildDashboard, DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
 import { buildReconcileWarnings, STRANDED_DAYS } from "@/lib/reconcile-warnings";
 import { formatAmount, formatMonthDay, formatSignedYen, formatYen } from "@/lib/format";
 import { forecastEnd } from "@/lib/period";
+import { UNRECORDED_LABEL } from "@/lib/unrecorded";
 
 const CELL = "border-b-border-base-low border-b px-8 py-8";
 
@@ -128,13 +129,22 @@ export function DashboardScreen() {
           {/* 件数を並べない（AC-49d）。件数は隣のカード
               「実績が未入力の予定（N件）」が唯一の出しどころ */}
           {dashboard.unrecorded.count > 0 && (
-            <p className="text-object-base-mid mt-4 text-body-xxs">
-              どちらにも、まだ記録されていない予定{" "}
-              <span className="num">
-                {formatSignedYen(dashboard.unrecorded.amount)}
-              </span>
-              が含まれています。
-            </p>
+            <>
+              {/* **語はヘッダー・ツールチップと同じものを使う（AC-49e）。**
+                  ここだけ「まだ記録されていない予定」と書いていて、
+                  マニュアルの語で探しても見つからなかった。
+                  文に埋めると語が崩れるので、ヘッダーと同じ「語＋金額」の
+                  形にして、どちらに掛かるかは次の行で補う */}
+              <p className="text-object-base-mid mt-8 text-body-xxs">
+                {UNRECORDED_LABEL}{" "}
+                <span className="num">
+                  {formatSignedYen(dashboard.unrecorded.amount)}
+                </span>
+              </p>
+              <p className="text-object-base-mid mt-4 text-body-xxs">
+                上の2つの残高どちらにも含まれています。
+              </p>
+            </>
           )}
 
           <div className="mt-12">
