@@ -23,11 +23,25 @@
     "db:diff": "npx --yes supabase@latest db diff"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/noto-sans-jp": "^5.3.1",
+    "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-alert-dialog": "^1.2.1",
+    "@radix-ui/react-checkbox": "^1.4.1",
+    "@radix-ui/react-select": "^2.4.1",
+    "@radix-ui/react-separator": "^1.2.0",
+    "@radix-ui/react-slot": "^1.5.0",
+    "@radix-ui/react-tabs": "^1.2.1",
     "@supabase/supabase-js": "^2.116.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "next": "15.5.25",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

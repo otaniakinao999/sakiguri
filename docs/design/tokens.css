@@ -1,0 +1,271 @@
+/* =====================================================================
+   sakiguri design tokens
+   Source: Figma "Design System sakiguri" (diqeunxgHCLNIPKVXL4evB) v0.6.0
+   Brand mode = sakiguri / Color = Light (:root) + Dark (.dark)
+   Density = Comfortable (default) + Compact ([data-density="compact"])
+   Variable names match the Figma Variables code syntax (var(--…)).
+   For Tailwind v4 + shadcn/ui. Import from app/globals.css:
+     @import "tailwindcss";
+     @import "../docs/design/tokens.css";
+   ===================================================================== */
+
+/* ---------- Primitives (do not use directly in components) ---------- */
+:root {
+  --teal-50: #edf6f6;  --teal-100: #d3eaeb; --teal-200: #a9d4d6; --teal-300: #77b9bc;
+  --teal-400: #43989d; --teal-500: #1a7a80; --teal-600: #065d63; --teal-700: #054c51;
+  --teal-800: #063e42; --teal-900: #073337; --teal-950: #031e21;
+
+  --plum-50: #fbf0f6;  --plum-100: #f5dceb; --plum-200: #ebb8d6; --plum-300: #dc8bbb;
+  --plum-400: #c45a9a; --plum-500: #a8287c; --plum-600: #91066e; --plum-700: #7a0657;
+  --plum-800: #63063e; --plum-900: #4a052f; --plum-950: #2c021b;
+
+  /* neutral = Tailwind zinc, green = Tailwind green (identical values) */
+  --neutral-50: #fafafa;  --neutral-100: #f4f4f5; --neutral-200: #e4e4e7; --neutral-300: #d4d4d8;
+  --neutral-400: #a1a1aa; --neutral-600: #52525b; --neutral-700: #3f3f46; --neutral-800: #27272a;
+  --neutral-900: #18181b; --neutral-950: #09090b;
+  --green-50: #f0fdf4; --green-300: #86efac; --green-400: #4ade80; --green-800: #166534;
+  --green-900: #14532d; --green-950: #052e16;
+
+  /* Brand (sakiguri mode): brand = teal */
+  --brand-50: var(--teal-50);   --brand-100: var(--teal-100); --brand-200: var(--teal-200);
+  --brand-300: var(--teal-300); --brand-400: var(--teal-400); --brand-500: var(--teal-500);
+  --brand-600: var(--teal-600); --brand-700: var(--teal-700); --brand-800: var(--teal-800);
+  --brand-900: var(--teal-900); --brand-950: var(--teal-950);
+}
+
+/* ---------- Typography / radius / spacing (mode independent) ---------- */
+:root {
+  /* --font-inter / --font-noto-sans-jp / --font-jetbrains-mono are injected by next/font
+     via its variable option. Without next/font, the fallback names are used. */
+  --font-sans: var(--font-noto-sans-jp, "Noto Sans JP"), system-ui, sans-serif;
+  --font-numeric: var(--font-inter, "Inter");
+  --font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  /* Put Inter first: digits and symbols render in Inter, Japanese falls back to Noto Sans JP */
+  --font-ui: var(--font-numeric), var(--font-sans);
+
+  --radius-none: 0px;
+  --radius-sm: 6px;    /* tags, badges, callouts */
+  --radius-md: 8px;    /* buttons, inputs, nav items, tabs */
+  --radius-lg: 12px;   /* panels, sidebar */
+  --radius-xl: 12px;   /* dialogs */
+  --radius-full: 9999px;
+
+  --spacing-0: 0px;  --spacing-0-5: 2px; --spacing-1: 4px;  --spacing-1-5: 6px;
+  --spacing-2: 8px;  --spacing-3: 12px;  --spacing-4: 16px; --spacing-5: 20px;
+  --spacing-6: 24px; --spacing-8: 32px;  --spacing-10: 40px; --spacing-12: 48px;
+  --spacing-16: 64px; --spacing-20: 80px;
+  --stroke-1: 1px; --stroke-2: 2px;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* ---------- Color: Light ---------- */
+:root {
+  --background: #ffffff;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: var(--brand-600);
+  --primary-hover: var(--brand-700);
+  --primary-subtle: var(--brand-50);
+  --secondary: var(--neutral-100);
+  --secondary-hover: var(--neutral-200);
+  --muted: var(--neutral-100);
+  --accent: var(--neutral-100);
+  --destructive: var(--plum-700);
+  --destructive-hover: var(--plum-800);
+  --destructive-subtle: var(--plum-50);
+  --success-subtle: var(--teal-50);
+  --warning-subtle: var(--green-50);
+  --disabled: var(--neutral-100);
+  --inverse: var(--neutral-900);
+  --control-off: var(--neutral-300);
+  --overlay: rgb(0 0 0 / 0.5);
+
+  --foreground: var(--neutral-950);
+  --muted-foreground: var(--neutral-600);
+  --primary-foreground: #ffffff;
+  --secondary-foreground: var(--neutral-900);
+  --destructive-foreground: #ffffff;
+  --card-foreground: var(--foreground);      /* shadcn compatibility */
+  --popover-foreground: var(--foreground);   /* shadcn compatibility */
+  --accent-foreground: var(--neutral-900);   /* shadcn compatibility */
+  --text-primary: var(--brand-600);
+  --text-destructive: var(--plum-800);
+  --text-success: var(--teal-500);
+  --text-warning: var(--green-800);
+  --text-disabled: var(--neutral-400);
+  --text-inverse: var(--neutral-50);
+
+  --border: var(--neutral-200);
+  --input: var(--neutral-300);
+  --ring: var(--brand-500);
+  --border-primary: var(--brand-600);
+  --border-primary-subtle: var(--brand-200);
+  --border-destructive: var(--plum-500);
+  --border-destructive-subtle: var(--plum-200);
+  --border-success: var(--teal-200);
+  --border-warning: var(--green-300);
+
+  /* Icon colors (equivalent to the Figma Icon collection modes) */
+  --icon-default: var(--foreground);
+  --icon-muted: var(--muted-foreground);
+  --icon-on-solid: var(--primary-foreground);
+  --icon-disabled: var(--text-disabled);
+
+  /* Chart */
+  --chart-actual: var(--foreground);
+  --chart-forecast: var(--text-primary);
+  --chart-defense: var(--text-warning);
+  --chart-defense-zone: var(--warning-subtle);
+}
+
+/* ---------- Color: Dark ---------- */
+.dark {
+  --background: var(--neutral-950);
+  --card: var(--neutral-900);
+  --popover: var(--neutral-900);
+  --primary: var(--brand-600);
+  --primary-hover: var(--brand-700);
+  --primary-subtle: var(--brand-950);
+  --secondary: var(--neutral-800);
+  --secondary-hover: var(--neutral-700);
+  --muted: var(--neutral-800);
+  --accent: var(--neutral-800);
+  --destructive: var(--plum-600);
+  --destructive-hover: var(--plum-700);
+  --destructive-subtle: var(--plum-950);
+  --success-subtle: var(--teal-950);
+  --warning-subtle: var(--green-950);
+  --disabled: var(--neutral-800);
+  --inverse: var(--neutral-50);
+  --control-off: var(--neutral-700);
+  --overlay: rgb(0 0 0 / 0.7);
+
+  --foreground: var(--neutral-50);
+  --muted-foreground: var(--neutral-400);
+  --secondary-foreground: var(--neutral-50);
+  --accent-foreground: var(--neutral-50);
+  --text-primary: var(--brand-400);
+  --text-destructive: var(--plum-300);
+  --text-success: var(--teal-300);
+  --text-warning: var(--green-400);
+  --text-disabled: var(--neutral-600);
+  --text-inverse: var(--neutral-900);
+
+  --border: var(--neutral-800);
+  --input: var(--neutral-700);
+  --ring: var(--brand-400);
+  --border-primary: var(--brand-500);
+  --border-primary-subtle: var(--brand-800);
+  --border-destructive-subtle: var(--plum-900);
+  --border-success: var(--teal-900);
+  --border-warning: var(--green-900);
+}
+
+/* ---------- Density ---------- */
+:root, [data-density="comfortable"] {
+  --control-height-sm: 32px; --control-height-md: 40px; --control-height-lg: 48px;
+  --control-padding-x-sm: 12px; --control-padding-x-md: 16px; --control-padding-x-lg: 20px;
+  --control-gap: 8px;
+  --table-row-height: 48px; --table-cell-padding-x: 16px;
+}
+[data-density="compact"] {
+  --control-height-sm: 28px; --control-height-md: 32px; --control-height-lg: 40px;
+  --control-padding-x-sm: 8px; --control-padding-x-md: 12px; --control-padding-x-lg: 16px;
+  --control-gap: 6px;
+  --table-row-height: 36px; --table-cell-padding-x: 12px;
+}
+
+/* ---------- Tailwind v4 theme bridge ---------- */
+@theme inline {
+  --font-sans: var(--font-ui);   /* font-sans = Inter → Noto Sans JP */
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-disabled: var(--disabled);
+  --color-inverse: var(--inverse);
+  --color-control-off: var(--control-off);
+  --color-overlay: var(--overlay);
+
+  /* Text colors: use as text-fg-primary and so on */
+  --color-fg-primary: var(--text-primary);
+  --color-fg-destructive: var(--text-destructive);
+  --color-fg-success: var(--text-success);
+  --color-fg-warning: var(--text-warning);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-inverse: var(--text-inverse);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-border-primary: var(--border-primary);
+  --color-border-primary-subtle: var(--border-primary-subtle);
+  --color-border-destructive: var(--border-destructive);
+  --color-border-destructive-subtle: var(--border-destructive-subtle);
+  --color-border-success: var(--border-success);
+  --color-border-warning: var(--border-warning);
+
+  /* --radius-* and --shadow-* use the same names as the Tailwind theme namespace.
+     The unlayered :root definitions above win, so rounded-sm/md/lg/xl and shadow-xs…xl
+     resolve to the sakiguri values without being redefined here. Do not self-reference. */
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  html { font-family: var(--font-ui); color: var(--foreground); background: var(--muted); }
+  * { border-color: var(--border); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+/* ---------- Typography utilities (equivalent to Figma text styles) ---------- */
+@layer components {
+  .t-display   { font-size: 40px; line-height: 56px; font-weight: 700; }
+  .t-h1        { font-size: 32px; line-height: 44px; font-weight: 700; }
+  .t-h2        { font-size: 28px; line-height: 40px; font-weight: 700; }
+  .t-h3        { font-size: 24px; line-height: 36px; font-weight: 700; }
+  .t-h4        { font-size: 20px; line-height: 30px; font-weight: 700; }
+  .t-h5        { font-size: 18px; line-height: 28px; font-weight: 700; }
+  .t-body-lg   { font-size: 16px; line-height: 28px; font-weight: 400; letter-spacing: 0.02em; }
+  .t-body      { font-size: 14px; line-height: 24px; font-weight: 400; letter-spacing: 0.02em; }
+  .t-body-sm   { font-size: 12px; line-height: 20px; font-weight: 400; letter-spacing: 0.02em; }
+  .t-label-lg  { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: 0.01em; }
+  .t-label     { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: 0.01em; }
+  .t-label-sm  { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.01em; }
+  .t-code      { font-family: var(--font-mono); font-size: 13px; line-height: 20px; }
+
+  /* sakiguri */
+  .t-card-title   { font-size: 16px; line-height: 24px; font-weight: 700; }
+  .t-table        { font-size: 13px; line-height: 20px; font-weight: 400; }
+  .t-table-strong { font-size: 13px; line-height: 20px; font-weight: 700; }
+  .t-balance      { font-size: 34px; line-height: 40px; font-weight: 600; }
+  .t-kpi          { font-size: 28px; line-height: 36px; font-weight: 600; }
+
+  /* Wrap amounts, dates and counts in .num (tabular digits plus Inter weight correction) */
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .t-table-strong.num, .num.strong { font-weight: 600; } /* Inter uses Semi Bold */
+}
