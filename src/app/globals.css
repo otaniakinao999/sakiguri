@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../../docs/design/tokens.css";
 
 /* ============================================================
    Tailwind をデザイントークンに束縛する
@@ -15,11 +16,36 @@
 
 /* --- 既定スケールを消す --- */
 @theme {
-  --color-*: initial;
+  /* Tailwind 既定のパレットだけを消す。
+     --color-*: initial にすると docs/design/tokens.css の橋渡しまで
+     消えるため、色の族を名指しで消す（ADR-0014）。 */
+  --color-red-*: initial;
+  --color-orange-*: initial;
+  --color-amber-*: initial;
+  --color-yellow-*: initial;
+  --color-lime-*: initial;
+  --color-green-*: initial;
+  --color-emerald-*: initial;
+  --color-teal-*: initial;
+  --color-cyan-*: initial;
+  --color-sky-*: initial;
+  --color-blue-*: initial;
+  --color-indigo-*: initial;
+  --color-violet-*: initial;
+  --color-purple-*: initial;
+  --color-fuchsia-*: initial;
+  --color-pink-*: initial;
+  --color-rose-*: initial;
+  --color-slate-*: initial;
+  --color-gray-*: initial;
+  --color-zinc-*: initial;
+  --color-neutral-*: initial;
+  --color-stone-*: initial;
+  --color-black: initial;
+  --color-white: initial;
   --spacing: initial;
   --spacing-*: initial;
   --text-*: initial;
-  --radius-*: initial;
   --tracking-*: initial;
   --font-weight-*: initial;
   --breakpoint-*: initial;
@@ -99,7 +125,6 @@
   --text-body-xxs: var(--size-body-xxs);
 
   /* 書体 → font-* */
-  --font-ui: var(--family-ui);
   --font-display-en: var(--family-display-en);
   --font-display-jp: var(--family-display-jp);
 
@@ -163,4 +188,41 @@
     outline: 2px solid var(--object-accent-bright);
     outline-offset: 1px;
   }
+}
+
+/* ============================================================
+   v0.6.0 の橋渡し（ADR-0014）
+   ------------------------------------------------------------
+   docs/design/tokens.css が持つ値のうち、Tailwind のクラスとして
+   引きたいものだけをここで名前空間に載せる。値は向こうが正で、
+   ここでは定義しない。
+
+   移行が終わったら、上の旧セマンティック（object-* / surface-* /
+   border-*）と src/styles/tokens.css をまとめて外す。
+   ============================================================ */
+@theme inline {
+  /* 余白 ── v0.6.0 で増えた刻み。名前は px 値と一致する（ADR-0004）。
+     components.md / screens.md は Tailwind 既定の名前で書かれているので
+     4倍して読む。p-6 → p-24、gap-6 → gap-24、px-8 → px-32。 */
+  --spacing-2: 2px;
+  --spacing-6: 6px;
+  --spacing-20: 20px;
+  --spacing-80: 80px;
+
+  /* 操作要素と表の寸法。[data-density="compact"] で切り替わる。 */
+  --height-control-sm: var(--control-height-sm);
+  --height-control-md: var(--control-height-md);
+  --height-control-lg: var(--control-height-lg);
+  --height-row: var(--table-row-height);
+  --spacing-control-sm: var(--control-padding-x-sm);
+  --spacing-control-md: var(--control-padding-x-md);
+  --spacing-control-lg: var(--control-padding-x-lg);
+  --spacing-cell: var(--table-cell-padding-x);
+
+  /* グラフ。Recharts には var() を直接渡すが、凡例の線は
+     Tailwind のクラスで塗るため名前を与える。 */
+  --color-chart-actual: var(--chart-actual);
+  --color-chart-forecast: var(--chart-forecast);
+  --color-chart-defense: var(--chart-defense);
+  --color-chart-defense-zone: var(--chart-defense-zone);
 }

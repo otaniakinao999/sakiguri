@@ -1,26 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Cormorant_Garamond } from "next/font/google";
+
+/* 書体 ── docs/design/tokens.css §2.1 / HANDOFF_CLAUDE.md
+   Inter（数字と記号）／Noto Sans JP（和文）／JetBrains Mono（コード）。
+
+   HANDOFF_CLAUDE.md は next/font/google を指定しているが、この開発環境からは
+   fonts.googleapis.com に到達できないため、同じ3書体を npm から自己ホストする。
+   tokens.css が var(--font-inter, "Inter") の形で書かれているため、
+   変数を与えなくても実体名で解決する（ADR-0014）。
+
+   @fontsource は unicode-range で分割して配信するので、和文でも実際に使う字だけが
+   落ちてくる。ADR-0005 が避けたかった「数MBの一括ダウンロード」は起きない。 */
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/noto-sans-jp/400.css";
+import "@fontsource/noto-sans-jp/500.css";
+import "@fontsource/noto-sans-jp/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+/* ワードマーク「SAKIGURI」のみ。正式なロゴ画像は未支給（decisions.md 未決2）。 */
+import "@fontsource/cormorant-garamond/500.css";
+import "@fontsource/cormorant-garamond/600.css";
+
 import "./globals.css";
-
-/* docs/designsystem.md §2.1
-   --family-ui：本文、ラベル、ボタン、数値。アプリ画面はほぼすべてこれ。 */
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-/* --family-display-en：ワードマーク「SAKIGURI」のみ */
-const cormorantGaramond = Cormorant_Garamond({
-  variable: "--font-cormorant",
-  subsets: ["latin"],
-  weight: ["600", "700"],
-  display: "swap",
-});
-
-/* --family-display-jp（Noto Serif JP）は Web フォントとして読み込まない。
-   日本語サブセットが数MBあり、非機能要件 5.1（初回表示3秒以内・4G想定）
-   と衝突するため。端末にあるときだけ効く。docs/adr/0005 を参照。 */
 
 export const metadata: Metadata = {
   title: "Sakiguri",
@@ -39,10 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    /* フォント変数は html に置く。tokens.css の --family-* は :root で
-       計算されるため、body に置くと :root からは見えず、
-       var(--font-inter, "Inter") のフォールバック側に落ちる。 */
-    <html lang="ja" className={`${inter.variable} ${cormorantGaramond.variable}`}>
+    <html lang="ja">
       <body>{children}</body>
     </html>
   );
