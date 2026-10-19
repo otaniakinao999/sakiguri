@@ -232,4 +232,6 @@
   --container-sidenav: 224px;
   --container-ledger: 420px;
   --container-dialog: 560px;
+  /* Main の内容幅。Figma の Main 1200px から左右の余白 32px を引いた値。 */
+  --container-content: 1136px;
 }

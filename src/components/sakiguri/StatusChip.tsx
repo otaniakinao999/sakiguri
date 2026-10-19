@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/v06/badge";
 import { cn } from "@/lib/utils";
 
 export type Status = "予定" | "実績";
