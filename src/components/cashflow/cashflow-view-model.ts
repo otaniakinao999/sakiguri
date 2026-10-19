@@ -9,7 +9,6 @@
  */
 
 import type { BalanceSeries } from "@/core/balance";
-import { addDays } from "@/core/date";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
 import type { AmountType } from "@/components/sakiguri/Amount";
@@ -24,9 +23,6 @@ import {
 import type { LedgerEntry, LedgerView } from "@/lib/ledger";
 
 import type { CashflowLedgerEntry, CashflowMonthRow } from "./CashflowView";
-
-/** PageHeader の「30日後」「90日後」 */
-export const HEADER_HORIZONS = [30, 90] as const;
 
 export interface CashflowViewModel {
   stats: PageHeaderStat[];
@@ -48,8 +44,8 @@ export interface CashflowViewModelInput {
   to: DateStr;
   today: DateStr;
   reserveLine: Yen;
-  /** 口座・カードの未払合計 */
-  cardDue: Yen;
+  /** PageHeader の残高サマリー。buildHeaderStats が作る */
+  stats: PageHeaderStat[];
 }
 
 /**
@@ -104,20 +100,8 @@ export function buildCashflowViewModel({
   to,
   today,
   reserveLine,
-  cardDue,
+  stats,
 }: CashflowViewModelInput): CashflowViewModel {
-  const projAt = (date: DateStr) =>
-    series.rows.find((row) => row.date === date)?.proj ?? null;
-
-  const stats: PageHeaderStat[] = [
-    { label: "今日の残高", value: projAt(today) ?? 0 },
-    ...HEADER_HORIZONS.map((days) => ({
-      label: `${days}日後`,
-      value: projAt(addDays(today, days)) ?? 0,
-    })),
-    { label: "カード未払", value: cardDue, tone: "expense" as const },
-  ];
-
   const months: CashflowMonthRow[] = monthly.map((m) => ({
     label: formatYearMonthLabel(m.yearMonth),
     income: m.inflow,

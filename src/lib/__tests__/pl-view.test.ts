@@ -419,10 +419,10 @@ describe("行の並び（CL-5 手順5）", () => {
     expect(row(d, "net").label).toBe("事業所得");
   });
 
-  it("合算・家計では収支のまま", () => {
+  it("合算・家計では差引", () => {
     for (const scope of ["all", "household"] as const) {
       const matrix = buildPLMatrix({ forecast: FORECAST, actuals: ACTUALS, year: 2026, scope, today: NOW });
-      expect(buildPLDisplay(matrix, "plan", NOW).netLabel).toBe("収支");
+      expect(buildPLDisplay(matrix, "plan", NOW).netLabel).toBe("差引");
     }
   });
 });

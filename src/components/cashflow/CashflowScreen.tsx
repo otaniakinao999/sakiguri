@@ -22,10 +22,11 @@ import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import { buildMonthlyCashflow } from "@/core/monthly";
 import { daysBetween, toYearMonth } from "@/core/date";
-import { isCard, type Actual } from "@/core/types";
+import type { Actual } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Panel } from "@/components/sakiguri/Panel";
 import { track } from "@/lib/analytics/track";
+import { buildHeaderStats } from "@/lib/header-stats";
 import { formatYearMonthLabel } from "@/lib/format";
 import { isEmpty } from "@/lib/app-data";
 import {
@@ -146,15 +147,7 @@ export function CashflowScreen() {
       to: rows[rows.length - 1]?.date ?? today,
       today,
       reserveLine: data.reserveLine,
-      cardDue: data.accounts
-        .filter(isCard)
-        .reduce(
-          (sum, card) =>
-            sum +
-            (computed.series.rows.find((r) => r.date === today)?.byCard[card.id] ??
-              card.balance),
-          0,
-        ),
+      stats: buildHeaderStats(computed.series, data.accounts, today),
     });
   }, [computed, range, kind, status, today, data.reserveLine, data.accounts]);
 

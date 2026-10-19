@@ -25,7 +25,7 @@ const view = buildCashflowViewModel({
   to: fixture.to,
   today: FIXTURE_TODAY,
   reserveLine: FIXTURE_RESERVE_LINE,
-  cardDue: fixture.cardDue,
+  stats: fixture.stats,
 });
 
 describe("PageHeader の残高サマリー", () => {

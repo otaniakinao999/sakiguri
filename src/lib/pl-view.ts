@@ -207,7 +207,11 @@ export function buildPLDisplay(
     mode,
     months,
     rows,
-    netLabel: matrix.scope === "business" ? "事業所得" : "収支",
+    /* **「収支」ではなく「差引」。** v0.6.0 の Figma 2031:256 と
+       screens.md 03 の行の表がどちらも「差引」で、Figma の注記も
+       「差引は 収入 − 固定費 − 変動費 です」と書いている。
+       画面の名前（年月別 収支）は変えていない。戻すならこの1行 */
+    netLabel: matrix.scope === "business" ? "事業所得" : "差引",
     asOfNote:
       mode === "diff" && currentIndex >= 0
         ? {

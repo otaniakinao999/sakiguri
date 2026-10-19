@@ -31,7 +31,7 @@ export default function DevCashflowWiredPage() {
     to: fixture.to,
     today: FIXTURE_TODAY,
     reserveLine: FIXTURE_RESERVE_LINE,
-    cardDue: fixture.cardDue,
+    stats: fixture.stats,
   });
 
   return (
