@@ -225,4 +225,11 @@
   --color-chart-forecast: var(--chart-forecast);
   --color-chart-defense: var(--chart-defense);
   --color-chart-defense-zone: var(--chart-defense-zone);
+
+  /* 版面の幅。余白のスケールとは別に持つ（これらは間隔ではなく寸法）。
+     SideNav 224px / 口座・カード 420px / ダイアログ 560px は
+     components.md と screens.md が名指しで決めている。 */
+  --container-sidenav: 224px;
+  --container-ledger: 420px;
+  --container-dialog: 560px;
 }
