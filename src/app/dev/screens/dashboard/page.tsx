@@ -8,16 +8,18 @@
  * 値は docs/design/screens.md の表そのまま。1/17 の大口出金は
  * decisions.md 未決1（1/16 ¥1,905,200 と 1/18 ¥1,382,500 の辻褄）に従って置いた。
  *
- * **計算はしていない。** 本番は DashboardScreen が同じ props を作って
- * 同じ DashboardView に渡す。
+ * **ここは Figma との見比べ専用。** 本番の DashboardScreen は同じ
+ * DashboardView に実データを渡すが、差し込み口（警告・合計・注記）も
+ * 埋めるので見た目は一致しない。差は ADR-0014 にまとめてある。
+ *
+ * **計算はしていない。**
  */
 
 import type { DateStr, Yen } from "@/core/types";
-import {
-  DashboardView,
-  type DashboardTodo,
-} from "@/components/dashboard/DashboardView";
+import { DashboardView, type DashboardTodo } from "@/components/dashboard/DashboardView";
 import type { ForecastPoint } from "@/components/sakiguri/ForecastChart";
+import { Button } from "@/components/ui/v06/button";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 const TODAY: DateStr = "2026-10-18";
 const DEFENSE_LINE: Yen = 1_500_000;
@@ -83,7 +85,7 @@ export default function DevDashboardPage() {
   return (
     <div className="min-h-screen bg-muted">
       {/* Figma の Main は 1200px。SideNav（240px の列）はこのページには出さない。 */}
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
+      <div className="mx-auto flex min-h-screen w-full max-w-content flex-col">
         <DashboardView
           today={TODAY}
           balance={2_847_300}
@@ -99,8 +101,14 @@ export default function DevDashboardPage() {
             ],
           }}
           lowPoint={{ date: "2027-01-18", value: 1_382_500 }}
-          staleCount={2}
+          annotation={{
+            tone: "warning",
+            prefix: "1月18日に ",
+            amount: 1_382_500,
+            suffix: "。生活防衛ラインを割る見込みです",
+          }}
           todos={TODOS}
+          todoCount={TODOS.length}
           accounts={[
             { label: "現金", value: 52_000 },
             { label: "○○銀行 普通", value: 2_145_300 },
@@ -110,6 +118,19 @@ export default function DevDashboardPage() {
             { label: "××カード 確定金額", value: 186_200 },
             { label: "××カード 未確定分", value: 62_400 },
           ]}
+          heroActions={
+            <Button>
+              <ArrowUpTrayIcon />
+              CSVを取り込む
+            </Button>
+          }
+          /* Figma の行には「予定どおり」が付いている。本番は消し込みの
+             処理がこの画面に無いので渡していない（ADR-0014） */
+          rowAction={() => (
+            <Button variant="outline" size="sm">
+              予定どおり
+            </Button>
+          )}
         />
       </div>
     </div>

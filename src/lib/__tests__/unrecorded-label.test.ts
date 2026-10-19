@@ -20,10 +20,17 @@ import { UNRECORDED_LABEL } from "../unrecorded";
  * あれば落ちるよう、**競合する言い回しを全ソースから探す**ほうも置く。
  */
 
-/** `Unrecorded.amount` を画面に出しているファイル */
+/**
+ * `Unrecorded.amount` を画面に出しているファイル
+ *
+ * **数えるファイルではなく、書き出すファイルを列挙する。**
+ * ダッシュボードは DashboardScreen が金額を計算して DashboardView が
+ * 文字にするので、語を持っているのは View 側。Screen を見ていると
+ * 「語を使っていない」で落ちるが、実際には揃っている。
+ */
 const SHOWS_THE_VALUE = [
   "src/components/app-shell/BalanceHeader.tsx",
-  "src/components/dashboard/DashboardScreen.tsx",
+  "src/components/dashboard/DashboardView.tsx",
   "src/components/cashflow/BalanceChart.tsx",
 ];
 

@@ -12,7 +12,11 @@ export interface TodoRowProps {
   title: string;
   amount: Yen;
   amountType?: AmountType;
-  category: Category;
+  /**
+   * 区分。**null なら出さない。**
+   * 費用で固定／変動が決まっていない場合がある（§3.1.2 適用規則1）。
+   */
+  category?: Category | null;
   status?: Status;
   actions?: React.ReactNode;
   /** 行の下に開く領域（照合候補・ほかの操作） */
@@ -45,13 +49,8 @@ export function TodoRow({
       <div className="flex items-center gap-12 py-12">
         <span className="num w-48 shrink-0 t-table text-muted-foreground">{date}</span>
         <span className="min-w-0 flex-1 truncate t-body text-foreground">{title}</span>
-        <Amount
-          value={amount}
-          type={amountType}
-          size="body"
-          className="w-amount shrink-0"
-        />
-        <CategoryTag category={category} />
+        <Amount value={amount} type={amountType} size="body" className="shrink-0" />
+        {category ? <CategoryTag category={category} /> : null}
         {status ? <StatusChip status={status} /> : null}
         {actions ? <div className="flex shrink-0 items-center gap-8">{actions}</div> : null}
       </div>
