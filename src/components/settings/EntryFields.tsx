@@ -20,7 +20,7 @@ export interface EntryFieldsValue {
   toAccountId?: string;
 }
 
-const CELL = "border-b-border-base-low border-b px-8 py-8 align-top";
+const CELL = "border-b border-border px-cell py-8 align-top";
 
 /**
  * 収支の向きを変えたときの後始末。

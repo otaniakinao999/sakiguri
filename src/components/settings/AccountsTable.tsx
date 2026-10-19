@@ -10,8 +10,8 @@
 import type { Account, CardAccount } from "@/core/types";
 import { isCard } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/v06/button";
+import { Panel } from "@/components/sakiguri/Panel";
 import { NumberInput, Select, TextInput } from "@/components/ui/inputs";
 import {
   addAccount,
@@ -22,9 +22,9 @@ import {
   updateAccount,
 } from "@/lib/mutations";
 
-const CELL = "border-b-border-base-low border-b px-8 py-8 align-top";
+const CELL = "border-b border-border px-cell py-8 align-top";
 const HEAD =
-  "bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-8 py-8 text-left text-body-xxs font-semibold tracking-wide whitespace-nowrap";
+  "border-b border-border bg-muted px-cell py-8 text-left t-label-sm text-muted-foreground whitespace-nowrap";
 
 export function AccountsTable() {
   const { data, setData } = useAppData();
@@ -34,9 +34,9 @@ export function AccountsTable() {
     setData((d) => updateAccount(d, id, value));
 
   return (
-    <Card
+    <Panel
       title={`口座・カード（${data.accounts.length}件）`}
-      right={
+      action={
         <span className="flex gap-8">
           <Button
             size="sm"
@@ -59,12 +59,12 @@ export function AccountsTable() {
       }
     >
       {data.accounts.length === 0 ? (
-        <p className="text-object-base-mid py-24 text-center text-body-xs">
+        <p className="text-muted-foreground py-24 text-center t-body-sm">
           まず口座を1つ登録してください。ここが資金繰りの起点になります。
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-body-xs">
+          <table className="w-full border-collapse t-body-sm">
             <thead>
               <tr>
                 <th className={`${HEAD} min-w-[var(--layout-field-width)]`}>名前</th>
@@ -134,7 +134,7 @@ export function AccountsTable() {
                         }
                       />
                     ) : (
-                      <span className="text-object-base-mid">—</span>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
                   {isCard(account) ? (
@@ -193,14 +193,14 @@ export function AccountsTable() {
                       </td>
                     </>
                   ) : (
-                    <td className={`${CELL} text-object-base-mid`} colSpan={4}>
+                    <td className={`${CELL} text-muted-foreground`} colSpan={4}>
                       —
                     </td>
                   )}
                   <td className={`${CELL} text-right`}>
                     <Button
                       size="sm"
-                      color="danger"
+                      variant="destructive"
                       onClick={() => setData((d) => removeAccount(d, account.id))}
                     >
                       削除
@@ -212,7 +212,7 @@ export function AccountsTable() {
           </table>
         </div>
       )}
-      <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
+      <p className="text-muted-foreground mt-12 t-body-sm leading-normal">
         例：15日締め・翌月10日払いなら 締日15／支払月「翌月」／支払日10。
         カードで払った支出は、利用日ではなくこの日に口座から出ていく前提で
         残高を計算します。口座を削除すると、その口座を使う予定と実績も
@@ -222,6 +222,6 @@ export function AccountsTable() {
         その2つが並んで載っています。分けずに合計を入れると、1ヶ月先に
         落ちるはずの金額まで次回に計上され、残高が実際より低く出ます。
       </p>
-    </Card>
+    </Panel>
   );
 }

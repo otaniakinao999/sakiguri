@@ -10,8 +10,8 @@
 import { compareDate } from "@/core/date";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/v06/button";
+import { Panel } from "@/components/sakiguri/Panel";
 import { DateInput, TextInput } from "@/components/ui/inputs";
 import {
   addOneoff,
@@ -23,18 +23,18 @@ import {
 
 import { EntryFieldCells } from "./EntryFields";
 
-const CELL = "border-b-border-base-low border-b px-8 py-8 align-top";
+const CELL = "border-b border-border px-cell py-8 align-top";
 const HEAD =
-  "bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-8 py-8 text-left text-body-xxs font-semibold tracking-wide whitespace-nowrap";
+  "border-b border-border bg-muted px-cell py-8 text-left t-label-sm text-muted-foreground whitespace-nowrap";
 
 export function OneoffsTable() {
   const { data, setData, today, session } = useAppData();
   const sorted = [...data.oneoffs].sort((a, b) => compareDate(a.date, b.date));
 
   return (
-    <Card
+    <Panel
       title={`単発の予定（${data.oneoffs.length}件）`}
-      right={
+      action={
         <Button
           size="sm"
           disabled={data.accounts.length === 0 || !today}
@@ -50,12 +50,12 @@ export function OneoffsTable() {
       }
     >
       {sorted.length === 0 ? (
-        <p className="text-object-base-mid py-24 text-center text-body-xs">
+        <p className="text-muted-foreground py-24 text-center t-body-sm">
           予定納税、設備投資、大型の入金など、1回限りのものを登録します。
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-body-xs">
+          <table className="w-full border-collapse t-body-sm">
             <thead>
               <tr>
                 <th className={HEAD}>日付</th>
@@ -98,7 +98,7 @@ export function OneoffsTable() {
                   <td className={`${CELL} text-right`}>
                     <Button
                       size="sm"
-                      color="danger"
+                      variant="destructive"
                       onClick={() => setData((d) => removeOneoff(d, item.id))}
                     >
                       削除
@@ -110,6 +110,6 @@ export function OneoffsTable() {
           </table>
         </div>
       )}
-    </Card>
+    </Panel>
   );
 }

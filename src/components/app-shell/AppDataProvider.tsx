@@ -76,7 +76,13 @@ export interface AppDataStore {
   signOut: () => Promise<void>;
 }
 
-const AppDataContext = createContext<AppDataStore | null>(null);
+/**
+ * **開発用のページが差し替えるために export してある。**
+ * 本番では AppDataProvider だけが値を入れる。/dev/screens/* は
+ * Supabase に到達できない環境でも画面を開けるよう、ここに固定値を
+ * 流し込む（AppDataProvider 自身は自分で取得してしまうため）。
+ */
+export const AppDataContext = createContext<AppDataStore | null>(null);
 
 export function useAppData(): AppDataStore {
   const store = useContext(AppDataContext);

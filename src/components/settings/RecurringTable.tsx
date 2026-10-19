@@ -11,8 +11,8 @@
 
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/v06/button";
+import { Panel } from "@/components/sakiguri/Panel";
 import { MonthsInput, NumberInput, TextInput } from "@/components/ui/inputs";
 import {
   addRecurring,
@@ -25,17 +25,17 @@ import {
 
 import { EntryFieldCells } from "./EntryFields";
 
-const CELL = "border-b-border-base-low border-b px-8 py-8 align-top";
+const CELL = "border-b border-border px-cell py-8 align-top";
 const HEAD =
-  "bg-surface-base-secondary text-object-base-mid border-b-border-base-low border-b px-8 py-8 text-left text-body-xxs font-semibold tracking-wide whitespace-nowrap";
+  "border-b border-border bg-muted px-cell py-8 text-left t-label-sm text-muted-foreground whitespace-nowrap";
 
 export function RecurringTable() {
   const { data, setData, session } = useAppData();
 
   return (
-    <Card
+    <Panel
       title={`定期項目（${data.recurring.length}件）`}
-      right={
+      action={
         <Button
           size="sm"
           disabled={data.accounts.length === 0}
@@ -49,12 +49,12 @@ export function RecurringTable() {
       }
     >
       {data.recurring.length === 0 ? (
-        <p className="text-object-base-mid py-24 text-center text-body-xs">
+        <p className="text-muted-foreground py-24 text-center t-body-sm">
           毎月の家賃・売上・保険料などを登録すると、予測が立ち上がります。
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-body-xs">
+          <table className="w-full border-collapse t-body-sm">
             <thead>
               <tr>
                 <th className={`${HEAD} min-w-[var(--layout-field-width)]`}>内容</th>
@@ -120,7 +120,7 @@ export function RecurringTable() {
                       </Button>
                       <Button
                         size="sm"
-                        color="danger"
+                        variant="destructive"
                         onClick={() => setData((d) => removeRecurring(d, item.id))}
                       >
                         削除
@@ -133,12 +133,12 @@ export function RecurringTable() {
           </table>
         </div>
       )}
-      <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
+      <p className="text-muted-foreground mt-12 t-body-sm leading-normal">
         「日」に31を入れると月末に寄ります（2月は28日か29日）。「対象月」に
         6,8,10,1 と書くとその月だけ発生します（住民税など）。「事業%」が
         家事按分です。100なら全額経費、0なら家計、40なら4割を事業経費として
         集計します。初期値は0です。
       </p>
-    </Card>
+    </Panel>
   );
 }

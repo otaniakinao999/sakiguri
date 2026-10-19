@@ -19,7 +19,11 @@ import type { EntryType } from "@/core/types";
 import { parseMonthsField, parseNumberField } from "@/lib/number-field";
 
 const CONTROL =
-  "border-border-base-high bg-surface-base-primary text-object-base-high w-full rounded-base border px-8 py-4 text-body-xs leading-normal disabled:bg-surface-overlay-hoverd disabled:text-object-base-low";
+  /* **横余白は sm。** 設定の表は列が多く、md（16px）だと選択肢の文字が
+   見えなくなる（実際に空の箱に見えた）。高さは md のまま */
+  "h-control-md w-full min-w-0 rounded-md border border-input bg-background px-control-sm t-body text-foreground " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 /** ラベルと入力の組。 */
 export function Field({
@@ -36,13 +40,13 @@ export function Field({
     <div>
       <label
         htmlFor={id}
-        className="text-object-base-mid mb-4 block text-body-xxs font-semibold"
+        className="mb-4 block t-label-sm text-muted-foreground"
       >
         {label}
       </label>
       {children(id)}
       {hint && (
-        <p className="text-object-base-mid mt-4 text-body-xxs">{hint}</p>
+        <p className="mt-4 t-body-sm text-muted-foreground">{hint}</p>
       )}
     </div>
   );
@@ -156,10 +160,10 @@ export function MonthsInput({
           if (!invalid) setDraft(null);
           props.onBlur?.(e);
         }}
-        className={`${CONTROL} ${invalid ? "border-object-error-dim" : ""}`}
+        className={`${CONTROL} ${invalid ? "border-destructive" : ""}`}
       />
       {invalid && (
-        <p id={messageId} className="text-object-error-dim mt-4 text-body-xxs leading-normal">
+        <p id={messageId} className="mt-4 t-body-sm text-fg-destructive">
           1〜12 の月を入れてください。直前の指定のままにしてあります。
         </p>
       )}
@@ -172,7 +176,9 @@ export function Select({
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...props} className={CONTROL}>
+    /* **最小幅を持たせる。** 設定の表は列が多く、幅を内容任せにすると
+       選択肢の文字が1文字も出ない空の箱になる（実際になった） */
+    <select {...props} className={`${CONTROL} min-w-amount`}>
       {children}
     </select>
   );
