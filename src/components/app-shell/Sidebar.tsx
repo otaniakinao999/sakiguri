@@ -27,7 +27,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useAppData } from "./AppDataProvider";
-import { formatYen } from "@/lib/format";
+import { formatYearMonthDay, formatYen } from "@/lib/format";
 import { NAV_ITEMS } from "./navigation";
 
 /** アイコンは表示の都合なので navigation.ts（画面の一覧）には持たせない。 */
@@ -95,7 +95,8 @@ export function Sidebar() {
       {/* 狭いときは残高ヘッダーを優先するので隠す */}
       <div className="mt-auto hidden border-t border-border-primary-subtle px-12 pt-16 text-primary-foreground wide:block">
         <div className="t-label-sm text-primary-foreground/70">基準日</div>
-        <div className="num t-body">{data.asOf}</div>
+        {/* Figma 2030:98 は「2026年9月1日」。ISO のまま出さない */}
+        <div className="num t-body">{formatYearMonthDay(data.asOf)}</div>
 
         <div className="mt-12 t-label-sm text-primary-foreground/70">生活防衛ライン</div>
         <div className="num t-body">{formatYen(data.reserveLine)}</div>

@@ -7,8 +7,13 @@ import { cn } from "@/lib/utils";
 export type AmountType = "income" | "expense" | "neutral";
 export type AmountSize = "table" | "body" | "kpi";
 
-/** docs/design/components.md §3。収入は teal、支出は plum、残高は foreground。 */
-const TONE: Record<AmountType, string> = {
+/**
+ * docs/design/components.md §3。収入は teal、支出は plum、残高は foreground。
+ *
+ * **PageHeader も使う（色だけ）。** 同じ対応を2箇所に書かない
+ * （CLAUDE.md §2.8）。向こうは符号を付けないので、Amount ごとは使えない。
+ */
+export const AMOUNT_TONE: Record<AmountType, string> = {
   income: "text-fg-success",
   expense: "text-fg-destructive",
   neutral: "text-foreground",
@@ -52,7 +57,7 @@ export function Amount({
       : formatYen(value);
 
   return (
-    <span className={cn("num text-right", SIZE[size], TONE[type], className)} {...props}>
+    <span className={cn("num text-right", SIZE[size], AMOUNT_TONE[type], className)} {...props}>
       {text}
     </span>
   );

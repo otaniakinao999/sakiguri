@@ -15,64 +15,15 @@
  * **計算はしていない。**
  */
 
-import type { DateStr, Yen } from "@/core/types";
+import {
+  buildSamplePoints,
+  msOf as ms,
+  SAMPLE_DEFENSE_LINE as DEFENSE_LINE,
+  SAMPLE_TODAY as TODAY,
+} from "../../sample-series";
 import { DashboardView, type DashboardTodo } from "@/components/dashboard/DashboardView";
-import type { ForecastPoint } from "@/components/sakiguri/ForecastChart";
 import { Button } from "@/components/ui/v06/button";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
-
-const TODAY: DateStr = "2026-10-18";
-const DEFENSE_LINE: Yen = 1_500_000;
-
-const ms = (d: DateStr) => {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(y, m - 1, day).getTime();
-};
-
-/** 折れ線の節。間は日割りで補間する。 */
-const ANCHORS: Array<[DateStr, Yen]> = [
-  ["2026-09-18", 2_980_000],
-  ["2026-09-24", 2_962_000],
-  ["2026-09-25", 3_292_000],
-  ["2026-09-27", 3_197_000],
-  ["2026-10-02", 3_120_000],
-  ["2026-10-10", 2_933_800],
-  ["2026-10-14", 2_880_000],
-  [TODAY, 2_847_300],
-  ["2026-11-17", 2_412_800],
-  ["2026-12-12", 2_160_000],
-  ["2026-12-25", 1_988_000],
-  ["2027-01-16", 1_905_200],
-  /* 1/17 に税金の納付 ¥522,700。1/18 の残高に出る（decisions.md 未決1） */
-  ["2027-01-17", 1_905_200],
-  ["2027-01-18", 1_382_500],
-  ["2027-02-15", 1_612_000],
-];
-
-const DAY = 86_400_000;
-
-function buildPoints(): ForecastPoint[] {
-  const todayT = ms(TODAY);
-  const out: ForecastPoint[] = [];
-  for (let i = 0; i < ANCHORS.length - 1; i++) {
-    const [fromDate, fromValue] = ANCHORS[i];
-    const [toDate, toValue] = ANCHORS[i + 1];
-    const fromT = ms(fromDate);
-    const steps = Math.round((ms(toDate) - fromT) / DAY);
-    for (let s = 0; s < steps; s++) {
-      const t = fromT + s * DAY;
-      const value = Math.round(fromValue + ((toValue - fromValue) * s) / steps);
-      out.push({
-        t,
-        actual: t <= todayT ? value : null,
-        forecast: t >= todayT ? value : null,
-      });
-    }
-  }
-  const [lastDate, lastValue] = ANCHORS[ANCHORS.length - 1];
-  out.push({ t: ms(lastDate), actual: null, forecast: lastValue });
-  return out;
-}
 
 const TODOS: DashboardTodo[] = [
   { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, amountType: "income", category: "収入" },
@@ -91,7 +42,7 @@ export default function DevDashboardPage() {
           balance={2_847_300}
           unrecorded={186_400}
           chart={{
-            points: buildPoints(),
+            points: buildSamplePoints(),
             todayT: ms(TODAY),
             defenseLine: DEFENSE_LINE,
             markers: [

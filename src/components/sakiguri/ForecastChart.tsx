@@ -38,10 +38,25 @@ export interface ForecastChartProps {
   /** 本日の位置（縦の破線） */
   todayT: number;
   defenseLine: Yen;
+  /** 点と吹き出し。キャッシュフロー（02）は空で渡す */
   markers: ForecastMarker[];
   /** 生活防衛ラインを割る最低点。ラベルは付けず、点だけ打つ（Figma 2029:119）。 */
   lowPoint?: { t: number; value: Yen } | null;
   height?: number;
+  /**
+   * 右端の目盛り。
+   * 01 ダッシュボードは出さない（2029:88 に軸が無い）。
+   * 02 キャッシュフローは出す（2030:161 に ¥3,000,000 など3つ）。
+   */
+  yAxis?: boolean;
+  /** 縦線に添える語。02 は「今日」。01 は添えない */
+  todayLabel?: string;
+  /**
+   * 防衛ラインの額をグラフの中に書くか。
+   * 01 は中に書く。02 は凡例が「生活防衛ライン ¥1,500,000」まで書くので
+   * 中には書かない（二重になる）。
+   */
+  defenseLabel?: boolean;
 }
 
 interface MarkerLabelProps extends Omit<ForecastMarker, "t"> {
@@ -92,6 +107,9 @@ export function ForecastChart({
   markers,
   lowPoint = null,
   height = 264,
+  yAxis = false,
+  todayLabel,
+  defenseLabel = true,
 }: ForecastChartProps) {
   const firstT = points[0]?.t ?? todayT;
   const lastT = points[points.length - 1]?.t ?? todayT;
@@ -114,10 +132,28 @@ export function ForecastChart({
   const low = min - (max - min) * 0.18;
   const high = max + (max - min) * 0.3;
 
+  /* **目盛りはキリのいい額にする。** domain をそのまま割ると
+     ¥2,938,790 のような値が並ぶ（実際に並んだ）。Figma 2030:161 は
+     ¥1,800,000 / ¥2,400,000 / ¥3,000,000 で、60万刻み */
+  const yTicks = React.useMemo(() => {
+    if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return undefined;
+    const raw = (high - low) / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step =
+      [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((m) => m * mag).find((v) => v >= raw) ??
+      10 * mag;
+    const out: number[] = [];
+    for (let v = Math.ceil(low / step) * step; v <= high; v += step) out.push(v);
+    return out;
+  }, [low, high]);
+
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={points} margin={{ top: 36, right: 8, bottom: 4, left: 8 }}>
+        <ComposedChart
+          data={points}
+          margin={{ top: 36, right: yAxis ? 12 : 8, bottom: 4, left: 8 }}
+        >
           <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.6} />
 
           <XAxis
@@ -132,7 +168,17 @@ export function ForecastChart({
             axisLine={false}
             tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
           />
-          <YAxis hide domain={[low, high]} />
+          <YAxis
+            domain={[low, high]}
+            hide={!yAxis}
+            orientation="right"
+            width={88}
+            ticks={yAxis ? yTicks : undefined}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v: number) => formatYen(v)}
+            tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+          />
 
           <ReferenceArea
             y1={low}
@@ -144,14 +190,32 @@ export function ForecastChart({
             y={defenseLine}
             stroke="var(--chart-defense)"
             strokeDasharray="6 4"
-            label={{
-              value: `生活防衛ライン ${formatYen(defenseLine)}`,
-              position: "insideTopLeft",
-              fill: "var(--chart-defense)",
-              fontSize: 12,
-            }}
+            label={
+              defenseLabel
+                ? {
+                    value: `生活防衛ライン ${formatYen(defenseLine)}`,
+                    position: "insideTopLeft",
+                    fill: "var(--chart-defense)",
+                    fontSize: 12,
+                  }
+                : undefined
+            }
           />
-          <ReferenceLine x={todayT} stroke="var(--border)" strokeDasharray="3 3" />
+          <ReferenceLine
+            x={todayT}
+            stroke="var(--border)"
+            strokeDasharray="3 3"
+            label={
+              todayLabel
+                ? {
+                    value: todayLabel,
+                    position: "insideTopLeft",
+                    fill: "var(--muted-foreground)",
+                    fontSize: 12,
+                  }
+                : undefined
+            }
+          />
 
           <Line
             type="linear"
