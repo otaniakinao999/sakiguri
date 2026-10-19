@@ -51,13 +51,17 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="flex min-w-0 flex-col gap-2">
+      {/* サブタイトルが長い画面（04）だと、縮まないぶん右側が2行目に
+          落ちる。縮めて1行に収める */}
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <h1 className="t-h4 text-foreground">{title}</h1>
         {subtitle ? <p className="t-body-sm text-muted-foreground">{subtitle}</p> : null}
       </div>
 
       {stats?.length || action ? (
-        <div className="flex flex-wrap items-center gap-32">
+        /* **折り返しても右端に寄せる。** justify-between だけだと、
+           2行目に回ったときに左に付く（実際に付いた） */
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-24">
           {stats?.map((stat) => (
             <div key={stat.label} className="flex flex-col items-end gap-2">
               <span className="t-label-sm text-muted-foreground">{stat.label}</span>

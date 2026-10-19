@@ -19,26 +19,22 @@
 import { useMemo, useState } from "react";
 
 import { buildBalanceSeries } from "@/core/balance";
-import { categoryOf } from "@/core/categories";
 import { classificationChanges } from "@/core/classification";
 import { addDays } from "@/core/date";
 import { buildForecast } from "@/core/forecast";
 import type { Actual, ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import Link from "next/link";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+
+import { Button } from "@/components/ui/v06/button";
 import { Modal } from "@/components/ui/Modal";
-import { Notification } from "@/components/ui/Notification";
-import { KindTag, RatioTag } from "@/components/ui/Tag";
+import { Callout } from "@/components/sakiguri/Callout";
+import { Panel } from "@/components/sakiguri/Panel";
+import { buildHeaderStats } from "@/lib/header-stats";
 import { buildActualList, MONTH_PAGE_SIZE } from "@/lib/actual-list";
 import { describeInheritance } from "@/lib/classification-notice";
-import {
-  formatAmount,
-  formatMonthDay,
-  formatYearMonthLabel,
-  MINUS,
-} from "@/lib/format";
 import {
   addActual,
   blankActual,
@@ -62,7 +58,14 @@ import {
 
 import { ActualForm, applyActualPatch, isSubmittable } from "./ActualForm";
 import { DeferralEditor } from "./DeferralEditor";
-import { TodoTable } from "./TodoTable";
+import { EntryView } from "./EntryView";
+import {
+  buildEntryActualRows,
+  buildEntryMonths,
+  buildEntryTodoRows,
+  formatActualListFooter,
+  futureNoteOf,
+} from "./entry-view-model";
 
 /** 要対応に出す予定の範囲。今日から先1週間ぶんまで拾う */
 const PENDING_LOOKAHEAD_DAYS = 7;
@@ -80,6 +83,8 @@ export function EntryScreen() {
 
   /** 要対応リストを全件出すか（B-2） */
   const [showAllTodo, setShowAllTodo] = useState(false);
+  /** ［ほかの操作］を開いている行。1度に1行だけ */
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   /* 実績一覧（FR-42） */
   const [listMonth, setListMonth] = useState<string | null>(null);
@@ -87,7 +92,7 @@ export function EntryScreen() {
 
   const computed = useMemo(() => {
     if (!today || data.accounts.length === 0) {
-      return { todo: [] as TodoRow[], candidateCount: 0 };
+      return { todo: [] as TodoRow[], candidateCount: 0, series: null };
     }
     const to = forecastEnd(data.asOf);
     const forecast = buildForecast(
@@ -118,6 +123,8 @@ export function EntryScreen() {
         until: addDays(today, PENDING_LOOKAHEAD_DAYS),
       }),
       candidateCount: candidates.length,
+      /* PageHeader の残高サマリー。ほかの画面と同じ数字を出す（AC-49） */
+      series,
     };
   }, [data, today]);
 
@@ -127,21 +134,16 @@ export function EntryScreen() {
     [data.actuals, listMonth, listPage],
   );
 
-  const accountName = (id: string) =>
-    data.accounts.find((a) => a.id === id)?.name ?? "—";
-
-  if (!today) return <Card title="実績入力">読み込み中…</Card>;
+  if (!today) return <Panel title="実績入力">読み込み中…</Panel>;
 
   if (data.accounts.length === 0) {
     return (
-      <Card title="実績入力">
-        <p className="text-object-base-high text-body-sm leading-normal">
-          まだ口座が登録されていません。
-        </p>
-        <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
+      <Panel title="実績入力">
+        <p className="t-body text-foreground">まだ口座が登録されていません。</p>
+        <p className="t-body-sm text-muted-foreground">
           先に「予定の設定」で口座を登録してください。
         </p>
-      </Card>
+      </Panel>
     );
   }
 
@@ -244,211 +246,187 @@ export function EntryScreen() {
     },
   };
 
+  const todoById = new Map<string, TodoRow>(
+    computed.todo.map((row) => [
+      row.kind === "plan" ? row.plan.key : row.actual.id,
+      row,
+    ]),
+  );
+  const planRow = (id: string) => {
+    const row = todoById.get(id);
+    return row?.kind === "plan" ? row : null;
+  };
+  const candidateRow = (id: string) => {
+    const row = todoById.get(id);
+    return row?.kind === "candidate" ? row : null;
+  };
+
+  const visibleTodo = showAllTodo
+    ? computed.todo
+    : computed.todo.slice(0, TODO_PREVIEW_COUNT);
+
   return (
-    <div className="flex flex-col gap-12">
-      {/* ---------- 要対応（主）---------- */}
-      <Card
-        title={`要対応（${computed.todo.length}件）`}
-        right={
-          <Button size="sm" onClick={startForm}>
-            ＋ 実績を手入力
+    <EntryView
+      stats={computed.series ? buildHeaderStats(computed.series, data.accounts, today) : []}
+      headerAction={
+        <Link href="/import">
+          <Button>
+            <ArrowUpTrayIcon />
+            CSVを取り込む
           </Button>
-        }
-      >
-        {computed.candidateCount > 0 && (
-          <div className="mb-12">
-            <Notification variant="caution">
+        </Link>
+      }
+      todoCount={computed.todo.length}
+      todos={buildEntryTodoRows(visibleTodo)}
+      openRowId={openRowId}
+      onSettleAsIs={(id) => {
+        const row = planRow(id);
+        if (row) actions.settleAsIs(row);
+      }}
+      onToggleOther={(id) => setOpenRowId((prev) => (prev === id ? null : id))}
+      onSettleWithAmount={(id, amount) => {
+        const row = planRow(id);
+        if (row) actions.settleWithAmount(row, amount);
+        setOpenRowId(null);
+      }}
+      onDefer={(id) => {
+        const row = planRow(id);
+        if (row) actions.defer(row);
+        setOpenRowId(null);
+      }}
+      onLink={(rowId, candidateId) => {
+        const row = candidateRow(rowId);
+        if (row) actions.linkTo(row, candidateId);
+      }}
+      onUnplanned={(id) => {
+        const row = candidateRow(id);
+        if (row) actions.markUnplanned(row);
+      }}
+      months={buildEntryMonths(list, today)}
+      onSelectMonth={(value) => {
+        setListMonth(value);
+        setListPage(0);
+      }}
+      futureNote={futureNoteOf(list, today) ?? undefined}
+      actuals={buildEntryActualRows(list.rows).map((row) => ({
+        ...row,
+        /* FR-41。CSV取込で費目を誤って推測された分を、削除せずに直せるようにする */
+        actions: (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const actual = list.rows.find((a) => a.id === row.id);
+                if (actual) startEdit(actual);
+              }}
+            >
+              編集
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setData((d) => removeActual(d, row.id))}
+            >
+              削除
+            </Button>
+          </>
+        ),
+      }))}
+      /* ---- ここから下は v0.6.0 の Figma に無い（ADR-0014） ---- */
+      notices={
+        <>
+          {computed.candidateCount > 0 && (
+            <Callout tone="caution">
               同じ取引かもしれない実績と予定が{computed.candidateCount}組あります。
               両方が残高に乗っているため、残高が実際より低く出ています。
-              同じ取引なら「同じ取引」を押してください。
-            </Notification>
-          </div>
-        )}
-
-        {/* 予定から分類を引き継いだことを黙って済ませない（AC-46） */}
-        {inherited && (
-          <div className="mb-12">
-            <Notification>{inherited}</Notification>
-          </div>
-        )}
-
-        <TodoTable
-          rows={
-            showAllTodo
-              ? computed.todo
-              : computed.todo.slice(0, TODO_PREVIEW_COUNT)
-          }
-          accounts={data.accounts}
-          actions={actions}
-        />
-
-        {/* B-2。古いものから20件だけ出し、残りは開いて見せる */}
-        {computed.todo.length > TODO_PREVIEW_COUNT && (
-          <div className="mt-12 flex flex-wrap items-center gap-8">
-            <span className="text-object-base-mid num text-body-xxs">
+            </Callout>
+          )}
+          {/* 予定から分類を引き継いだことを黙って済ませない（AC-46） */}
+          {inherited && <Callout tone="info">{inherited}</Callout>}
+        </>
+      }
+      todoFooter={
+        /* B-2。古いものから20件だけ出し、残りは開いて見せる */
+        computed.todo.length > TODO_PREVIEW_COUNT ? (
+          <div className="flex flex-wrap items-center gap-12">
+            <span className="num t-body-sm text-muted-foreground">
               {showAllTodo
                 ? `${computed.todo.length}件すべて`
                 : `${TODO_PREVIEW_COUNT}件 ／ ${computed.todo.length}件`}
               を表示しています
             </span>
-            <Button size="sm" onClick={() => setShowAllTodo(!showAllTodo)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAllTodo(!showAllTodo)}
+            >
               {showAllTodo ? "古い20件だけ表示" : "すべて表示"}
             </Button>
           </div>
-        )}
-
-        <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
-          「予定どおり」で予定額のまま実績にします。金額が違うときや払えな
-          かったときは「ほかの操作」を開いてください。CSV取込を使うと、
-          ここの多くは自動で消し込まれます。
-        </p>
-      </Card>
-
-      {/* ---------- 繰延（FR-07）---------- */}
-      {deferring && (
-        <DeferralEditor plan={deferring} onClose={() => setDeferring(null)} />
-      )}
-
-      {/* ---------- 実績（FR-42）---------- */}
-      <Card
-        title={`実績（${list.total}件）`}
-        right={
-          list.months.length > 0 ? (
-            <span className="flex items-center gap-8">
-              <label className="sr-only" htmlFor="actual-month">
-                表示する月
-              </label>
-              <select
-                id="actual-month"
-                value={list.yearMonth ?? ""}
-                onChange={(e) => {
-                  setListMonth(e.target.value);
-                  setListPage(0);
-                }}
-                className="border-border-base-high bg-surface-base-primary rounded-base border px-8 py-4 text-body-xs"
+        ) : undefined
+      }
+      listAction={
+        <Button variant="outline" size="sm" onClick={startForm}>
+          手入力する（例外のときだけ）
+        </Button>
+      }
+      listFooter={
+        <div className="flex flex-col gap-8">
+          {/* 月内が上限を超えたときだけ出す。無限スクロールは採らない
+              （§5.1「一覧の表示件数」）。狙った位置に到達できないため */}
+          {list.pageCount > 1 && (
+            <div className="flex flex-wrap items-center gap-12">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={list.page === 0}
+                onClick={() => setListPage(list.page - 1)}
               >
-                {list.months.map((m) => (
-                  <option key={m.yearMonth} value={m.yearMonth}>
-                    {formatYearMonthLabel(m.yearMonth)}（{m.count}件）
-                  </option>
-                ))}
-              </select>
-            </span>
-          ) : undefined
-        }
-      >
-        {list.rows.length === 0 ? (
-          <p className="text-object-base-mid py-24 text-center text-body-xs">
-            まだ実績がありません。
+                前の{MONTH_PAGE_SIZE}件
+              </Button>
+              <span className="num t-body-sm text-muted-foreground">
+                {formatActualListFooter(list)}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={list.page >= list.pageCount - 1}
+                onClick={() => setListPage(list.page + 1)}
+              >
+                次の{MONTH_PAGE_SIZE}件
+              </Button>
+            </div>
+          )}
+          <p className="t-body-sm text-muted-foreground">
+            月ごとに区切って全{list.total}件を出しています。
+            月を切り替えるとすべての実績に辿り着けます（AC-28）。
           </p>
-        ) : (
-          <div className="max-h-[var(--layout-ledger-height)] overflow-auto">
-            <table className="w-full border-collapse text-body-xs">
-              <tbody>
-                {list.rows.map((actual) => (
-                  <tr key={actual.id}>
-                    <td className="border-b-border-base-low num text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
-                      {formatMonthDay(actual.date)}
-                    </td>
-                    <td className="border-b-border-base-low border-b px-8 py-8">
-                      {actual.name}
-                      <span className="text-object-base-mid block text-body-xxs">
-                        {categoryOf(actual.categoryCode).name} ／{" "}
-                        {accountName(actual.accountId)}
-                      </span>
-                    </td>
-                    <td className="border-b-border-base-low border-b px-8 py-8">
-                      <span className="flex gap-4">
-                        <KindTag event={{ ...actual, src: "actual" }} />
-                        <RatioTag bizRatio={actual.bizRatio} />
-                      </span>
-                    </td>
-                    <td className="border-b-border-base-low text-object-base-mid border-b px-8 py-8 whitespace-nowrap">
-                      {actual.key ? "消し込み済み" : "突発"}
-                    </td>
-                    <td
-                      className={`border-b-border-base-low num border-b px-8 py-8 text-right whitespace-nowrap ${
-                        actual.type === "income" ? "text-object-success-bright" : ""
-                      }`}
-                    >
-                      {actual.type === "transfer"
-                        ? "±"
-                        : actual.type === "income"
-                          ? "+"
-                          : MINUS}
-                      {formatAmount(actual.amount)}
-                    </td>
-                    <td className="border-b-border-base-low border-b px-8 py-8 text-right">
-                      <span className="flex justify-end gap-4">
-                        {/* FR-41。CSV取込で費目を誤って推測された分を
-                            削除せずに直せるようにする */}
-                        <Button size="sm" onClick={() => startEdit(actual)}>
-                          編集
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="danger"
-                          onClick={() => setData((d) => removeActual(d, actual.id))}
-                        >
-                          削除
-                        </Button>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* 月内が上限を超えたときだけ出す。無限スクロールは採らない
-            （§5.1「一覧の表示件数」）。狙った位置に到達できないため */}
-        {list.pageCount > 1 && (
-          <div className="mt-12 flex flex-wrap items-center gap-8">
-            <Button
-              size="sm"
-              disabled={list.page === 0}
-              onClick={() => setListPage(list.page - 1)}
+        </div>
+      }
+      dialog={
+        <>
+          {/* 繰延（FR-07） */}
+          {deferring && (
+            <DeferralEditor plan={deferring} onClose={() => setDeferring(null)} />
+          )}
+          {form && (
+            <Modal
+              title={editingId ? "実績を編集" : "実績を手入力"}
+              onClose={closeForm}
             >
-              前の200件
-            </Button>
-            <span className="text-object-base-mid num text-body-xxs">
-              {list.page * MONTH_PAGE_SIZE + 1}〜
-              {list.page * MONTH_PAGE_SIZE + list.rows.length} 件目 ／{" "}
-              {list.monthCount}件（{list.page + 1}/{list.pageCount}ページ）
-            </span>
-            <Button
-              size="sm"
-              disabled={list.page >= list.pageCount - 1}
-              onClick={() => setListPage(list.page + 1)}
-            >
-              次の200件
-            </Button>
-          </div>
-        )}
-
-        <p className="text-object-base-mid mt-12 text-body-xxs leading-normal">
-          月ごとに区切って全件を出しています。見出しの件数は全期間の合計で、
-          月を切り替えるとすべての実績に辿り着けます。
-        </p>
-      </Card>
-
-      {/* ---------- 手入力・編集（従）---------- */}
-      {form && (
-        <Modal
-          title={editingId ? "実績を編集" : "実績を手入力"}
-          onClose={closeForm}
-        >
-          <ActualForm
-            value={form}
-            accounts={data.accounts}
-            mode={editingId ? "edit" : "create"}
-            onChange={(patch) => setForm((f) => (f ? applyActualPatch(f, patch) : f))}
-            onSubmit={submit}
-            onCancel={closeForm}
-          />
-        </Modal>
-      )}
-    </div>
+              <ActualForm
+                value={form}
+                accounts={data.accounts}
+                mode={editingId ? "edit" : "create"}
+                onChange={(patch) => setForm((f) => (f ? applyActualPatch(f, patch) : f))}
+                onSubmit={submit}
+                onCancel={closeForm}
+              />
+            </Modal>
+          )}
+        </>
+      }
+    />
   );
 }
