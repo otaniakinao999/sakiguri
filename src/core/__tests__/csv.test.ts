@@ -12,6 +12,8 @@ import {
   normalizeAmount,
   normalizeDate,
   parseCsv,
+  planMatches,
+  planMatchesExceptAmount,
   type ColumnMapping,
   type HistoryEntry,
 } from "../csv";
@@ -898,5 +900,47 @@ describe("純関数であること", () => {
     const args = { rows, mapping: mapping(), accountId: "a1" };
 
     expect(buildImportRows(args)).toEqual(buildImportRows(args));
+  });
+});
+
+describe("照合できなかった理由（screens.md 05 の「照合」列）", () => {
+  /* **planMatches から金額だけを外した述語を共有している。**
+     条件を2箇所に書くと片方にだけ増える（AC-33 の「口座が一致」が実際そうだった） */
+  const plan: ForecastInstance = {
+    key: "p1",
+    date: "2026-09-25",
+    name: "○○商会 売上入金",
+    type: "income",
+    costType: null,
+    categoryCode: "INC-01",
+    amount: 330_000,
+    bizRatio: 100,
+    accountId: "a1",
+    src: "recurring",
+    srcId: "r1",
+  };
+
+  const subject = {
+    date: "2026-09-27" as const,
+    type: "income" as const,
+    amount: 330_000,
+    accountId: "a1",
+  };
+
+  it("金額以外が合えば true", () => {
+    expect(planMatchesExceptAmount(subject, plan)).toBe(true);
+    expect(planMatches(subject, plan)).toBe(true);
+  });
+
+  it("金額だけ違うとき、planMatches は false でこちらは true", () => {
+    const other = { ...subject, amount: 330_001 };
+    expect(planMatches(other, plan)).toBe(false);
+    expect(planMatchesExceptAmount(other, plan)).toBe(true);
+  });
+
+  it("口座・種別・日付の条件はどちらでも効く", () => {
+    expect(planMatchesExceptAmount({ ...subject, accountId: "a2" }, plan)).toBe(false);
+    expect(planMatchesExceptAmount({ ...subject, type: "expense" }, plan)).toBe(false);
+    expect(planMatchesExceptAmount({ ...subject, date: "2026-10-20" }, plan)).toBe(false);
   });
 });

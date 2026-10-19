@@ -389,6 +389,23 @@ export function planMatches(
   plan: ForecastInstance,
 ): boolean {
   if (plan.amount !== subject.amount) return false;
+  return planMatchesExceptAmount(subject, plan);
+}
+
+/**
+ * `planMatches` から**金額の条件だけを外した**もの。
+ *
+ * 照合できなかった理由を画面に出すために要る（screens.md 05「要対応
+ * （金額が一致しません）」と「要対応（候補がありません）」）。
+ *
+ * **planMatches の隣に置き、planMatches 自身がこれを呼ぶ。** 条件を
+ * 2箇所に書くと片方にだけ条件が増える。実際 AC-33 の「口座が一致」は
+ * 両方に手で足していた（上のコメント）。同じことを繰り返さない。
+ */
+export function planMatchesExceptAmount(
+  subject: MatchSubject,
+  plan: ForecastInstance,
+): boolean {
   if (plan.type !== subject.type) return false;
   if (plan.accountId !== subject.accountId) return false;
   return daysBetween(plan.date, subject.date) <= MATCH_WINDOW_DAYS;
@@ -439,6 +456,14 @@ export interface ImportRow {
   matchedName: string | null;
   /** 費目推定のもとになった名称。無ければ null */
   guessedFrom: string | null;
+  /**
+   * 照合の結果（screens.md 05「照合」列）。
+   *
+   * `amountDiffers` は「日付も口座も種別も合う予定はあるが、金額が違う」。
+   * 利用者が次にすることが変わる（金額を直すのか、予定を作るのか）ので、
+   * 「候補がありません」と同じ文言にしない。
+   */
+  matchHint: "matched" | "amountDiffers" | "noCandidate";
 }
 
 export interface BuildImportRowsInput {
@@ -543,6 +568,13 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       matchedKey: matched?.key ?? null,
       matchedName: matched?.name ?? null,
       guessedFrom: guess?.from ?? null,
+      matchHint: matched
+        ? ("matched" as const)
+        : candidates.some((plan) =>
+              planMatchesExceptAmount({ date, type, amount, accountId }, plan),
+            )
+          ? ("amountDiffers" as const)
+          : ("noCandidate" as const),
     });
   });
 
