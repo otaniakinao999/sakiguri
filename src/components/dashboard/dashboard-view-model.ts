@@ -17,6 +17,7 @@ import type { DateStr, Yen } from "@/core/types";
 import type { AmountType } from "@/components/sakiguri/Amount";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
 import type { ForecastMarker, ForecastPoint } from "@/components/sakiguri/ForecastChart";
+import { buildForecastPoints, msOf } from "@/lib/forecast-points";
 import { formatMonthDay, formatMonthDayJa, formatYen } from "@/lib/format";
 import { DASHBOARD_HORIZON_DAYS, type Dashboard } from "@/lib/dashboard";
 
@@ -90,15 +91,6 @@ export interface DashboardViewModel {
   total: { label: string; value: Yen };
 }
 
-/** DateStr をグラフの横軸（エポックミリ秒）に。ローカル時刻で揃える */
-export function msOf(date: DateStr): number {
-  return new Date(
-    Number(date.slice(0, 4)),
-    Number(date.slice(5, 7)) - 1,
-    Number(date.slice(8, 10)),
-  ).getTime();
-}
-
 export interface DashboardViewModelInput {
   series: BalanceSeries;
   dashboard: Dashboard;
@@ -117,19 +109,7 @@ export function buildDashboardViewModel({
   const from = addDays(today, -LOOKBACK_DAYS);
   const to = addDays(today, RANGES[range].days);
 
-  /* 実線は実績系列の終端まで、破線はそこから。**今日を直接見ない。**
-     `actualEnd` は max(最後の実績, 今日)（balance.ts 手順4）なので、
-     ふだんは今日と同じで Figma のとおり今日から破線になる。違うのは
-     未来日付の実績があるときで、そこまで実線が伸びる。今日で切ると、
-     利用者が入れた実績が線から消える。
-     継ぎ目の1点は実線にも破線にも入れる。でないと線が切れる */
-  const points: ForecastPoint[] = series.rows
-    .filter((row) => row.date >= from && row.date <= to)
-    .map((row) => ({
-      t: msOf(row.date),
-      actual: row.act,
-      forecast: row.date >= series.actualEnd ? row.proj : null,
-    }));
+  const points = buildForecastPoints(series.rows, series.actualEnd, from, to);
 
   const projAt = (date: DateStr) =>
     series.rows.find((row) => row.date === date)?.proj ?? null;

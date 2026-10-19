@@ -7,10 +7,11 @@ import {
   FIXTURE_RESERVE_LINE,
   FIXTURE_TODAY,
 } from "../dashboard-fixture";
+import { msOf } from "@/lib/forecast-points";
+
 import {
   buildDashboardViewModel,
   LOOKBACK_DAYS,
-  msOf,
   TODO_LIMIT,
 } from "../dashboard-view-model";
 

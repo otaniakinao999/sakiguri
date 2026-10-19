@@ -45,8 +45,22 @@ export interface CashflowLedgerEntry {
   amountType: AmountType;
   category: Category | null;
   status: Status;
-  /** 備考。振替・カード引落・繰延の注記 */
+  /** 備考。振替・カード引落・繰延・未入力の注記 */
   note?: string;
+
+  /**
+   * 月の区切り行。入れると、この行は明細ではなく見出しとして描かれる。
+   *
+   * **Figma 2030:348 には無い。** 9月と10月が区切り無しで続いている。
+   * だが要件定義書 §4.2 は月ごとのまとまりと、月末残高・月中最低を
+   * 求めている。落とすと、どの月を見ているのか分からなくなる（ADR-0014）。
+   */
+  groupLabel?: string;
+  closing?: Yen | null;
+  lowest?: Yen | null;
+
+  /** 実績の id。`onEditActual` と両方そろうと内容が押せるようになる（FR-41） */
+  actualId?: string;
 }
 
 export interface TabGroup<T extends string> {
@@ -83,6 +97,14 @@ export interface CashflowViewProps {
   /** v0.6.0 に無いもの（ADR-0014）。渡さなければ出ない */
   notices?: React.ReactNode;
   footer?: React.ReactNode;
+  /** 入出金予定表の見出しに出す集計（要件定義書 §4.2） */
+  ledgerTotal?: React.ReactNode;
+  /** 期間に「期間を指定」を選んだときの開始月・終了月 */
+  periodDetail?: React.ReactNode;
+  /** 明細の上に出す編集フォーム（FR-41） */
+  ledgerEditor?: React.ReactNode;
+  /** 実績の行を押したとき（FR-41） */
+  onEditActual?: (actualId: string) => void;
 }
 
 /* ------------------------------------------------------------ 小物 */
@@ -135,6 +157,10 @@ export function CashflowView({
   kindFilter,
   notices,
   footer,
+  ledgerTotal,
+  periodDetail,
+  ledgerEditor,
+  onEditActual,
 }: CashflowViewProps) {
   return (
     <>
@@ -208,11 +234,18 @@ export function CashflowView({
         </Panel>
 
         {/* 入出金予定表 — 2030:310 */}
-        <Panel title="入出金予定表" action={<FilterTabs group={period} />}>
+        <Panel
+          title="入出金予定表"
+          count={ledgerTotal}
+          action={<FilterTabs group={period} />}
+        >
           <div className="flex flex-wrap items-center gap-12">
             <FilterTabs group={categoryFilter} />
             <FilterTabs group={kindFilter} />
+            {periodDetail}
           </div>
+
+          {ledgerEditor}
 
           <Table density="compact">
             {/* 列幅は Figma 2030:349。1088px 中 88 / 364 / 140 / 120 / 96 / 280 */}
@@ -240,22 +273,52 @@ export function CashflowView({
                   </TableCell>
                 </TableRow>
               ) : (
-                ledger.map((row, i) => (
-                  <TableRow key={row.id} fixedHeight last={i === ledger.length - 1}>
-                    <TableCell className="num whitespace-nowrap">{row.date}</TableCell>
-                    <TableCell>{row.title}</TableCell>
-                    <TableCell align="right">
-                      <Amount value={row.amount} type={row.amountType} size="table" />
-                    </TableCell>
-                    <TableCell>
-                      {row.category ? <CategoryTag category={row.category} /> : null}
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={row.status} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{row.note ?? ""}</TableCell>
-                  </TableRow>
-                ))
+                ledger.map((row, i) =>
+                  row.groupLabel !== undefined ? (
+                    <TableRow key={row.id} fixedHeight last={i === ledger.length - 1}>
+                      <TableCell kind="group" colSpan={3}>
+                        {row.groupLabel}
+                      </TableCell>
+                      <TableCell kind="group" colSpan={3} align="right">
+                        {row.closing !== null && row.closing !== undefined ? (
+                          <span className="num">
+                            月末残高 {formatYen(row.closing)}
+                            {row.lowest !== null && row.lowest !== undefined
+                              ? ` ／ 月中の最低 ${formatYen(row.lowest)}`
+                              : null}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow key={row.id} fixedHeight last={i === ledger.length - 1}>
+                      <TableCell className="num whitespace-nowrap">{row.date}</TableCell>
+                      <TableCell>
+                        {row.actualId && onEditActual ? (
+                          <button
+                            type="button"
+                            onClick={() => onEditActual(row.actualId as string)}
+                            className="text-left underline-offset-2 hover:underline focus-visible:outline-ring"
+                          >
+                            {row.title}
+                          </button>
+                        ) : (
+                          row.title
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Amount value={row.amount} type={row.amountType} size="table" />
+                      </TableCell>
+                      <TableCell>
+                        {row.category ? <CategoryTag category={row.category} /> : null}
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip status={row.status} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{row.note ?? ""}</TableCell>
+                    </TableRow>
+                  ),
+                )
               )}
             </tbody>
           </Table>
