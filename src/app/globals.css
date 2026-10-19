@@ -233,5 +233,8 @@
   --container-ledger: 420px;
   --container-dialog: 560px;
   /* Main の内容幅。Figma の Main 1200px から左右の余白 32px を引いた値。 */
+  /* やることの金額列。−¥1,234,567 が収まる幅。 */
+  --container-amount: 112px;
+  --container-main: 1200px;
   --container-content: 1136px;
 }

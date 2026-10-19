@@ -61,6 +61,16 @@ export function formatYearMonthDay(date: DateStr): string {
   );
 }
 
+/**
+ * '2026-10-18' → '10月18日'
+ *
+ * 年を落とすので、**戻すための控えには使わない**（formatYearMonthDay を使う）。
+ * 画面の見出しと注記で使う（docs/design/screens.md 01）。
+ */
+export function formatMonthDayJa(date: DateStr): string {
+  return `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日`;
+}
+
 /** '2026-09' → '2026年9月' */
 export function formatYearMonthLabel(yearMonth: string): string {
   return `${yearMonth.slice(0, 4)}年${Number(yearMonth.slice(5, 7))}月`;
