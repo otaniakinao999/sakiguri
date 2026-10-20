@@ -13,6 +13,7 @@ import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
 import type { AmountType } from "@/components/sakiguri/Amount";
 import { categoryTagFor, type Category } from "@/components/sakiguri/CategoryTag";
+import type { MonthlyBalancePoint } from "@/components/sakiguri/MonthlyBalanceChart";
 import type { PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { buildForecastPoints, msOf } from "@/lib/forecast-points";
 import {
@@ -29,6 +30,8 @@ export interface CashflowViewModel {
   chart: { points: ReturnType<typeof buildForecastPoints>; todayT: number; defenseLine: Yen };
   months: CashflowMonthRow[];
   monthsNote: string;
+  /** 残高推移の「月次」。日次とは出すものが違う（棒と月中の最低を重ねる） */
+  monthlyChart: MonthlyBalancePoint[];
   ledger: CashflowLedgerEntry[];
   /** 見出しに出す絞り込み後の合計（要件定義書 §4.2 集計） */
   total: { count: number; inflow: Yen; outflow: Yen };
@@ -112,6 +115,22 @@ export function buildCashflowViewModel({
     highlight: m.warning !== null,
   }));
 
+  /* 月次のグラフ。実績はその月の**最後に実績がある日**の残高を取る。
+     **月の最終日を見ない。** 今月は月末がまだ来ていないので act が
+     null になり、実績の線が1点だけになって描かれない（旧 BalanceChart が
+     そうなっていた）。実績が尽きた月から先は null で線が切れる */
+  const monthlyChart: MonthlyBalancePoint[] = monthly.map((m) => ({
+    label: formatYearMonthLabel(m.yearMonth),
+    closing: m.closing,
+    actual:
+      series.rows
+        .filter((row) => row.date.startsWith(m.yearMonth) && row.act !== null)
+        .at(-1)?.act ?? null,
+    inflow: m.inflow,
+    outflow: m.outflow,
+    lowest: m.lowest,
+  }));
+
   const breached = months.filter((m) => m.highlight).map((m) => m.label);
   const monthsNote =
     breached.length === 0
@@ -160,6 +179,7 @@ export function buildCashflowViewModel({
     },
     months,
     monthsNote,
+    monthlyChart,
     ledger,
     total: view.total,
   };

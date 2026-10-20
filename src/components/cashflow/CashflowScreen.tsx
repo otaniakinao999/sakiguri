@@ -194,6 +194,7 @@ export function CashflowScreen() {
         defaultValue: "daily",
         options: GRAINS,
       }}
+      monthlyChart={model.monthlyChart}
       months={model.months}
       monthsNote={model.monthsNote}
       ledger={model.ledger}

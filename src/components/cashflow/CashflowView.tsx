@@ -9,6 +9,10 @@ import {
   type ForecastPoint,
 } from "@/components/sakiguri/ForecastChart";
 import { LegendItem } from "@/components/sakiguri/LegendItem";
+import {
+  MonthlyBalanceChart,
+  type MonthlyBalancePoint,
+} from "@/components/sakiguri/MonthlyBalanceChart";
 import { Panel } from "@/components/sakiguri/Panel";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { StatusChip, type Status } from "@/components/sakiguri/StatusChip";
@@ -83,6 +87,8 @@ export interface CashflowViewProps {
   };
   /** 残高推移の 日次 / 月次 */
   trend: TabGroup<"daily" | "monthly">;
+  /** 月次に切り替えたときに出すもの */
+  monthlyChart: MonthlyBalancePoint[];
 
   months: CashflowMonthRow[];
   /** 表の下の注記。ハイライトした月の名を含む */
@@ -149,6 +155,7 @@ export function CashflowView({
   headerAction,
   chart,
   trend,
+  monthlyChart,
   months,
   monthsNote,
   ledger,
@@ -176,15 +183,24 @@ export function CashflowView({
 
         {/* 残高推移 — 2030:152 */}
         <Panel title="残高推移" action={<FilterTabs group={trend} />}>
-          <ForecastChart
-            points={chart.points}
-            todayT={chart.todayT}
-            defenseLine={chart.defenseLine}
-            markers={[]}
-            yAxis
-            todayLabel="今日"
-            defenseLabel={false}
-          />
+          {/* **タブで中身を変える。** 以前はタブが光るだけで、
+              日次のグラフのままだった */}
+          {(trend.value ?? trend.defaultValue) === "monthly" ? (
+            <MonthlyBalanceChart
+              points={monthlyChart}
+              defenseLine={chart.defenseLine}
+            />
+          ) : (
+            <ForecastChart
+              points={chart.points}
+              todayT={chart.todayT}
+              defenseLine={chart.defenseLine}
+              markers={[]}
+              yAxis
+              todayLabel="今日"
+              defenseLabel={false}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-24">
             <LegendItem series="actual" label="実績（本日まで）" />
             <LegendItem series="forecast" label="予測" />
@@ -192,6 +208,11 @@ export function CashflowView({
               series="defense"
               label={`生活防衛ライン ${formatYen(chart.defenseLine)}`}
             />
+            {(trend.value ?? trend.defaultValue) === "monthly" ? (
+              <span className="t-body-sm text-muted-foreground">
+                棒は入金と出金、細い破線は月中の最低
+              </span>
+            ) : null}
           </div>
         </Panel>
 

@@ -37,6 +37,16 @@ export default function DevCashflowPage() {
               { value: "monthly", label: "月次" },
             ],
           }}
+          /* Figma 比較用のページ。月次の中身は Figma に無いので
+             月次表と同じ値をそのまま流す */
+          monthlyChart={[
+            { label: "2026年9月", closing: 2_847_300, actual: 2_847_300, inflow: 1_180_000, outflow: 947_500, lowest: 2_580_000 },
+            { label: "2026年10月", closing: 2_412_800, actual: null, inflow: 860_000, outflow: 1_294_500, lowest: 2_180_000 },
+            { label: "2026年11月", closing: 2_030_800, actual: null, inflow: 720_000, outflow: 1_102_000, lowest: 1_880_000 },
+            { label: "2026年12月", closing: 1_382_500, actual: null, inflow: 540_000, outflow: 1_188_300, lowest: 1_382_500 },
+            { label: "2027年1月", closing: 1_520_200, actual: null, inflow: 980_000, outflow: 842_300, lowest: 1_382_500 },
+            { label: "2027年2月", closing: 1_905_200, actual: null, inflow: 1_040_000, outflow: 655_000, lowest: 1_790_000 },
+          ]}
           months={[
             { label: "2026年9月", income: 1_180_000, expense: 947_500, endBalance: 2_847_300, lowest: 2_580_000 },
             { label: "2026年10月", income: 860_000, expense: 1_294_500, endBalance: 2_412_800, lowest: 2_180_000 },
