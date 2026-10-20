@@ -665,3 +665,75 @@ describe("AC-23 過去に残った未消込の予定", () => {
     expect(view.groups[0].past).toBe(false);
   });
 });
+
+describe("行ごとの残高（§4.2 明細列）", () => {
+  const view = build("all", "all", "2026-04", "2026-06");
+  const entries = view.groups.flatMap((g) => g.entries);
+
+  it("フィクスチャに同じ日の行が複数ある（検査の前提）", () => {
+    const perDay = new Map<string, number>();
+    for (const e of entries) perDay.set(e.date, (perDay.get(e.date) ?? 0) + 1);
+    expect([...perDay.values()].some((n) => n > 1)).toBe(true);
+  });
+
+  it("**同じ日でも行ごとに動く。** 終値を全行に入れない", () => {
+    /* 以前はその日の終値を全行に入れていたので、同じ日の行が何件あっても
+       同じ数字が並んでいた */
+    const perDay = new Map<string, number[]>();
+    for (const e of entries) {
+      const list = perDay.get(e.date) ?? [];
+      list.push(e.balance);
+      perDay.set(e.date, list);
+    }
+    const multi = [...perDay.entries()].filter(([, v]) => v.length > 1);
+    expect(multi.length).toBeGreaterThan(0);
+    /* 金額が0でない行が並んでいれば、残高は必ずどこかで変わる */
+    expect(multi.some(([, v]) => new Set(v).size > 1)).toBe(true);
+  });
+
+  it("その日の最後の行の残高は、その日の終値に着地する", () => {
+    /* 積み上げの順が表示順とずれていたら、ここで落ちる。
+       日ごとの最後の行を、系列の終値と突き合わせる */
+    const last = new Map<string, number>();
+    for (const e of entries) last.set(e.date, e.balance);
+    const series = (() => {
+      const forecast = buildForecast(
+        { recurring: RECURRING, oneoffs: [], overrides: {} as never },
+        ASOF,
+        TO,
+      );
+      return buildBalanceSeries(
+        { accounts: [bank, jigyou, card], asOf: ASOF, forecast, actuals: [] },
+        TO,
+        TODAY,
+      );
+    })();
+    const proj = new Map(series.rows.map((r) => [r.date, r.proj]));
+    for (const [date, balance] of last) {
+      expect(balance).toBe(proj.get(date));
+    }
+  });
+
+  it("**絞り込んでも各行の残高は変わらない**", () => {
+    /* 隠れた行も積んだうえでの値。飛ばすと、見えている行の残高が
+       実際の残高と違う数字になる */
+    const filtered = build("fixed", "all", "2026-04", "2026-06");
+    const byKey = new Map(entries.map((e) => [`${e.date}|${e.name}`, e.balance]));
+    const rows = filtered.groups.flatMap((g) => g.entries);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const e of rows) {
+      expect(e.balance).toBe(byKey.get(`${e.date}|${e.name}`));
+    }
+  });
+
+  it("振替は残高を動かさない", () => {
+    /* 口座間の付け替えなので合計は変わらない（accountDelta が相殺する） */
+    const transfers = entries.filter((e) => e.type === "transfer");
+    expect(transfers.length).toBeGreaterThan(0);
+    for (const t of transfers) {
+      const sameDay = entries.filter((e) => e.date === t.date);
+      const i = sameDay.indexOf(t);
+      if (i > 0) expect(t.balance).toBe(sameDay[i - 1].balance);
+    }
+  });
+});

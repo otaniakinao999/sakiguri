@@ -126,6 +126,23 @@ export function ForecastChart({
     return ticks;
   }, [firstT, lastT]);
 
+  /**
+   * 実線と破線の継ぎ目。
+   *
+   * 消し込みが遅れていると、同じ日でも実績系列と予測系列の値が違う
+   * （その差が「うち未記録の予定」）。放っておくと線が切れて見えるので、
+   * 細い縦線で繋ぐ。**差を埋めない。** 段差は事実で、消し込みが
+   * 追いつけば自然に消える。
+   */
+  const seam = React.useMemo(() => {
+    const point = points.find(
+      (p) => p.actual !== null && p.forecast !== null && p.actual !== p.forecast,
+    );
+    return point
+      ? { t: point.t, from: point.actual as number, to: point.forecast as number }
+      : null;
+  }, [points]);
+
   const values = points.map((p) => p.actual ?? p.forecast ?? 0);
   const min = Math.min(...values, defenseLine);
   const max = Math.max(...values);
@@ -245,6 +262,18 @@ export function ForecastChart({
               fill="var(--chart-defense)"
               stroke="var(--background)"
               strokeWidth={2}
+            />
+          )}
+
+          {seam && (
+            <ReferenceLine
+              segment={[
+                { x: seam.t, y: seam.from },
+                { x: seam.t, y: seam.to },
+              ]}
+              stroke="var(--chart-forecast)"
+              strokeWidth={1}
+              strokeDasharray="2 2"
             />
           )}
 

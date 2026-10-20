@@ -49,6 +49,14 @@ export interface CashflowLedgerEntry {
   amountType: AmountType;
   category: Category | null;
   status: Status;
+  /**
+   * **この行を処理した直後の残高**（要件定義書 §4.2 明細列）。
+   *
+   * Figma 2030:349 の列には無いが、1件ずつ効いていく様子が読めないと
+   * 「いつ足りなくなるか」を行から追えない。絞り込みで隠れた行も
+   * 積んだうえでの値なので、連続する2行の差が金額と一致しないことがある。
+   */
+  balance?: Yen;
   /** 備考。振替・カード引落・繰延・未入力の注記 */
   note?: string;
 
@@ -271,17 +279,19 @@ export function CashflowView({
           <Table density="compact">
             {/* 列幅は Figma 2030:349。1088px 中 88 / 364 / 140 / 120 / 96 / 280 */}
             <colgroup>
+              <col className="w-[7%]" />
+              <col className="w-[27%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
+              <col className="w-[10%]" />
               <col className="w-[8%]" />
-              <col className="w-[33%]" />
-              <col className="w-[13%]" />
-              <col className="w-[11%]" />
-              <col className="w-[9%]" />
-              <col className="w-[26%]" />
+              <col className="w-[24%]" />
             </colgroup>
             <TableHeaderRow>
               <TableHead>日付</TableHead>
               <TableHead>内容</TableHead>
               <TableHead align="right">金額</TableHead>
+              <TableHead align="right">残高</TableHead>
               <TableHead>区分</TableHead>
               <TableHead>状態</TableHead>
               <TableHead>備考</TableHead>
@@ -300,7 +310,7 @@ export function CashflowView({
                       <TableCell kind="group" colSpan={3}>
                         {row.groupLabel}
                       </TableCell>
-                      <TableCell kind="group" colSpan={3} align="right">
+                      <TableCell kind="group" colSpan={4} align="right">
                         {row.closing !== null && row.closing !== undefined ? (
                           <span className="num">
                             月末残高 {formatYen(row.closing)}
@@ -329,6 +339,10 @@ export function CashflowView({
                       </TableCell>
                       <TableCell align="right">
                         <Amount value={row.amount} type={row.amountType} size="table" />
+                      </TableCell>
+                      {/* 残高は色を付けない。増減ではなく水準なので */}
+                      <TableCell align="right" className="num whitespace-nowrap">
+                        {row.balance === undefined ? "" : formatYen(row.balance)}
                       </TableCell>
                       <TableCell>
                         {row.category ? <CategoryTag category={row.category} /> : null}

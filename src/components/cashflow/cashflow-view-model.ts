@@ -163,6 +163,7 @@ export function buildCashflowViewModel({
         amount: entry.amount,
         amountType: amountTypeOf(category),
         category,
+        balance: entry.balance,
         status: entry.status === "actual" ? "実績" : "予定",
         note: noteOf(entry),
         actualId: entry.status === "actual" ? entry.srcId : undefined,

@@ -9,7 +9,7 @@
  * 「引落」として現れる（CL-2）。年月別収支の発生日ベースとは日付が違う。
  */
 
-import type { BalanceSeries } from "@/core/balance";
+import { accountDelta, type BalanceSeries } from "@/core/balance";
 import { groupOfCategory } from "@/core/categories";
 import { compareDate, compareString, toYearMonth } from "@/core/date";
 import type { MonthlyCashflowRow, ShortfallWarning } from "@/core/monthly";
@@ -51,7 +51,16 @@ export const LEDGER_STATUSES: readonly { value: LedgerStatus; label: string }[] 
 export interface LedgerEntry extends CashEvent {
   /** 実績として登録済みか、まだ予定か */
   status: "plan" | "actual";
-  /** その日の予測残高（要件定義書 §4.2 明細列） */
+  /**
+   * **この行を処理した直後の予測残高**（要件定義書 §4.2 明細列）。
+   *
+   * 以前はその日の終値を全行に入れていたので、同じ日の行が何件あっても
+   * 同じ数字が並んでいた。1件ずつ効いていく様子が読めない。
+   *
+   * **絞り込みで隠れた行も積んだうえでの値。** 隠したぶんを飛ばすと、
+   * 見えている行の残高が実際の残高と違う数字になる。そのため連続する
+   * 2行の差が、その行の金額と一致しないことがある（間に隠れた行がある）。
+   */
   balance: Yen;
   /** 繰延された行か。背景色を変え、元の日付を併記する */
   deferred: boolean;
@@ -166,8 +175,47 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
   const { series, monthly, from, to, kind, status, today } = input;
   const currentYm = toYearMonth(today);
 
-  /* 日付 → その日の予測残高 */
+  /* 日付 → その日の予測残高（終値） */
   const balanceByDate = new Map(series.rows.map((r) => [r.date, r.proj]));
+
+  /**
+   * イベント1件ごとの残高（行ごとの残高）。
+   *
+   * **規則を増やさない。** 1件が残高を動かす額は `accountDelta`
+   * （CL-3 手順6）が唯一の定義で、残高系列もこれを足している。
+   * ここで符号や振替の扱いを書き直すと、系列と静かに食い違う。
+   *
+   * 口座の集合も**系列が合計に使ったものと同じ**ものを使う。別に渡すと、
+   * 違う集合で足して終値に着地しなくなる。
+   */
+  const depositIds = Object.keys(series.rows[0]?.byAccount ?? {});
+  const totalDelta = (event: CashEvent) =>
+    depositIds.reduce((sum, id) => sum + accountDelta(event, id), 0);
+
+  /* 同じ日のイベントを表示順に並べ、その日の始値から積み上げる。
+     **絞り込みで隠れる行も積む。** 隠したぶんを飛ばすと、見えている行の
+     残高が実際と違う値になる */
+  const runningByEvent = new Map<CashEvent, Yen>();
+  const sameDay = new Map<DateStr, CashEvent[]>();
+  for (const event of series.projectedCash) {
+    const list = sameDay.get(event.date);
+    if (list) list.push(event);
+    else sameDay.set(event.date, [event]);
+  }
+  for (const [date, events] of sameDay) {
+    /* 下の entries.sort と同じ並び。ずれると最後の行が終値に着地しない */
+    events.sort(
+      (a, b) =>
+        compareString(a.name, b.name) || compareString(a.key ?? "", b.key ?? ""),
+    );
+    const closing = balanceByDate.get(date) ?? 0;
+    const opening = closing - events.reduce((sum, e) => sum + totalDelta(e), 0);
+    let running = opening;
+    for (const event of events) {
+      running += totalDelta(event);
+      runningByEvent.set(event, running);
+    }
+  }
 
   /* 繰延された予定のキー。CL-1 が origDate を持たせている */
   const deferredByKey = new Map<string, DateStr>();
@@ -188,7 +236,7 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
     entries.push({
       ...event,
       status: entryStatus,
-      balance: balanceByDate.get(event.date) ?? 0,
+      balance: runningByEvent.get(event) ?? balanceByDate.get(event.date) ?? 0,
       deferred: origDate !== undefined,
       origDate,
       /* カード引落は CL-2 の生成物。利用者は動かせない（§4.2 繰延操作） */
