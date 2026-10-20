@@ -21,7 +21,9 @@ import { parseMonthsField, parseNumberField } from "@/lib/number-field";
 const CONTROL =
   /* **横余白は sm。** 設定の表は列が多く、md（16px）だと選択肢の文字が
    見えなくなる（実際に空の箱に見えた）。高さは md のまま */
-  "h-control-md w-full min-w-0 rounded-md border border-input bg-background px-control-sm t-body text-foreground " +
+  /* **min-w-0 は付けない。** 付けると表の中で潰れる。幅が足りないときは
+     表ごと横に送る（設定の表は w-max + overflow-x-auto） */
+  "h-control-md w-full rounded-md border border-input bg-background px-control-sm t-body text-foreground " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -108,6 +110,10 @@ export function NumberInput({
         setDraft(null);
         onBlur?.(e);
       }}
+      /* **固有幅を詰める。** 表の中では器の幅が決まらず、w-full が
+         入力の既定（約20文字）に落ちる。金額は9桁も要らないので、
+         表が無駄に横長になるのを防ぐ。フォームでは w-full が勝つ */
+      size={9}
       className={`${CONTROL} num text-right`}
     />
   );

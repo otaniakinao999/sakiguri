@@ -54,7 +54,10 @@ export function RecurringTable() {
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse t-body-sm">
+          {/* **w-full にしない。** 器に合わせると列が潰れて、金額や事業割合が
+              読めない細い箱になる。内容ぶんの幅を取らせて、親の
+              overflow-x-auto で横に送る */}
+          <table className="w-max min-w-full border-collapse t-body-sm">
             <thead>
               <tr>
                 <th className={`${HEAD} min-w-[var(--layout-field-width)]`}>内容</th>
