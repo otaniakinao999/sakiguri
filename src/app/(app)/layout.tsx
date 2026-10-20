@@ -27,8 +27,17 @@ export default function AppLayout({
             <Sidebar />
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
-            <BalanceHeader />
-            <main className="min-w-0 flex-1 px-12 pt-16 pb-64 wide:px-24 wide:pt-24">
+            {/* **広いときは出さない。** PageHeader の残高サマリーが同じ値を
+                出すので二重になる（Figma 2030:97 の Main は PageHeader から
+                始まっていて、この帯は無い）。狭いときは PageHeader の
+                サマリーが折り返して消えるため、こちらが受け持つ */}
+            <div className="wide:hidden">
+              <BalanceHeader />
+            </div>
+            {/* **余白を持たせない。** PageHeader が自前で px-32 と下辺の
+                罫線を持っていて、外から足すと罫線が端まで届かず、
+                余白も二重になる */}
+            <main className="flex min-w-0 flex-1 flex-col pb-64 wide:pb-0">
               {children}
             </main>
           </div>

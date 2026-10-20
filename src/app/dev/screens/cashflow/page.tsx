@@ -18,8 +18,6 @@ import {
 
 export default function DevCashflowPage() {
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
         <CashflowView
           stats={[
             { label: "今日の残高", value: 2_847_300 },
@@ -90,7 +88,5 @@ export default function DevCashflowPage() {
             ],
           }}
         />
-      </div>
-    </div>
   );
 }

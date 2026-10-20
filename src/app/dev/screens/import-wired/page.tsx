@@ -74,8 +74,6 @@ export default function DevImportWiredPage() {
   );
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
         <ImportView
           stats={buildHeaderStats(series, FIXTURE_ACCOUNTS, FIXTURE_TODAY)}
           steps={[
@@ -99,7 +97,5 @@ export default function DevImportWiredPage() {
           preview={preview}
           onPreviewChange={setPreview}
         />
-      </div>
-    </div>
   );
 }

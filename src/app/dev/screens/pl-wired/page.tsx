@@ -48,8 +48,6 @@ export default function DevPLWiredPage() {
   const display = buildPLDisplay(matrix, "mixed", FIXTURE_TODAY);
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
         <ProfitLossView
           stats={buildHeaderStats(series, FIXTURE_ACCOUNTS, FIXTURE_TODAY)}
           panelTitle="年月別 収支（2026年度・合算）"
@@ -77,7 +75,5 @@ export default function DevPLWiredPage() {
             </div>
           }
         />
-      </div>
-    </div>
   );
 }

@@ -27,7 +27,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useAppData } from "./AppDataProvider";
-import { formatYearMonthDay, formatYen } from "@/lib/format";
+import { formatYearMonthDay } from "@/lib/format";
 import { NAV_ITEMS } from "./navigation";
 
 /** アイコンは表示の都合なので navigation.ts（画面の一覧）には持たせない。 */
@@ -40,8 +40,10 @@ const ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> 
   "/settings": Cog6ToothIcon,
 };
 
-export function Sidebar() {
+export function Sidebar({ currentHref }: { currentHref?: string } = {}) {
   const pathname = usePathname();
+  /* /dev/screens/* から本番の現在地を渡すための口。本番では使わない */
+  const active = currentHref ?? pathname;
   const { data, session, signOut } = useAppData();
 
   return (
@@ -51,9 +53,9 @@ export function Sidebar() {
         wide:h-full wide:w-sidenav wide:gap-24 wide:rounded-lg wide:px-16 wide:py-24
       "
     >
-      <div className="flex items-baseline gap-12 wide:flex-col wide:items-start wide:gap-4 wide:px-12">
+      {/* ロゴだけ。説明文は v0.6.0 の SideNav（2008:19）に無い */}
+      <div className="flex items-baseline gap-12 wide:flex-col wide:items-start wide:px-12">
         <span className="wordmark text-primary-foreground">SAKIGURI</span>
-        <span className="t-body-sm text-primary-foreground/70">個人事業主の資金繰り帳</span>
       </div>
 
       <nav aria-label="画面">
@@ -64,7 +66,7 @@ export function Sidebar() {
           "
         >
           {NAV_ITEMS.map((item) => {
-            const current = pathname === item.href;
+            const current = active === item.href;
             const Icon = ICONS[item.href];
             return (
               <li key={item.href} className="shrink-0">
@@ -92,28 +94,23 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* 狭いときは残高ヘッダーを優先するので隠す */}
+      {/* フッター。**基準日だけ**（components.md §2 SideNav の構成4）。
+          生活防衛ラインは予定の設定とグラフの凡例に出ているので外した。
+          メールアドレスも外した。サインアウトはほかに置き場が無いので残す。
+          狭いときは残高ヘッダーを優先するので隠す */}
       <div className="mt-auto hidden border-t border-border-primary-subtle px-12 pt-16 text-primary-foreground wide:block">
         <div className="t-label-sm text-primary-foreground/70">基準日</div>
         {/* Figma 2030:98 は「2026年9月1日」。ISO のまま出さない */}
         <div className="num t-body">{formatYearMonthDay(data.asOf)}</div>
 
-        <div className="mt-12 t-label-sm text-primary-foreground/70">生活防衛ライン</div>
-        <div className="num t-body">{formatYen(data.reserveLine)}</div>
-
         {session && (
-          <div className="mt-16 t-body-sm text-primary-foreground/70">
-            <span className="block truncate" title={session.user.email ?? ""}>
-              {session.user.email}
-            </span>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="mt-4 text-primary-foreground underline focus-visible:outline-primary-foreground"
-            >
-              サインアウト
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="mt-16 t-body-sm text-primary-foreground/70 underline underline-offset-2 hover:text-primary-foreground focus-visible:outline-primary-foreground"
+          >
+            サインアウト
+          </button>
         )}
       </div>
     </aside>

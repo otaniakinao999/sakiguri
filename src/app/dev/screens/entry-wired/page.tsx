@@ -45,8 +45,6 @@ export default function DevEntryWiredPage() {
   const list = buildActualList({ actuals: fixture.actuals, yearMonth: month });
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
         <EntryView
           stats={stats}
           headerAction={
@@ -89,7 +87,5 @@ export default function DevEntryWiredPage() {
             </Button>
           }
         />
-      </div>
-    </div>
   );
 }

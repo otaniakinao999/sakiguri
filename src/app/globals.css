@@ -240,3 +240,22 @@
   --container-main: 1200px;
   --container-content: 1136px;
 }
+
+@layer components {
+  /**
+   * ロゴ「SAKIGURI」（components.md §2 SideNav の構成1、Figma 2008:19）
+   *
+   * Cormorant Garamond 22px / 500 / 字間 0.08em。正式なロゴは画像で
+   * 差し替える予定（未支給）なので、それまでの仮置き。
+   *
+   * **この規則が無いと Inter 14px で出る。** サイドバーがスクリーンショットに
+   * 一度も入っていなかったため、載せ替えのあいだ気づかなかった。
+   */
+  .wordmark {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+}

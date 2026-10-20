@@ -37,8 +37,6 @@ export default function DevDashboardWiredPage() {
   });
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-content flex-col">
         <DashboardView
           {...view}
           heroActions={
@@ -71,7 +69,5 @@ export default function DevDashboardWiredPage() {
             </p>
           }
         />
-      </div>
-    </div>
   );
 }

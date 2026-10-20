@@ -34,9 +34,6 @@ const TODOS: DashboardTodo[] = [
 
 export default function DevDashboardPage() {
   return (
-    <div className="min-h-screen bg-muted">
-      {/* Figma の Main は 1200px。SideNav（240px の列）はこのページには出さない。 */}
-      <div className="mx-auto flex min-h-screen w-full max-w-content flex-col">
         <DashboardView
           today={TODAY}
           balance={2_847_300}
@@ -83,7 +80,5 @@ export default function DevDashboardPage() {
             </Button>
           )}
         />
-      </div>
-    </div>
   );
 }

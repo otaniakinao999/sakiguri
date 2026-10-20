@@ -35,8 +35,6 @@ export default function DevCashflowWiredPage() {
   });
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div className="mx-auto flex min-h-screen w-full max-w-main flex-col">
         <CashflowView
           stats={view.stats}
           chart={view.chart}
@@ -64,7 +62,5 @@ export default function DevCashflowWiredPage() {
             options: LEDGER_STATUSES.map((s) => ({ value: s.value, label: s.label })),
           }}
         />
-      </div>
-    </div>
   );
 }
