@@ -70,7 +70,7 @@ export interface EntryViewProps {
   futureNote?: string;
   actuals: EntryActualRow[];
 
-  /* 差し込み口。v0.6.0 に無いもの（ADR-0014） */
+  /* 差し込み口。v0.6.0 に無いもの（ADR-0023） */
   notices?: React.ReactNode;
   todoFooter?: React.ReactNode;
   listAction?: React.ReactNode;
@@ -288,7 +288,7 @@ export function EntryView({
           </div>
 
           {/* screens.md は Callout（caution）だが、Figma は枠も背景も無い
-              ただの注記だった。Figma を採った（ADR-0014） */}
+              ただの注記だった。Figma を採った（ADR-0023） */}
           {futureNote ? (
             <p className="t-body-sm text-fg-warning">{futureNote}</p>
           ) : null}

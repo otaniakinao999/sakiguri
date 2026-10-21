@@ -63,7 +63,7 @@ export default function DevCashflowPage() {
             { id: "4", date: "10/1", title: "通信費", amount: 9_800, amountType: "expense", category: "固定費", status: "実績" },
             { id: "5", date: "10/5", title: "外注費", amount: 140_000, amountType: "expense", category: "変動費", status: "予定" },
             /* Figma の区分は「固定費」だが、カード引落の行に固定費を付けると
-               「カード引落」フィルターが1件も拾わない。区分を直した（ADR-0014） */
+               「カード引落」フィルターが1件も拾わない。区分を直した（ADR-0023） */
             { id: "6", date: "10/10", title: "××カード 引落", amount: 186_200, amountType: "expense", category: "カード引落", status: "予定", note: "自動で作られる行（編集できません）" },
             { id: "7", date: "10/15", title: "水道光熱費", amount: 14_200, amountType: "expense", category: "変動費", status: "予定", note: "繰延（元の日付 10/8）" },
           ]}

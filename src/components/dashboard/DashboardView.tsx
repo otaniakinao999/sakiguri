@@ -113,7 +113,7 @@ const ANNOTATION_TONE: Record<DashboardAnnotation["tone"], string> = {
  * **v0.6.0 の Figma に無いものを差し込み口にしてある**（heroActions /
  * heroNotice / notices / todoAction / rowAction / total / footer）。
  * いずれも要件か受入基準に紐づいていて、落とすと退行する。
- * デザインとの差はこの7つだけで、ADR-0014 に理由を書いてある。
+ * デザインとの差はこの7つだけで、ADR-0023 に理由を書いてある。
  */
 export function DashboardView({
   today,

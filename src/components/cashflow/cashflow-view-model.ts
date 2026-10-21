@@ -57,7 +57,7 @@ export interface CashflowViewModelInput {
  * **カード引落は `src` で決める。** CL-2 の生成物で、元の費目は
  * 引落にまとめられた個々の利用のものだから、費目から引くと
  * 「固定費」などになってしまう。Figma 2030:471 は実際にそうなっていて、
- * その区分だとフィルターの「カード引落」が1件も拾わない（ADR-0014）。
+ * その区分だとフィルターの「カード引落」が1件も拾わない（ADR-0023）。
  */
 function categoryOfEntry(entry: LedgerEntry): Category | null {
   if (entry.src === "settle") return "カード引落";

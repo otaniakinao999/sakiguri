@@ -65,7 +65,7 @@ export interface CashflowLedgerEntry {
    *
    * **Figma 2030:348 には無い。** 9月と10月が区切り無しで続いている。
    * だが要件定義書 §4.2 は月ごとのまとまりと、月末残高・月中最低を
-   * 求めている。落とすと、どの月を見ているのか分からなくなる（ADR-0014）。
+   * 求めている。落とすと、どの月を見ているのか分からなくなる（ADR-0023）。
    */
   groupLabel?: string;
   closing?: Yen | null;
@@ -108,7 +108,7 @@ export interface CashflowViewProps {
   categoryFilter: TabGroup<string>;
   kindFilter: TabGroup<string>;
 
-  /** v0.6.0 に無いもの（ADR-0014）。渡さなければ出ない */
+  /** v0.6.0 に無いもの（ADR-0023）。渡さなければ出ない */
   notices?: React.ReactNode;
   footer?: React.ReactNode;
   /** 入出金予定表の見出しに出す集計（要件定義書 §4.2） */

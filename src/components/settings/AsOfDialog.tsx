@@ -27,7 +27,7 @@ import { formatYearMonthDay } from "@/lib/format";
  *
  * **変更前の日付を本文に入れる。** 元に戻すには何日だったかが要るが、
  * 変えたあとの画面にはどこにも残らない。screens.md の本文には無いが、
- * 落とすと取り消せなくなる（ADR-0014）。
+ * 落とすと取り消せなくなる（ADR-0023）。
  */
 export function AsOfDialog({
   current,

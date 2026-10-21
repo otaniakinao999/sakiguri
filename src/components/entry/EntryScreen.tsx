@@ -333,7 +333,7 @@ export function EntryScreen() {
           </>
         ),
       }))}
-      /* ---- ここから下は v0.6.0 の Figma に無い（ADR-0014） ---- */
+      /* ---- ここから下は v0.6.0 の Figma に無い（ADR-0023） ---- */
       notices={
         <>
           {computed.candidateCount > 0 && (

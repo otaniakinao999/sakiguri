@@ -173,7 +173,7 @@ describe("buildDashboardViewModel", () => {
     expect(view.cards).toHaveLength(1);
     expect(view.cards[0].label).toBe("××カード 未払");
     /* **次回引落を落とさない。** 口座残高だけ見て足りると思った翌週に
-       引落が来るのを防ぐ行（v0.6.0 のデザインには無い。ADR-0014） */
+       引落が来るのを防ぐ行（v0.6.0 のデザインには無い。ADR-0023） */
     expect(view.cards[0].note).toMatch(/^次回引落 \d+月\d+日 ¥/);
   });
 

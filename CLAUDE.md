@@ -123,7 +123,7 @@ group by category_code;
 
 ### 2.6 色とサイズはトークンから引く
 
-`src/styles/tokens.css` の CSS 変数のみを使う。
+CSS 変数のみを使う。リテラルの hex やスケール外の px を書かない。
 
 ```css
 /* OK */
@@ -135,11 +135,36 @@ color: #63063E;
 padding: 15px;        /* スケール外の値を作らない */
 ```
 
-余白は 4 / 8 / 12 / 16 / 24 / 32 / 40 / 48 のスケールのみ。中間値を作らない。トークンの定義は `docs/designsystem.md` にある。
+余白は 4 / 8 / 12 / 16 / 24 / 32 / 40 / 48 のスケールのみ。中間値を作らない。
+
+#### トークンの所在（過渡期）
+
+**いまトークンは2ファイルある。** `src/app/globals.css` が両方を読んでいる。
+
+| | 役割 |
+|---|---|
+| `docs/design/tokens.css` | **v0.6.0 の正。新しいトークンはここに書く**（131個） |
+| `src/styles/tokens.css` | **旧画面のためだけに残っている**（125個）。新しく足さない |
+
+**同名の変数は0個で、値の衝突は無い**（2026-10-21 に全変数を突き合わせて確認）。どちらが勝つかを気にする必要はない。困るのは「新しいトークンをどちらに書くか」だけなので、上の表のとおりにする。
+
+**`src/styles/tokens.css` は、旧部品の片付け（`src/components/ui/v06/*` を `ui/` に畳む作業）で消す。** 消したらこの節から過渡期の記述も消す。デザインシステムの定義は `docs/designsystem.md`（旧）と `docs/design/`（v0.6.0）。
 
 ### 2.7 依存を増やす前に確認する
 
 許可済み: `react` `next` `typescript` `tailwindcss` `recharts` `@supabase/supabase-js` `zod` `vitest` `@testing-library/react` `jsdom` `@playwright/test`
+
+デザインシステム v0.6.0 で追加（ADR-0023）。
+
+| | なぜ |
+|---|---|
+| `@fontsource/inter` `@fontsource/cormorant-garamond` `@fontsource/jetbrains-mono` `@fontsource/noto-sans-jp` | 書体。`next/font/google` から替えた（開発環境から `fonts.googleapis.com` に到達できなかった）。**戻し方は `src/app/layout.tsx` 冒頭のコメント** |
+| `@heroicons/react` | アイコン |
+| `@radix-ui/react-alert-dialog` `@radix-ui/react-checkbox` `@radix-ui/react-slot` `@radix-ui/react-tabs` | 素のままでは作れない操作（フォーカスの閉じ込め、キーボード操作） |
+| `@radix-ui/react-select` | **現在どこからも使っていない。** 費目が60件以上あり、モバイルの既定 UI を捨てないためネイティブ `<select>` を採った。**検索付きの選択が必要になったときに使う**ので残してある（利用者の判断） |
+| `class-variance-authority` `clsx` `tailwind-merge` | クラス名の組み立て |
+
+**`@radix-ui/react-select` 以外に、使っていない依存を残さない。** v0.6.0 では `@radix-ui/react-separator` が0ファイル参照のまま入っていたので外した。
 
 これ以外のライブラリを追加したいときは、**入れる前に理由と代替案を提示してください。** 特に日付ライブラリ（dayjs / date-fns）は 2.2 の規約と競合するため入れません。
 

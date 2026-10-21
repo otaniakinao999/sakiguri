@@ -18,7 +18,7 @@ import { STRANDED_DAYS, type ReconcileWarnings } from "@/lib/reconcile-warnings"
  * **v0.6.0 のデザインには無い。** Figma の Hero はグラフ下の1行しか
  * 警告の置き場を持っていないが、v1.0 には残高の警告と消し込みの警告が
  * あり、どちらも要件か受入基準に紐づく（FR-43・AC-29c・指標
- * shortfall_acted）。落とさずに Callout で作り直した。経緯は ADR-0014。
+ * shortfall_acted）。落とさずに Callout で作り直した。経緯は ADR-0023。
  *
  * **文言はここにしか書かない。** 本番の画面（DashboardScreen）と
  * 配線確認用のページ（/dev/screens/dashboard-wired）が同じものを使う。

@@ -55,7 +55,7 @@ export interface ProfitLossViewProps {
   lead?: React.ReactNode;
   /** 表の下。注記（複数行） */
   notes?: React.ReactNode;
-  /** v0.6.0 に無いもの（ADR-0014） */
+  /** v0.6.0 に無いもの（ADR-0023） */
   notices?: React.ReactNode;
 }
 

@@ -99,7 +99,7 @@ describe("入出金予定表", () => {
 
   it("**カード引落は費目ではなく src で区分を決める**", () => {
     /* CL-2 の生成物。費目から引くと「固定費」などになり、
-       フィルターの「カード引落」が1件も拾わない（ADR-0014） */
+       フィルターの「カード引落」が1件も拾わない（ADR-0023） */
     const settle = fixture.view.groups
       .flatMap((g) => g.entries)
       .filter((e) => e.src === "settle");

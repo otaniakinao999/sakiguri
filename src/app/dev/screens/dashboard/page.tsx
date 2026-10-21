@@ -10,7 +10,7 @@
  *
  * **ここは Figma との見比べ専用。** 本番の DashboardScreen は同じ
  * DashboardView に実データを渡すが、差し込み口（警告・合計・注記）も
- * 埋めるので見た目は一致しない。差は ADR-0014 にまとめてある。
+ * 埋めるので見た目は一致しない。差は ADR-0023 にまとめてある。
  *
  * **計算はしていない。**
  */
@@ -73,7 +73,7 @@ export default function DevDashboardPage() {
             </Button>
           }
           /* Figma の行には「予定どおり」が付いている。本番は消し込みの
-             処理がこの画面に無いので渡していない（ADR-0014） */
+             処理がこの画面に無いので渡していない（ADR-0023） */
           rowAction={() => (
             <Button variant="outline" size="sm">
               予定どおり

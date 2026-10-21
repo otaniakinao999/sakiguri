@@ -6,7 +6,7 @@ import type { Metadata, Viewport } from "next";
    HANDOFF_CLAUDE.md は next/font/google を指定しているが、この開発環境からは
    fonts.googleapis.com に到達できないため、同じ3書体を npm から自己ホストする。
    tokens.css が var(--font-inter, "Inter") の形で書かれているため、
-   変数を与えなくても実体名で解決する（ADR-0014）。
+   変数を与えなくても実体名で解決する（ADR-0023）。
 
    @fontsource は unicode-range で分割して配信するので、和文でも実際に使う字だけが
    落ちてくる。ADR-0005 が避けたかった「数MBの一括ダウンロード」は起きない。 */
