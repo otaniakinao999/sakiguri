@@ -13,6 +13,7 @@ import {
   MonthlyBalanceChart,
   type MonthlyBalancePoint,
 } from "@/components/sakiguri/MonthlyBalanceChart";
+import { MonthTab } from "@/components/sakiguri/MonthTab";
 import { Panel } from "@/components/sakiguri/Panel";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { StatusChip, type Status } from "@/components/sakiguri/StatusChip";
@@ -103,6 +104,8 @@ export interface CashflowViewProps {
   monthsNote: React.ReactNode;
 
   ledger: CashflowLedgerEntry[];
+  /** 明細の月へ飛ぶ見出し。view-model が ledger と同じループで作る（要望9） */
+  ledgerMonths?: Array<{ id: string; label: string }>;
   /** 入出金予定表の3組のフィルター */
   period: TabGroup<string>;
   categoryFilter: TabGroup<string>;
@@ -167,6 +170,7 @@ export function CashflowView({
   months,
   monthsNote,
   ledger,
+  ledgerMonths,
   period,
   categoryFilter,
   kindFilter,
@@ -276,6 +280,23 @@ export function CashflowView({
 
           {ledgerEditor}
 
+          {/* 月へ飛ぶ見出し（要望9）。**スクロールしても残す。** 明細は
+              縦に長く、上に戻らないと押せない位置にあると使われない。
+              id は view-model が区切り行と同じループで作っているので、
+              押しても飛ばない見出しは構造上できない */}
+          {ledgerMonths && ledgerMonths.length > 1 ? (
+            <nav
+              aria-label="月へ移動"
+              className="sticky top-0 z-30 -mx-16 flex flex-wrap items-center gap-8 border-b border-border bg-card px-16 py-8"
+            >
+              {ledgerMonths.map((m) => (
+                <a key={m.id} href={`#${m.id}`}>
+                  <MonthTab>{m.label}</MonthTab>
+                </a>
+              ))}
+            </nav>
+          ) : null}
+
           <Table density="compact">
             {/* 列幅は Figma 2030:349。1088px 中 88 / 364 / 140 / 120 / 96 / 280 */}
             <colgroup>
@@ -306,7 +327,14 @@ export function CashflowView({
               ) : (
                 ledger.map((row, i) =>
                   row.groupLabel !== undefined ? (
-                    <TableRow key={row.id} fixedHeight last={i === ledger.length - 1}>
+                    <TableRow
+                      key={row.id}
+                      id={row.id}
+                      fixedHeight
+                      last={i === ledger.length - 1}
+                      /* 上の月見出しの下に潜らせない */
+                      className="scroll-mt-64"
+                    >
                       <TableCell kind="group" colSpan={3}>
                         {row.groupLabel}
                       </TableCell>

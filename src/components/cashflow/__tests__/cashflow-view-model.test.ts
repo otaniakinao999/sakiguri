@@ -161,3 +161,28 @@ describe("グラフ", () => {
     expect(dashed.length).toBeGreaterThan(0);
   });
 });
+
+describe("月へ飛ぶ見出し（要望9）", () => {
+  /**
+   * **押しても飛ばない見出しを作らない。**
+   * 見出しの id が明細の区切り行の id と一致していなければ、
+   * アンカーは何にも当たらず、押しても黙って何も起きない。
+   * 画面では「反応しない」としか見えず、目視では原因が分からない。
+   */
+  it("見出しの id は、すべて明細の区切り行の id と一致する", () => {
+    const groupIds = new Set(
+      view.ledger.filter((r) => r.groupLabel !== undefined).map((r) => r.id),
+    );
+    expect(view.ledgerMonths.length).toBeGreaterThan(0);
+    for (const m of view.ledgerMonths) {
+      expect(groupIds.has(m.id)).toBe(true);
+    }
+  });
+
+  it("月の数ぶんある。並びも明細と同じ", () => {
+    const labels = view.ledger
+      .filter((r) => r.groupLabel !== undefined)
+      .map((r) => r.groupLabel);
+    expect(view.ledgerMonths.map((m) => m.label)).toEqual(labels);
+  });
+});

@@ -198,6 +198,7 @@ export function CashflowScreen() {
       months={model.months}
       monthsNote={model.monthsNote}
       ledger={model.ledger}
+      ledgerMonths={model.ledgerMonths}
       ledgerTotal={formatLedgerTotal(model.total)}
       period={{
         value: String(preset),

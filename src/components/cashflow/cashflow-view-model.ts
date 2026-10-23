@@ -33,6 +33,14 @@ export interface CashflowViewModel {
   /** 残高推移の「月次」。日次とは出すものが違う（棒と月中の最低を重ねる） */
   monthlyChart: MonthlyBalancePoint[];
   ledger: CashflowLedgerEntry[];
+  /**
+   * 明細の月へ飛ぶための見出し（要望9）。
+   *
+   * **`ledger` と同じループで作る。** 別に組み立てると、片方の月だけ
+   * 増えたり id がずれたりして「押しても飛ばない見出し」ができる。
+   * ここの `id` は必ず `ledger` の区切り行の `id` と一致する。
+   */
+  ledgerMonths: Array<{ id: string; label: string }>;
   /** 見出しに出す絞り込み後の合計（要件定義書 §4.2 集計） */
   total: { count: number; inflow: Yen; outflow: Yen };
 }
@@ -141,9 +149,12 @@ export function buildCashflowViewModel({
      groupLabel）。Figma 2030:348 は9月と10月が区切り無しで続いているが、
      要件定義書 §4.2 は月ごとのまとまりを求めている */
   const ledger: CashflowLedgerEntry[] = [];
+  const ledgerMonths: CashflowViewModel["ledgerMonths"] = [];
   for (const group of view.groups) {
+    const groupId = `group-${group.yearMonth}`;
+    ledgerMonths.push({ id: groupId, label: formatYearMonthLabel(group.yearMonth) });
     ledger.push({
-      id: `group-${group.yearMonth}`,
+      id: groupId,
       groupLabel: formatYearMonthLabel(group.yearMonth),
       closing: group.closing,
       lowest: group.lowest,
@@ -182,6 +193,7 @@ export function buildCashflowViewModel({
     monthsNote,
     monthlyChart,
     ledger,
+    ledgerMonths,
     total: view.total,
   };
 }

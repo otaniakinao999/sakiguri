@@ -143,7 +143,11 @@ export function ProfitLossView({
         >
           {lead}
 
-          <Table density="compact">
+          {/* **w-full にしない。** 器に合わせると13列が潰れて金額が読めない。
+              内容ぶんの幅を取らせ、Table の overflow-x-auto で横に送る
+              （設定の表と同じ。要望7）。費目の列は sticky left-0 なので
+              横に送っても残る */}
+          <Table density="compact" className="w-max min-w-full">
             <TableHeaderRow>
               <TableHead className="sticky left-0 z-20 w-pl-label bg-muted">費目</TableHead>
               {columns.map((c) => (

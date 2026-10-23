@@ -57,6 +57,7 @@ export default function DevCashflowWiredPage() {
           months={view.months}
           monthsNote={view.monthsNote}
           ledger={view.ledger}
+          ledgerMonths={view.ledgerMonths}
           ledgerTotal={formatLedgerTotal(view.total)}
           period={{
             defaultValue: "recent",
