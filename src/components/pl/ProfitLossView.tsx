@@ -120,6 +120,12 @@ export function ProfitLossView({
   notes,
   notices,
 }: ProfitLossViewProps) {
+  /* 当初予算を添える列が1つでもあるか。**行ごとに決めない。**
+     添える行だけ背が高くなると、数字の並びが揃わず読みづらくなる */
+  const showsPlan = rows.some((r) =>
+    r.planValues?.some((v) => v !== null && v !== undefined),
+  );
+
   return (
     <>
       <PageHeader
@@ -147,6 +153,9 @@ export function ProfitLossView({
               内容ぶんの幅を取らせ、Table の overflow-x-auto で横に送る
               （設定の表と同じ。要望7）。費目の列は sticky left-0 なので
               横に送っても残る */}
+          {/* **当初予算は行ではなく表で揃える。** 添える行と添えない行で
+              高さが変わると、密度の高い数字の表は読みづらくなる。出す列が
+              1つでもあれば、すべてのセルで2行ぶんの場所を取る */}
           <Table density="compact" className="w-max min-w-full">
             <TableHeaderRow>
               <TableHead className="sticky left-0 z-20 w-pl-label bg-muted">費目</TableHead>
@@ -158,7 +167,11 @@ export function ProfitLossView({
             </TableHeaderRow>
             <tbody>
               {rows.map((row, i) => (
-                <TableRow key={row.key} fixedHeight last={i === rows.length - 1}>
+                <TableRow
+                  key={row.key}
+                  fixedHeight={!showsPlan}
+                  last={i === rows.length - 1}
+                >
                   <TableCell
                     kind={row.kind === "item" ? "row-header" : KIND[row.kind]}
                     sticky
@@ -198,10 +211,15 @@ export function ProfitLossView({
                       ) : (
                         `¥${formatAmount(value)}`
                       )}
-                      {/* 当初予算。見込みと違う月だけ添える */}
-                      {row.planValues?.[j] !== null && row.planValues?.[j] !== undefined ? (
-                        <span className="ml-4 t-body-sm text-muted-foreground">
-                          予¥{formatAmount(row.planValues[j] as Yen)}
+                      {/* 当初予算。見込みと違う月だけ添える。
+                          **横に並べない。** ml-4 で並べると金額が2つ続いて
+                          読めない（要望：予定と実績が近すぎる）。下に置き、
+                          出さない月も場所だけ取って高さを揃える */}
+                      {showsPlan ? (
+                        <span className="block t-body-sm text-muted-foreground">
+                          {row.planValues?.[j] !== null && row.planValues?.[j] !== undefined
+                            ? `予 ¥${formatAmount(row.planValues[j] as Yen)}`
+                            : "\u00A0"}
                         </span>
                       ) : null}
                     </TableCell>
