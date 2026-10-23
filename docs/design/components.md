@@ -127,7 +127,7 @@ Figma fileKey: `diqeunxgHCLNIPKVXL4evB`
 
 - **Props：** `value: number`、`type: "income" | "expense" | "neutral"`、`size: "table" | "body" | "kpi"`
 - **文字色：**
-  - income：`text-fg-success`（teal-500、白地に対するコントラスト比 5.1:1）
+  - income：`text-fg-success`（green-700。v0.6.1 で teal-500 から変更）
   - expense：`text-fg-destructive`（plum-800）。頭に「−」を付けます。
   - neutral：`text-foreground`（残高・合計など）
 - **サイズ：**
@@ -199,14 +199,17 @@ Figma fileKey: `diqeunxgHCLNIPKVXL4evB`
 
 | category | Badge variant | 色 |
 |---|---|---|
-| 収入 | Success | `bg-success-subtle`、`text-fg-success` |
-| 固定費 | Info | `bg-primary-subtle`、`text-fg-primary` |
-| 変動費 | Warning | `bg-warning-subtle`、`text-fg-warning` |
-| 振替 | Secondary | `bg-secondary`、`text-secondary-foreground` |
+| 収入 | Success | `bg-success-subtle`、`text-fg-success`（green） |
+| 固定費 | Info | `bg-primary-subtle`、`text-fg-primary`（teal） |
+| 変動費 | Secondary | `bg-secondary`、`text-secondary-foreground` |
+| 振替・カード引落 | Outline | 枠線のみ |
+
+**区分に Warning を使わない。** warning は残高警告の専用色（v0.6.1）。変動費に当てると、生活防衛ラインを割る月の行と同じ色になる。
 
 #### StatusChip — `2007:29`
 
-- **予定：** Badge の Outline。枠は `border-border` の破線（`border-dashed`）、文字は muted。
+- **予定：** Badge の Outline。枠は `border-border-primary-subtle` の破線、文字は `text-fg-primary`。
+- **対にする：** 予定と実績は1つのものの2つの状態なので、同じ色相の破線と塗りで差を付ける（v0.6.1）。
 - **実績：** Badge の Default（`bg-primary`、`text-primary-foreground`）。
 
 #### Callout — `2007:55`
@@ -233,8 +236,9 @@ Figma fileKey: `diqeunxgHCLNIPKVXL4evB`
 | 意味 | 使う変数 | 補足 |
 |---|---|---|
 | ブランド・主操作 | `primary` (teal-600) | — |
-| 収入・成功・情報 | `fg-success` / `success-subtle` (teal) | — |
-| 注意・防衛ライン付近 | `fg-warning` / `warning-subtle` (**green**) | 一般的な黄・橙ではない。sakiguri の決定事項 |
+| 収入・成功 | `fg-success` / `success-subtle` (**green**) | v0.6.1 で teal から変更。teal は primary と同値で、収入と固定費が同じ色になっていた |
+| 情報・固定費 | `fg-primary` / `primary-subtle` (teal) | — |
+| 注意・防衛ライン付近 | `fg-warning` / `warning-subtle` (**amber**) | **v0.6.1 で green から変更。** 旧「一般的な黄・橙ではない」という決定を取り消した。緑は安全に読めるため、防衛ラインを割る行が警告に見えなかった |
 | エラー・破壊的操作 | `destructive` (**plum**) | 赤ではない。sakiguri の決定事項 |
 | 支出の金額 | `fg-destructive` (plum-800) ＋「−」 | — |
 | 残高・合計 | `foreground` | — |

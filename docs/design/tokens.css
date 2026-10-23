@@ -23,8 +23,11 @@
   --neutral-50: #fafafa;  --neutral-100: #f4f4f5; --neutral-200: #e4e4e7; --neutral-300: #d4d4d8;
   --neutral-400: #a1a1aa; --neutral-600: #52525b; --neutral-700: #3f3f46; --neutral-800: #27272a;
   --neutral-900: #18181b; --neutral-950: #09090b;
-  --green-50: #f0fdf4; --green-300: #86efac; --green-400: #4ade80; --green-800: #166534;
-  --green-900: #14532d; --green-950: #052e16;
+  --green-50: #f0fdf4; --green-200: #bbf7d0; --green-300: #86efac; --green-400: #4ade80;
+  --green-700: #15803d; --green-800: #166534; --green-900: #14532d; --green-950: #052e16;
+  /* amber = Tailwind amber。警告に暖色を当てるために v0.6.1 で追加（旧：警告=green） */
+  --amber-50: #fffbeb;  --amber-200: #fde68a; --amber-300: #fcd34d; --amber-400: #fbbf24;
+  --amber-700: #b45309; --amber-800: #92400e; --amber-900: #78350f; --amber-950: #451a03;
 
   /* Brand (sakiguri mode): brand = teal */
   --brand-50: var(--teal-50);   --brand-100: var(--teal-100); --brand-200: var(--teal-200);
@@ -78,8 +81,8 @@
   --destructive: var(--plum-700);
   --destructive-hover: var(--plum-800);
   --destructive-subtle: var(--plum-50);
-  --success-subtle: var(--teal-50);
-  --warning-subtle: var(--green-50);
+  --success-subtle: var(--green-50);
+  --warning-subtle: var(--amber-50);
   --disabled: var(--neutral-100);
   --inverse: var(--neutral-900);
   --control-off: var(--neutral-300);
@@ -95,8 +98,8 @@
   --accent-foreground: var(--neutral-900);   /* shadcn compatibility */
   --text-primary: var(--brand-600);
   --text-destructive: var(--plum-800);
-  --text-success: var(--teal-500);
-  --text-warning: var(--green-800);
+  --text-success: var(--green-700);
+  --text-warning: var(--amber-800);
   --text-disabled: var(--neutral-400);
   --text-inverse: var(--neutral-50);
 
@@ -107,8 +110,8 @@
   --border-primary-subtle: var(--brand-200);
   --border-destructive: var(--plum-500);
   --border-destructive-subtle: var(--plum-200);
-  --border-success: var(--teal-200);
-  --border-warning: var(--green-300);
+  --border-success: var(--green-200);
+  --border-warning: var(--amber-300);
 
   /* Icon colors (equivalent to the Figma Icon collection modes) */
   --icon-default: var(--foreground);
@@ -138,8 +141,8 @@
   --destructive: var(--plum-600);
   --destructive-hover: var(--plum-700);
   --destructive-subtle: var(--plum-950);
-  --success-subtle: var(--teal-950);
-  --warning-subtle: var(--green-950);
+  --success-subtle: var(--green-950);
+  --warning-subtle: var(--amber-950);
   --disabled: var(--neutral-800);
   --inverse: var(--neutral-50);
   --control-off: var(--neutral-700);
@@ -151,8 +154,8 @@
   --accent-foreground: var(--neutral-50);
   --text-primary: var(--brand-400);
   --text-destructive: var(--plum-300);
-  --text-success: var(--teal-300);
-  --text-warning: var(--green-400);
+  --text-success: var(--green-400);
+  --text-warning: var(--amber-400);
   --text-disabled: var(--neutral-600);
   --text-inverse: var(--neutral-900);
 
@@ -162,8 +165,8 @@
   --border-primary: var(--brand-500);
   --border-primary-subtle: var(--brand-800);
   --border-destructive-subtle: var(--plum-900);
-  --border-success: var(--teal-900);
-  --border-warning: var(--green-900);
+  --border-success: var(--green-900);
+  --border-warning: var(--amber-900);
 }
 
 /* ---------- Density ---------- */

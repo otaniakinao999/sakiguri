@@ -8,13 +8,19 @@ import { cn } from "@/lib/utils";
 /** 区分。カード引落は CSV取込 の画面にだけ出てくる（screens.md §1）。 */
 export type Category = "収入" | "固定費" | "変動費" | "振替" | "カード引落";
 
-/** docs/design/components.md の対応表。独自の割り当てを作らない。 */
+/**
+ * docs/design/components.md の対応表。独自の割り当てを作らない。
+ *
+ * **warning は区分に使わない。** v0.6.1 で警告色を暖色（amber）にし、
+ * 残高警告の専用色にした。変動費に当てると、生活防衛ラインを割る月の行と
+ * 日常的な変動費タグが同じ色になり、一番急を要する合図が埋もれる。
+ */
 const VARIANT: Record<Category, React.ComponentProps<typeof Badge>["variant"]> = {
   収入: "success",
   固定費: "info",
-  変動費: "warning",
-  振替: "secondary",
-  カード引落: "secondary",
+  変動費: "secondary",
+  振替: "outline",
+  カード引落: "outline",
 };
 
 /**
