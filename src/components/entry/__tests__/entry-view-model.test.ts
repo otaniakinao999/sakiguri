@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import type { Actual } from "@/core/types";
 import { buildHeaderStats } from "@/lib/header-stats";
+
+import { isSubmittable } from "../ActualForm";
 
 import {
   buildEntryFixture,
@@ -124,5 +127,53 @@ describe("PageHeader", () => {
       "90日後",
       "カード未払",
     ]);
+  });
+});
+
+describe("isSubmittable — 振替先の検査", () => {
+  /**
+   * **振替先が無いまま保存できてはいけない。**
+   * 保存できると、残高から出ていく側だけが効いて受ける側に入らず、
+   * 合計が金額ぶん減る。画面には「振替」と出るので辻褄が合わない。
+   * 実際に14件そうなった（2026-09-02〜10-02、¥2,389,980）。
+   *
+   * 手入力とインライン編集が同じ関数を使っているので、ここで両方を留める。
+   */
+  const base: Actual = {
+    id: "a",
+    key: null,
+    unplanned: false,
+    date: "2026-10-05",
+    name: "振替",
+    type: "transfer",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 50_000,
+    bizRatio: 0,
+    accountId: "bank",
+  };
+
+  it("振替で振替先が無ければ保存できない", () => {
+    expect(isSubmittable({ ...base, toAccountId: undefined })).toBe(false);
+    expect(isSubmittable({ ...base, toAccountId: "" })).toBe(false);
+  });
+
+  it("振替先があれば保存できる", () => {
+    expect(isSubmittable({ ...base, toAccountId: "cash" })).toBe(true);
+  });
+
+  it("振替以外は振替先を要求しない", () => {
+    const expense: Actual = {
+      ...base,
+      type: "expense",
+      costType: "variable",
+      categoryCode: "EXP-20",
+    };
+    expect(isSubmittable({ ...expense, toAccountId: undefined })).toBe(true);
+  });
+
+  it("名前と金額の検査は残っている", () => {
+    expect(isSubmittable({ ...base, toAccountId: "cash", name: "  " })).toBe(false);
+    expect(isSubmittable({ ...base, toAccountId: "cash", amount: 0 })).toBe(false);
   });
 });

@@ -14,6 +14,7 @@
  * 行い、この画面には出さない。
  */
 
+import { isCard } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
 import { Button } from "@/components/ui/Button";
 import {
@@ -41,8 +42,20 @@ export function applyActualPatch(
 }
 
 /** 登録・保存できる状態か。 */
+/**
+ * 保存してよいか。
+ *
+ * **振替は振替先が要る。** 無いまま保存できると、残高から出ていく側だけが
+ * 効いて、受ける側に入らない。合計が金額ぶん減るのに、画面には「振替」と
+ * 出るので辻褄が合わない。実際に14件そうなった。
+ *
+ * 手入力（EntryScreen）とインライン編集（CashflowScreen）の両方がこれを
+ * 使っているので、ここだけで両方塞がる（CLAUDE.md §2.8）。
+ */
 export function isSubmittable(form: Actual): boolean {
-  return form.name.trim() !== "" && form.amount !== 0;
+  if (form.name.trim() === "" || form.amount === 0) return false;
+  if (form.type === "transfer" && !form.toAccountId) return false;
+  return true;
 }
 
 export function ActualForm({
@@ -148,12 +161,17 @@ export function ActualForm({
               value={value.accountId}
               onChange={(e) => onChange({ accountId: e.target.value })}
             >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.kind === "card" ? "（カード）" : ""}
-                </option>
-              ))}
+              {/* **振替のときはカードを出さない。** カードから振り替える
+                  ことはできない。選べると、出ていく側がカードで合計に
+                  入らず、受ける側だけが効いて合計が増える */}
+              {accounts
+                .filter((a) => value.type !== "transfer" || !isCard(a))
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                    {a.kind === "card" ? "（カード）" : ""}
+                  </option>
+                ))}
             </Select>
           )}
         </Field>
@@ -166,8 +184,11 @@ export function ActualForm({
                 onChange={(e) => onChange({ toAccountId: e.target.value })}
               >
                 <option value="">選んでください</option>
+                {/* **カードは振替先にしない。** カードは合計残高の
+                    計算に入らないので、受ける側の加算が落ちて
+                    合計が金額ぶん減る */}
                 {accounts
-                  .filter((a) => a.id !== value.accountId)
+                  .filter((a) => a.id !== value.accountId && !isCard(a))
                   .map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}

@@ -7,6 +7,7 @@
  *   収支・固定変動・費目・金額・事業割合・口座（振替なら振替先）。
  */
 
+import { isCard } from "@/core/types";
 import type { Account, CostType, EntryType } from "@/core/types";
 import { CategorySelect, fitCategory, NumberInput, Select } from "@/components/ui/inputs";
 
@@ -103,11 +104,14 @@ export function EntryFieldCells({
           value={value.accountId}
           onChange={(e) => onChange({ accountId: e.target.value })}
         >
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
+          {/* 振替のときはカードを出さない（ActualForm と同じ理由） */}
+          {accounts
+            .filter((a) => value.type !== "transfer" || !isCard(a))
+            .map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
         </Select>
         {value.type === "transfer" && (
           <Select
@@ -116,8 +120,9 @@ export function EntryFieldCells({
             onChange={(e) => onChange({ toAccountId: e.target.value })}
           >
             <option value="">振替先を選ぶ</option>
+            {/* カードは振替先にしない（合計の計算に入らないため） */}
             {accounts
-              .filter((a) => a.id !== value.accountId)
+              .filter((a) => a.id !== value.accountId && !isCard(a))
               .map((a) => (
                 <option key={a.id} value={a.id}>
                   → {a.name}
