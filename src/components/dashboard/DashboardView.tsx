@@ -11,11 +11,33 @@ import {
 import { LedgerRow } from "@/components/sakiguri/LedgerRow";
 import { LegendItem } from "@/components/sakiguri/LegendItem";
 import { Panel } from "@/components/sakiguri/Panel";
+
+/** やることパネルのアンカー。「うち未記録の予定」の飛び先（要望8） */
+const TODO_ANCHOR = "todo";
 import { TodoRow } from "@/components/sakiguri/TodoRow";
 import type { AmountType } from "@/components/sakiguri/Amount";
 import type { Category } from "@/components/sakiguri/CategoryTag";
 import { formatMonthDayJa, formatSignedYen, formatYen } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { UNRECORDED_LABEL } from "@/lib/unrecorded";
+
+/**
+ * 「うち未記録の予定」。押すとやることへ飛ぶ（要望8）。
+ *
+ * 金額だけでは何が未記録なのか分からない、という指摘への対応。
+ * **件数は添えない。** 発生日で数える件数と現金日で出すこの金額は
+ * 基準が違い、カード払いのある月に食い違う。件数の出しどころは
+ * やることの見出し1箇所だけ（AC-49b・AC-49d、要件定義書 §4.1）。
+ *
+ * 2箇所に出るので部品にしてある（CLAUDE.md §2.8）。
+ */
+function UnrecordedLink({ amount, className }: { amount: Yen; className?: string }) {
+  return (
+    <a href={`#${TODO_ANCHOR}`} className={cn("underline-offset-2 hover:underline", className)}>
+      {UNRECORDED_LABEL} <span className="num">{formatSignedYen(amount)}</span>
+    </a>
+  );
+}
 
 export interface DashboardTodo {
   id: string;
@@ -159,9 +181,7 @@ export function DashboardView({
               <span className="num t-balance text-foreground">{formatYen(balance)}</span>
               {/* AC-49d：件数を並べない。件数はやることの見出しが唯一の出しどころ */}
               {unrecorded !== null && (
-                <span className="t-body-sm text-fg-primary">
-                  {UNRECORDED_LABEL} <span className="num">{formatSignedYen(unrecorded)}</span>
-                </span>
+                <UnrecordedLink amount={unrecorded} className="t-body-sm text-fg-primary" />
               )}
             </div>
           </div>
@@ -224,10 +244,12 @@ export function DashboardView({
       {/* Body — 2029:133 */}
       <div className="flex flex-1 flex-col gap-24 bg-muted px-32 pt-24 pb-32 wide:flex-row">
         <Panel
+          id={TODO_ANCHOR}
           title="やること"
           count={`${todoCount}件`}
           action={todoAction}
-          className="min-w-0 flex-1 self-start"
+          /* 「うち未記録の予定」からの飛び先。見出しが上に隠れないよう余白を取る */
+          className="min-w-0 flex-1 scroll-mt-24 self-start"
         >
           {notices}
 
@@ -294,8 +316,8 @@ export function DashboardView({
 
           {unrecorded !== null && (
             <p className="t-body-sm text-muted-foreground">
-              {UNRECORDED_LABEL} <span className="num">{formatSignedYen(unrecorded)}</span>{" "}
-              は、上の残高どちらにも含まれています。
+              <UnrecordedLink amount={unrecorded} />
+              {" は、上の残高どちらにも含まれています。"}
             </p>
           )}
         </Panel>
