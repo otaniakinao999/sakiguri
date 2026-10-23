@@ -99,6 +99,8 @@ export const CATEGORIES: readonly Category[] = [
   { code: "EXP-30", name: "こづかい", group: "EXP", recommendedCostType: "fixed" },
   { code: "EXP-31", name: "仕送り・援助", group: "EXP", recommendedCostType: "fixed" },
   { code: "EXP-32", name: "特別費", group: "EXP", recommendedCostType: "variable" },
+  { code: "EXP-33", name: "会議費", group: "EXP", recommendedCostType: "variable", taxFormAccount: "雑費" },
+  { code: "EXP-34", name: "支払手数料", group: "EXP", recommendedCostType: "variable", taxFormAccount: "雑費" },
 
   /* ---------- 資金移動（TRF） ----------
      損益に計上しない。CL-5 の集計対象外（§3.1.2 適用規則5）。 */
@@ -109,6 +111,9 @@ export const CATEGORIES: readonly Category[] = [
   { code: "TRF-05", name: "借入実行", group: "TRF" },
   { code: "TRF-06", name: "借入返済（元金）", group: "TRF", generated: true },
   { code: "TRF-07", name: "消費税の納付積立", group: "TRF" },
+  { code: "TRF-08", name: "短期資金の受入", group: "TRF" },
+  { code: "TRF-09", name: "短期資金の返済", group: "TRF" },
+  { code: "TRF-10", name: "敷金・保証金", group: "TRF" },
 ];
 
 /** CL-2 が生成するカード引落の費目コード。 */

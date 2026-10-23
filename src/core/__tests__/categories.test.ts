@@ -16,11 +16,11 @@ import {
    転記ミスを検出するための検査をここに置く。 */
 
 describe("費目マスタの整合性", () => {
-  it("件数が要件定義書と一致する（INC 7 / EXP 32 / TRF 7）", () => {
+  it("件数が要件定義書と一致する（INC 7 / EXP 34 / TRF 10）", () => {
     expect(categoriesInGroup("INC")).toHaveLength(7);
-    expect(categoriesInGroup("EXP")).toHaveLength(32);
-    expect(categoriesInGroup("TRF")).toHaveLength(7);
-    expect(CATEGORIES).toHaveLength(46);
+    expect(categoriesInGroup("EXP")).toHaveLength(34);
+    expect(categoriesInGroup("TRF")).toHaveLength(10);
+    expect(CATEGORIES).toHaveLength(51);
   });
 
   it("コードが重複しない", () => {
@@ -54,8 +54,8 @@ describe("費目マスタの整合性", () => {
     const groups = CATEGORIES.map((c) => c.group);
     expect(groups).toEqual([
       ...new Array(7).fill("INC"),
-      ...new Array(32).fill("EXP"),
-      ...new Array(7).fill("TRF"),
+      ...new Array(34).fill("EXP"),
+      ...new Array(10).fill("TRF"),
     ]);
   });
 
@@ -91,7 +91,26 @@ describe("費目マスタの整合性", () => {
     for (const c of categoriesInGroup("EXP")) {
       const n = Number(c.code.slice(4));
       if (n <= 20) expect(c.taxFormAccount).toBeDefined();
-      else expect(c.taxFormAccount).toBeUndefined();
+    }
+  });
+
+  /**
+   * **番号の範囲が事業／家計を表している。**
+   * EXP-01〜20 が事業費目（決算書の科目に対応）、EXP-21〜32 が家計費目
+   * （対応なし）。v0.6.1 で事業費目を足したとき、連番の決まり（グループ内で
+   * 01 から連番・表示順＝コード順）のために末尾の EXP-33 以降へ付けるしか
+   * なく、**番号の範囲と事業／家計の対応が崩れた。**
+   *
+   * 崩れたのは範囲だけで、家計費目そのものは動いていない。ここを範囲では
+   * なく実体で留め直す。EXP-21〜32 に決算書の科目が付いたら落ちる。
+   *
+   * 付け替えるには既存データの category_code を書き換えることになるので
+   * やらない（CLAUDE.md §2.5.2）。
+   */
+  it("家計費目（EXP-21〜EXP-32）は決算書の科目を持たない", () => {
+    for (let n = 21; n <= 32; n += 1) {
+      const code = `EXP-${String(n).padStart(2, "0")}`;
+      expect(categoryOf(code).taxFormAccount).toBeUndefined();
     }
   });
 
@@ -160,7 +179,7 @@ describe("categoryOrder", () => {
   it("掲載順のとおりに並ぶ", () => {
     expect(categoryOrder("INC-01")).toBe(0);
     expect(categoryOrder("EXP-01")).toBe(7);
-    expect(categoryOrder("TRF-01")).toBe(39);
+    expect(categoryOrder("TRF-01")).toBe(41);
     expect(categoryOrder("EXP-02")).toBeGreaterThan(categoryOrder("EXP-01"));
   });
 });
