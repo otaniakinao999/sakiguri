@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   accountDelta,
+  isOneSidedTransfer,
   buildBalanceSeries,
   type BalanceInput,
   type BalanceRow,
@@ -408,20 +409,86 @@ describe("accountDelta", () => {
     src: "oneoff",
   };
 
+  /** 合計残高に足す口座。振替が閉じるかはこの集合で決まる */
+  const deposits = new Set(["a1", "a2", "a3"]);
+
   it("expense はその口座を減らす", () => {
-    expect(accountDelta(base, "a1")).toBe(-1_000);
-    expect(accountDelta(base, "a2")).toBe(0);
+    expect(accountDelta(base, "a1", deposits)).toBe(-1_000);
+    expect(accountDelta(base, "a2", deposits)).toBe(0);
   });
 
   it("income はその口座を増やす", () => {
-    expect(accountDelta({ ...base, type: "income" }, "a1")).toBe(1_000);
+    expect(accountDelta({ ...base, type: "income" }, "a1", deposits)).toBe(1_000);
   });
 
   it("transfer は送金元を減らし送金先を増やす", () => {
     const t: CashEvent = { ...base, type: "transfer", toAccountId: "a2" };
-    expect(accountDelta(t, "a1")).toBe(-1_000);
-    expect(accountDelta(t, "a2")).toBe(1_000);
-    expect(accountDelta(t, "a3")).toBe(0);
+    expect(accountDelta(t, "a1", deposits)).toBe(-1_000);
+    expect(accountDelta(t, "a2", deposits)).toBe(1_000);
+    expect(accountDelta(t, "a3", deposits)).toBe(0);
+  });
+
+  /**
+   * 閉じない振替（CL-3 手順6）
+   *
+   * **片側だけ効かせない。** 残った側だけが効くと合計が静かにずれる。
+   * 画面上は普通の振替に見えるので、目視では見つからない。
+   * 実際に14件（¥2,389,980）入っていて、1か月半気づけなかった。
+   *
+   * **合計が0であることだけを見ても足りない。** 両側を足せば0になる
+   * のは当たり前なので、1件ずつの額が0であることまで見る。
+   */
+  describe("閉じない振替は、どちらの側も動かさない", () => {
+    const sum = (t: CashEvent, set: ReadonlySet<string>) =>
+      [...set].reduce((acc, id) => acc + accountDelta(t, id, set), 0);
+
+    it("振替先が未設定", () => {
+      const t: CashEvent = { ...base, type: "transfer", toAccountId: undefined };
+      expect(accountDelta(t, "a1", deposits)).toBe(0);
+      expect(sum(t, deposits)).toBe(0);
+    });
+
+    it("振替先が合計の集合に居ない（カード）", () => {
+      const t: CashEvent = { ...base, type: "transfer", toAccountId: "card1" };
+      expect(accountDelta(t, "a1", deposits)).toBe(0);
+      expect(sum(t, deposits)).toBe(0);
+    });
+
+    it("出金元が合計の集合に居ない（カード）。合計が増えるのを防ぐ", () => {
+      const t: CashEvent = {
+        ...base,
+        type: "transfer",
+        accountId: "card1",
+        toAccountId: "a2",
+      };
+      expect(accountDelta(t, "a2", deposits)).toBe(0);
+      expect(sum(t, deposits)).toBe(0);
+    });
+
+    it("閉じる振替は従来どおり動く（留め具が効きすぎていないこと）", () => {
+      const t: CashEvent = { ...base, type: "transfer", toAccountId: "a2" };
+      expect(accountDelta(t, "a1", deposits)).toBe(-1_000);
+      expect(sum(t, deposits)).toBe(0);
+    });
+  });
+
+  describe("isOneSidedTransfer", () => {
+    it("振替以外は常に false", () => {
+      expect(isOneSidedTransfer(base, deposits)).toBe(false);
+      expect(isOneSidedTransfer({ ...base, type: "income" }, deposits)).toBe(false);
+    });
+
+    it("両側が集合に居るときだけ false", () => {
+      const t: Pick<CashEvent, "type" | "accountId" | "toAccountId"> = {
+        type: "transfer",
+        accountId: "a1",
+        toAccountId: "a2",
+      };
+      expect(isOneSidedTransfer(t, deposits)).toBe(false);
+      expect(isOneSidedTransfer({ ...t, toAccountId: undefined }, deposits)).toBe(true);
+      expect(isOneSidedTransfer({ ...t, toAccountId: "card1" }, deposits)).toBe(true);
+      expect(isOneSidedTransfer({ ...t, accountId: "card1" }, deposits)).toBe(true);
+    });
   });
 });
 

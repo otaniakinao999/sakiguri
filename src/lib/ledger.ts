@@ -9,7 +9,7 @@
  * 「引落」として現れる（CL-2）。年月別収支の発生日ベースとは日付が違う。
  */
 
-import { accountDelta, type BalanceSeries } from "@/core/balance";
+import { accountDelta, isOneSidedTransfer, type BalanceSeries } from "@/core/balance";
 import { groupOfCategory } from "@/core/categories";
 import { compareDate, compareString, toYearMonth } from "@/core/date";
 import type { MonthlyCashflowRow, ShortfallWarning } from "@/core/monthly";
@@ -68,6 +68,15 @@ export interface LedgerEntry extends CashEvent {
   origDate?: DateStr;
   /** 生成物なので繰延できない（カード引落）*/
   editable: boolean;
+  /**
+   * 合計の中で閉じない振替（振替先が未設定・カード、出金元がカード）。
+   *
+   * **残高に反映していない行。** 片側だけ効かせると合計が静かにずれる
+   * ので `accountDelta` が両側とも0にしている（`isOneSidedTransfer`）。
+   * 反映しないことを画面に出さないと、金額のある行で残高が動かない
+   * 理由が分からない。
+   */
+  oneSided: boolean;
   /**
    * 今日より前なのに、まだ実績が入っていない予定（要件定義書 §4.2 過去月の表示）。
    *
@@ -189,8 +198,9 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
    * 違う集合で足して終値に着地しなくなる。
    */
   const depositIds = Object.keys(series.rows[0]?.byAccount ?? {});
+  const deposits = new Set(depositIds);
   const totalDelta = (event: CashEvent) =>
-    depositIds.reduce((sum, id) => sum + accountDelta(event, id), 0);
+    depositIds.reduce((sum, id) => sum + accountDelta(event, id, deposits), 0);
 
   /* 同じ日のイベントを表示順に並べ、その日の始値から積み上げる。
      **絞り込みで隠れる行も積む。** 隠したぶんを飛ばすと、見えている行の
@@ -243,6 +253,9 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
       editable: entryStatus === "plan" && event.src !== "settle",
       overdue:
         entryStatus === "plan" && event.src !== "settle" && event.date < today,
+      /* 判定は core の1箇所から借りる。条件を写すと、片方にだけ条件が
+         増えたときに食い違う（CLAUDE.md §2.8） */
+      oneSided: isOneSidedTransfer(event, deposits),
     });
   }
 

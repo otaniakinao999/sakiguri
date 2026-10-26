@@ -68,14 +68,51 @@ export interface BalanceSeries {
  * 振替は送金元をマイナス、送金先をプラスにする。両方が現預金口座なら
  * 合計としては相殺されて0になる。
  */
-export function accountDelta(event: CashEvent, accountId: string): Yen {
+export function accountDelta(
+  event: CashEvent,
+  accountId: string,
+  deposits: ReadonlySet<string>,
+): Yen {
   if (event.type === "transfer") {
+    /* **閉じない振替は、どちらの側も動かさない。** 片側だけ効かせると
+       合計が静かにずれる。どちらを選んでも不正確だが、合計が狂うほうが
+       害が大きい（生活防衛ラインの警告がその合計で出る）。
+       動かさなかったことは明細に理由を出す（lib/ledger の `oneSided`）。 */
+    if (isOneSidedTransfer(event, deposits)) return 0;
     if (event.accountId === accountId) return -event.amount;
     if (event.toAccountId === accountId) return event.amount;
     return 0;
   }
   if (event.accountId !== accountId) return 0;
   return signedAmount(event);
+}
+
+/**
+ * 合計残高の中で閉じない振替か。
+ *
+ * 振替は出す側と受ける側が同額なので合計は動かない。**両側が合計の集合
+ * （現金・銀行口座）に居て初めてそうなる。** 片側が欠けると、残った側
+ * だけが効いて合計が動く。
+ *
+ * | 欠け方 | 起きること |
+ * | --- | --- |
+ * | 振替先が未設定 | マイナスだけ残り、合計が減る |
+ * | 振替先がカード | カードは合計に入らないので同じ |
+ * | 出金元がカード | プラスだけ残り、合計が増える |
+ *
+ * **どれも画面上は普通の振替に見え、残高だけが静かにずれる。**
+ * 実際に14件（¥2,389,980）入っていて、1か月半のあいだ気づけなかった。
+ *
+ * 入力側は塞いだが、定期項目・単発項目は即時保存で止める場所が無く、
+ * CSV取込や過去データからも同じ状態が入りうる。**最後に受けるのはここ。**
+ */
+export function isOneSidedTransfer(
+  event: Pick<CashEvent, "type" | "accountId" | "toAccountId">,
+  deposits: ReadonlySet<string>,
+): boolean {
+  if (event.type !== "transfer") return false;
+  if (!deposits.has(event.accountId)) return true;
+  return !event.toAccountId || !deposits.has(event.toAccountId);
 }
 
 /**
@@ -119,6 +156,8 @@ export function buildBalanceSeries(
 
   const depositAccounts = accounts.filter((a) => !isCard(a));
   const cards = accounts.filter(isCard);
+  /* 合計残高に足す口座の集合。振替が閉じるかの判定に使う */
+  const deposits = new Set(depositAccounts.map((a) => a.id));
 
   /**
    * 手順2：実績が持つキーの予定を予測から除外する（消し込み）。
@@ -168,7 +207,7 @@ export function buildBalanceSeries(
   for (const event of projectedCash) {
     const d = touch(event.date);
     for (const account of depositAccounts) {
-      const delta = accountDelta(event, account.id);
+      const delta = accountDelta(event, account.id, deposits);
       d.proj += delta;
       d.byAccount[account.id] += delta;
     }
@@ -177,7 +216,7 @@ export function buildBalanceSeries(
   for (const event of actualCash) {
     const d = touch(event.date);
     for (const account of depositAccounts) {
-      d.act += accountDelta(event, account.id);
+      d.act += accountDelta(event, account.id, deposits);
     }
   }
 

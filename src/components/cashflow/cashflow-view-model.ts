@@ -99,6 +99,10 @@ function noteOf(entry: LedgerEntry): string | undefined {
     return `繰延（元の日付 ${formatMonthDay(entry.origDate)}）`;
   }
   if (entry.overdue) return "実績が未入力";
+  /* **「増減なし」より先に出す。** 閉じない振替は合計を動かさないが、
+     それは「振替だから」ではなく「反映できていないから」である。
+     同じ文言にすると、直すべき行が正常な行に紛れる */
+  if (entry.oneSided) return "振替先が未設定です（残高に反映していません）";
   if (entry.type === "transfer") return "合計残高は増減なし";
   return undefined;
 }
