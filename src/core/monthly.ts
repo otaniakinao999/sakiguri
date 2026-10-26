@@ -10,6 +10,7 @@
  * 利用日ではなく引落日で出金に計上する（CL-5 の発生日ベースとは異なる）。
  */
 
+import { accountDelta } from "./balance";
 import type { BalanceRow, BalanceSeries } from "./balance";
 import { toYearMonth } from "./date";
 import type { CashEvent, DateStr, Yen, YearMonth } from "./types";
@@ -82,8 +83,24 @@ function warningOf(
 export function buildMonthlyCashflow(
   series: BalanceSeries,
   reserveLine: Yen,
+  /**
+   * 見せる口座。省略すると合計（従来どおり）。
+   *
+   * **「合計に入る口座の集合」とは別物である。** 前者は振替が閉じるかを
+   * 決める集合で、こちらは表示の範囲。混同すると、銀行→現金の振替を
+   * 銀行だけで見たときに `isOneSidedTransfer` が誤って0にする。
+   */
+  scope?: ReadonlySet<string>,
 ): MonthlyCashflowRow[] {
   if (series.rows.length === 0) return [];
+
+  /* 合計に入る口座（＝振替が閉じるかの判定に使う集合）。表示範囲ではない */
+  const deposits = new Set(Object.keys(series.rows[0].byAccount));
+  const shown = scope ?? deposits;
+  const inScope = [...shown];
+  /** その口座（範囲）から見た、この行の残高 */
+  const balanceOf = (row: BalanceRow): Yen =>
+    scope ? inScope.reduce((sum, id) => sum + (row.byAccount[id] ?? 0), 0) : row.proj;
 
   /* 日次の行を月ごとにまとめる。行は日付昇順なので月も出現順に並ぶ */
   const monthOrder: YearMonth[] = [];
@@ -123,9 +140,24 @@ export function buildMonthlyCashflow(
   for (const event of series.projectedCash as CashEvent[]) {
     if (event.date < firstDate || event.date > lastDate) continue;
     const flow = flowOf(toYearMonth(event.date));
-    if (event.type === "income") flow.inflow += event.amount;
-    else if (event.type === "expense") flow.outflow += event.amount;
-    /* transfer は合計残高を動かさないので入金にも出金にも数えない */
+    /**
+     * **金額ではなく、この範囲の残高が動いた額で数える。**
+     *
+     * 合計で見るとき：振替は出す側と受ける側が相殺して0になるので、
+     * 入金にも出金にも入らない（従来の「transfer は数えない」と同じ）。
+     *
+     * 口座別で見るとき：**振替はその口座から見れば入金か出金である。**
+     * 金額で数えると、月末残高だけ口座別になって
+     * 「前月繰越 ＋ 収支 ＝ 月末残高」が合わなくなる。
+     *
+     * この1本で両方が出る。場合分けを足さないこと。
+     */
+    const delta = inScope.reduce(
+      (sum, id) => sum + accountDelta(event, id, deposits),
+      0,
+    );
+    if (delta > 0) flow.inflow += delta;
+    else if (delta < 0) flow.outflow += -delta;
   }
 
   const rows: MonthlyCashflowRow[] = [];
@@ -135,16 +167,17 @@ export function buildMonthlyCashflow(
     const days = daysByMonth.get(yearMonth)!;
     const { inflow, outflow } = flows.get(yearMonth) ?? { inflow: 0, outflow: 0 };
     const net = inflow - outflow;
-    const closing = days[days.length - 1].proj;
+    const closing = balanceOf(days[days.length - 1]);
 
     /* 前月繰越。初月だけ、月末残高から当月の収支を差し引いて求める */
     const opening = previousClosing ?? closing - inflow + outflow;
 
-    let lowest = days[0].proj;
+    let lowest = balanceOf(days[0]);
     let lowestDate = days[0].date;
     for (const day of days) {
-      if (day.proj < lowest) {
-        lowest = day.proj;
+      const value = balanceOf(day);
+      if (value < lowest) {
+        lowest = value;
         lowestDate = day.date;
       }
     }
