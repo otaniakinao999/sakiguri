@@ -151,13 +151,26 @@ export function buildBalanceSeries(
   input: BalanceInput,
   to: DateStr,
   today: DateStr,
+  /**
+   * `proj` と `act` に足す口座。省略すると全口座（従来どおり）。
+   *
+   * **振替が閉じるかの判定には使わない。** あちらは全口座で見る。
+   * ここを兼ねさせると、銀行→現金の振替を銀行だけで見たときに
+   * 「閉じていない」と判定され、`accountDelta` が0を返してしまう。
+   *
+   * `byAccount` は範囲に関わらず全口座ぶん持つ。明細側が振替の判定に
+   * 使う集合をここから取るため、欠けると同じ取り違えが起きる。
+   */
+  scope?: ReadonlySet<string>,
 ): BalanceSeries {
   const { accounts, asOf, forecast, actuals } = input;
 
   const depositAccounts = accounts.filter((a) => !isCard(a));
   const cards = accounts.filter(isCard);
-  /* 合計残高に足す口座の集合。振替が閉じるかの判定に使う */
+  /* 合計残高に足す口座の集合。振替が閉じるかの判定に使う（範囲とは別物） */
   const deposits = new Set(depositAccounts.map((a) => a.id));
+  /* proj / act に足す範囲 */
+  const shown = scope ?? deposits;
 
   /**
    * 手順2：実績が持つキーの予定を予測から除外する（消し込み）。
@@ -208,7 +221,8 @@ export function buildBalanceSeries(
     const d = touch(event.date);
     for (const account of depositAccounts) {
       const delta = accountDelta(event, account.id, deposits);
-      d.proj += delta;
+      /* **範囲の外は合計に足さない。** byAccount は全口座ぶん持つ */
+      if (shown.has(account.id)) d.proj += delta;
       d.byAccount[account.id] += delta;
     }
   }
@@ -216,6 +230,7 @@ export function buildBalanceSeries(
   for (const event of actualCash) {
     const d = touch(event.date);
     for (const account of depositAccounts) {
+      if (!shown.has(account.id)) continue;
       d.act += accountDelta(event, account.id, deposits);
     }
   }
@@ -234,7 +249,9 @@ export function buildBalanceSeries(
   }
 
   /* 手順1：現金・銀行口座の基準日残高の合計が開始残高。カードは含めない */
-  const opening = depositAccounts.reduce((sum, a) => sum + a.balance, 0);
+  const opening = depositAccounts
+    .filter((a) => shown.has(a.id))
+    .reduce((sum, a) => sum + a.balance, 0);
 
   /* 手順4：実績系列を打ち切る日 */
   const lastActualDate = actuals.reduce(

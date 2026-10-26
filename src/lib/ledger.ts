@@ -133,6 +133,13 @@ export interface LedgerInput {
   status: LedgerStatus;
   /** 今日。過去かどうかの判定に使う */
   today: DateStr;
+  /**
+   * 残高を積む口座の範囲。省略すると全口座（従来どおり）。
+   *
+   * **`series` に渡した範囲と必ず揃えること。** 別にすると、行ごとの
+   * 残高がその日の終値に着地しなくなる。
+   */
+  scope?: ReadonlySet<string>;
 }
 
 /**
@@ -181,7 +188,7 @@ export function matchesStatus(
  * 繰延の操作もできない。
  */
 export function buildLedgerView(input: LedgerInput): LedgerView {
-  const { series, monthly, from, to, kind, status, today } = input;
+  const { series, monthly, from, to, kind, status, today, scope } = input;
   const currentYm = toYearMonth(today);
 
   /* 日付 → その日の予測残高（終値） */
@@ -198,9 +205,14 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
    * 違う集合で足して終値に着地しなくなる。
    */
   const depositIds = Object.keys(series.rows[0]?.byAccount ?? {});
+  /* 振替が閉じるかの判定に使う集合。**範囲とは別物。** 範囲で判定すると、
+     銀行→現金の振替を銀行だけで見たときに「閉じていない」と誤判定される */
   const deposits = new Set(depositIds);
+  /* 残高を積む範囲。系列の proj と必ず同じものを使う。別にすると
+     行ごとの残高がその日の終値に着地しない */
+  const inScope = scope ? depositIds.filter((id) => scope.has(id)) : depositIds;
   const totalDelta = (event: CashEvent) =>
-    depositIds.reduce((sum, id) => sum + accountDelta(event, id, deposits), 0);
+    inScope.reduce((sum, id) => sum + accountDelta(event, id, deposits), 0);
 
   /* 同じ日のイベントを表示順に並べ、その日の始値から積み上げる。
      **絞り込みで隠れる行も積む。** 隠したぶんを飛ばすと、見えている行の
