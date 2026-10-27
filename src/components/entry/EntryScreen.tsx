@@ -22,6 +22,8 @@ import { buildBalanceSeries } from "@/core/balance";
 import { classificationChanges } from "@/core/classification";
 import { addDays } from "@/core/date";
 import { buildForecast } from "@/core/forecast";
+import { touchesAccount } from "@/core/types";
+import { Select } from "@/components/ui/inputs";
 import type { Actual, ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
@@ -89,6 +91,8 @@ export function EntryScreen() {
   /* 実績一覧（FR-42） */
   const [listMonth, setListMonth] = useState<string | null>(null);
   const [listPage, setListPage] = useState(0);
+  /** 一覧を絞る口座。`"all"` は絞らない */
+  const [accountScope, setAccountScope] = useState<string>("all");
 
   const computed = useMemo(() => {
     if (!today || data.accounts.length === 0) {
@@ -128,11 +132,15 @@ export function EntryScreen() {
     };
   }, [data, today]);
 
-  const list = useMemo(
-    () =>
-      buildActualList({ actuals: data.actuals, yearMonth: listMonth, page: listPage }),
-    [data.actuals, listMonth, listPage],
-  );
+  const list = useMemo(() => {
+    /* **振替は2つの口座に関わる。** 出す側だけで絞ると、その口座へ
+       入ってきた振替が一覧から落ちる。判定は core の1箇所（§2.8） */
+    const actuals =
+      accountScope === "all"
+        ? data.actuals
+        : data.actuals.filter((a) => touchesAccount(a, accountScope));
+    return buildActualList({ actuals, yearMonth: listMonth, page: listPage });
+  }, [data.actuals, listMonth, listPage, accountScope]);
 
   if (!today) return <Panel title="実績入力">読み込み中…</Panel>;
 
@@ -269,12 +277,35 @@ export function EntryScreen() {
     <EntryView
       stats={computed.series ? buildHeaderStats(computed.series, data.accounts, today) : []}
       headerAction={
-        <Link href="/import">
-          <Button>
-            <ArrowUpTrayIcon />
-            CSVを取り込む
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-12">
+          <label className="flex shrink-0 items-center gap-8 whitespace-nowrap t-body-sm text-muted-foreground">
+            口座
+            <Select
+              aria-label="絞り込む口座"
+              value={accountScope}
+              onChange={(e) => {
+                setAccountScope(e.target.value);
+                /* 件数が変わるので、見ているページを先頭に戻す */
+                setListPage(0);
+              }}
+            >
+              <option value="all">すべて</option>
+              {/* **カードも出す。** 一覧の絞り込みなので、カード払いの
+                  実績を抜き出したいことがある。残高を出す画面ではない */}
+              {data.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <Link href="/import">
+            <Button>
+              <ArrowUpTrayIcon />
+              CSVを取り込む
+            </Button>
+          </Link>
+        </div>
       }
       todoCount={computed.todo.length}
       todos={buildEntryTodoRows(visibleTodo)}

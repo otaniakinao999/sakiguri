@@ -10,6 +10,7 @@
 import { categoriesInGroup } from "@/core/categories";
 import { applyClassification } from "@/core/classification";
 import { planKeySource } from "@/core/forecast";
+import { touchesAccount } from "@/core/types";
 import type {
   Account,
   Actual,
@@ -103,8 +104,9 @@ export const ACCOUNT_SCOPED_COLLECTIONS = [
 ] as const;
 
 export function removeAccount(data: AppData, id: string): AppData {
+  /* 判定は core の1箇所。絞り込み（実績入力）も同じものを使う（§2.8） */
   const uses = (item: { accountId: string; toAccountId?: string }) =>
-    item.accountId === id || item.toAccountId === id;
+    touchesAccount(item, id);
 
   const recurring = data.recurring.filter((r) => !uses(r));
   const oneoffs = data.oneoffs.filter((o) => !uses(o));

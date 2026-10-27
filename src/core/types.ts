@@ -92,6 +92,23 @@ export interface CardAccount extends AccountBase {
 export type Account = DepositAccount | CardAccount;
 
 /** カードかどうか。CL-2 はこの判定で残高を動かすかを分ける。 */
+/**
+ * その口座に関わる予定・実績か。
+ *
+ * **振替は2つの口座に関わる。** 出す側だけで判定すると、その口座へ
+ * 入ってきた振替が落ちる。口座を消すとき（道連れにする範囲）と、
+ * 口座で絞り込むときの両方がこの判定を使う。
+ *
+ * **2箇所に書かない**（CLAUDE.md §2.8）。片方にだけ条件が増えると、
+ * 「一覧には出ないのに、口座を消すと道連れになる」行ができる。
+ */
+export function touchesAccount(
+  item: { accountId: string; toAccountId?: string },
+  accountId: string,
+): boolean {
+  return item.accountId === accountId || item.toAccountId === accountId;
+}
+
 export function isCard(account: Account): account is CardAccount {
   return account.kind === "card";
 }
