@@ -57,6 +57,8 @@ export interface ProfitLossViewProps {
   notes?: React.ReactNode;
   /** v0.6.0 に無いもの（ADR-0023） */
   notices?: React.ReactNode;
+  /** 口座の絞り込み。按分の scope（家計／事業）とは別物 */
+  accountFilter?: React.ReactNode;
 }
 
 const KIND: Record<PLRowKind, TableCellKind> = {
@@ -119,6 +121,7 @@ export function ProfitLossView({
   lead,
   notes,
   notices,
+  accountFilter,
 }: ProfitLossViewProps) {
   /* 当初予算を添える列が1つでもあるか。**行ごとに決めない。**
      添える行だけ背が高くなると、数字の並びが揃わず読みづらくなる */
@@ -144,6 +147,7 @@ export function ProfitLossView({
               <Segmented select={year} />
               {scope ? <Segmented select={scope} /> : null}
               <Segmented select={mode} />
+              {accountFilter}
             </div>
           }
         >

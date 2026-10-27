@@ -21,6 +21,8 @@ import { actualToEvent } from "@/core/cash";
 import { buildForecast } from "@/core/forecast";
 import { buildPLMatrix, type PLMode } from "@/core/pl";
 import type { Scope } from "@/core/proration";
+import { touchesAccount } from "@/core/types";
+import { Select } from "@/components/ui/inputs";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Callout } from "@/components/sakiguri/Callout";
 import { Panel } from "@/components/sakiguri/Panel";
@@ -47,6 +49,14 @@ export function ProfitLossScreen() {
   const { data, today } = useAppData();
 
   const [scope, setScope] = useState<Scope>("all");
+  /**
+   * 絞り込む口座。`"all"` は絞らない。
+   *
+   * **`scope`（家計／事業）とは別物。** あちらは按分のスコープで、
+   * こちらは「どの口座から払ったか・どの口座に入ったか」。名前を
+   * 揃えると、どちらの話をしているか読めなくなる。
+   */
+  const [accountScope, setAccountScope] = useState<string>("all");
   const [mode, setMode] = useState<PLMode>("mixed");
   const [year, setYear] = useState<number | null>(null);
 
@@ -90,15 +100,26 @@ export function ProfitLossScreen() {
 
   const display = useMemo(() => {
     if (!computed || !today || activeYear === null) return null;
+    /* **損益を口座で絞る。** 「その口座から払った費用／その口座に
+       入った収入」という意味になる。残高の話ではないので、残高系列の
+       範囲（buildBalanceSeries の scope）は使わない。
+       判定は core の `touchesAccount` から借りる（§2.8） */
+    const byAccount = <T extends { accountId: string; toAccountId?: string }>(
+      events: readonly T[],
+    ): T[] =>
+      accountScope === "all"
+        ? [...events]
+        : events.filter((e) => touchesAccount(e, accountScope));
+
     const matrix = buildPLMatrix({
-      forecast: computed.forecast,
-      actuals: computed.actuals,
+      forecast: byAccount(computed.forecast),
+      actuals: byAccount(computed.actuals),
       year: activeYear,
       scope,
       today,
     });
     return buildPLDisplay(matrix, mode, today);
-  }, [computed, today, activeYear, scope, mode]);
+  }, [computed, today, activeYear, scope, mode, accountScope]);
 
   if (!today) return <Panel title="年月別 収支">読み込み中…</Panel>;
 
@@ -119,7 +140,28 @@ export function ProfitLossScreen() {
       stats={
         computed.series ? buildHeaderStats(computed.series, data.accounts, today) : []
       }
-      panelTitle={`年月別 収支（${activeYear}年度・${SCOPE_TITLES[scope]}）`}
+      panelTitle={`年月別 収支（${activeYear}年度・${SCOPE_TITLES[scope]}${
+        accountScope === "all"
+          ? ""
+          : `・${data.accounts.find((a) => a.id === accountScope)?.name ?? ""}`
+      }）`}
+      accountFilter={
+        <label className="flex shrink-0 items-center gap-8 whitespace-nowrap t-body-sm text-muted-foreground">
+          口座
+          <Select
+            aria-label="絞り込む口座"
+            value={accountScope}
+            onChange={(e) => setAccountScope(e.target.value)}
+          >
+            <option value="all">すべて</option>
+            {data.accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+      }
       columns={PL_COLUMNS}
       rows={buildPLViewRows(display)}
       signed={mode === "diff"}
