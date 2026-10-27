@@ -176,7 +176,11 @@ export interface FixtureModel {
 }
 
 /** 本番（DashboardScreen）と同じ順で同じ関数を通す。 */
-export function buildFixtureModel(today: DateStr = FIXTURE_TODAY): FixtureModel {
+export function buildFixtureModel(
+  today: DateStr = FIXTURE_TODAY,
+  /** 見る口座。省略すると全口座（本番と同じ既定） */
+  scope?: ReadonlySet<string>,
+): FixtureModel {
   const to = forecastEnd(FIXTURE_ASOF);
   const forecast = buildForecast(
     { recurring: FIXTURE_RECURRING, oneoffs: FIXTURE_ONEOFFS, overrides: {} },
@@ -192,6 +196,7 @@ export function buildFixtureModel(today: DateStr = FIXTURE_TODAY): FixtureModel 
     },
     to,
     today,
+    scope,
   );
   return {
     series,

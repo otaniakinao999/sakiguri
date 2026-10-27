@@ -9,7 +9,7 @@
 import { buildMonthlyCashflow, type MonthlyCashflowRow } from "@/core/monthly";
 import { toYearMonth } from "@/core/date";
 import { isCard } from "@/core/types";
-import type { DateStr } from "@/core/types";
+import type { DateStr, Yen } from "@/core/types";
 import { buildHeaderStats } from "@/lib/header-stats";
 import { buildLedgerView, type LedgerView } from "@/lib/ledger";
 import type { PageHeaderStat } from "@/components/sakiguri/PageHeader";
@@ -36,12 +36,20 @@ export interface CashflowFixture {
   from: DateStr;
   to: DateStr;
   stats: PageHeaderStat[];
+  /** 生活防衛ライン。口座別のときは null */
+  reserveLine: Yen | null;
 }
 
 /** 本番（CashflowScreen）と同じ順で同じ関数を通す。 */
-export function buildCashflowFixture(today: DateStr = FIXTURE_TODAY): CashflowFixture {
-  const { series } = buildFixtureModel(today);
-  const monthly = buildMonthlyCashflow(series, FIXTURE_RESERVE_LINE).filter(
+export function buildCashflowFixture(
+  today: DateStr = FIXTURE_TODAY,
+  /** 見る口座。省略すると現預金の合計（本番画面と同じ既定） */
+  scope?: ReadonlySet<string>,
+): CashflowFixture {
+  /* 口座別のあいだは生活防衛ラインを出さない（合計に対して決めた額なので） */
+  const reserveLine = scope ? null : FIXTURE_RESERVE_LINE;
+  const { series } = buildFixtureModel(today, scope);
+  const monthly = buildMonthlyCashflow(series, reserveLine ?? 0, scope).filter(
     (m) => m.yearMonth >= FIXTURE_FROM && m.yearMonth <= FIXTURE_TO,
   );
 
@@ -53,6 +61,7 @@ export function buildCashflowFixture(today: DateStr = FIXTURE_TODAY): CashflowFi
     kind: "all",
     status: "all",
     today,
+    scope,
   });
 
   const rows = series.rows.filter(
@@ -66,6 +75,7 @@ export function buildCashflowFixture(today: DateStr = FIXTURE_TODAY): CashflowFi
     from: rows[0]?.date ?? today,
     to: rows[rows.length - 1]?.date ?? today,
     stats: buildHeaderStats(series, FIXTURE_ACCOUNTS, today),
+    reserveLine,
   };
 }
 

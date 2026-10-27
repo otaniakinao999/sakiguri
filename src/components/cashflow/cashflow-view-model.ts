@@ -27,7 +27,12 @@ import type { CashflowLedgerEntry, CashflowMonthRow } from "./CashflowView";
 
 export interface CashflowViewModel {
   stats: PageHeaderStat[];
-  chart: { points: ReturnType<typeof buildForecastPoints>; todayT: number; defenseLine: Yen };
+  chart: {
+    points: ReturnType<typeof buildForecastPoints>;
+    todayT: number;
+    /** 口座別に見ているときは null */
+    defenseLine: Yen | null;
+  };
   months: CashflowMonthRow[];
   monthsNote: string;
   /** 残高推移の「月次」。日次とは出すものが違う（棒と月中の最低を重ねる） */
@@ -54,7 +59,8 @@ export interface CashflowViewModelInput {
   from: DateStr;
   to: DateStr;
   today: DateStr;
-  reserveLine: Yen;
+  /** 生活防衛ライン。**口座別に見ているときは null**（合計に対する額なので） */
+  reserveLine: Yen | null;
   /** PageHeader の残高サマリー。buildHeaderStats が作る */
   stats: PageHeaderStat[];
 }
@@ -146,7 +152,9 @@ export function buildCashflowViewModel({
   const breached = months.filter((m) => m.highlight).map((m) => m.label);
   const monthsNote =
     breached.length === 0
-      ? "月末がプラスでも、月中に生活防衛ラインを割る月は色が変わります。"
+      ? reserveLine === null
+        ? "口座を選んでいるあいだ、生活防衛ラインは出しません。現預金の合計に対して決めた額なので、1口座の残高と比べても意味を持たないためです。"
+        : "月末がプラスでも、月中に生活防衛ラインを割る月は色が変わります。"
       : `月末がプラスでも、月中に生活防衛ラインを割る月は色が変わります（${breached.join("・")}）。`;
 
   /* 月グループは畳んで1枚の表にする。月の区切りは行で入れる（下の

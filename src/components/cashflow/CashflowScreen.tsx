@@ -22,7 +22,9 @@ import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import { buildMonthlyCashflow } from "@/core/monthly";
 import { daysBetween, toYearMonth } from "@/core/date";
+import { isCard } from "@/core/types";
 import type { Actual } from "@/core/types";
+import { Select } from "@/components/ui/inputs";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Panel } from "@/components/sakiguri/Panel";
 import { track } from "@/lib/analytics/track";
@@ -74,6 +76,13 @@ export function CashflowScreen() {
   const [kind, setKind] = useState<LedgerKind>("all");
   const [status, setStatus] = useState<LedgerStatus>("all");
   /**
+   * 見ている口座。`"all"` は現預金の合計（従来どおり）。
+   *
+   * **画面の全部をこれに従わせる。** グラフだけ・表だけを口座別にすると、
+   * 同じ「残高」が画面の中で2つの意味を持つ（CLAUDE.md §2.12）。
+   */
+  const [accountScope, setAccountScope] = useState<string>("all");
+  /**
    * 編集中の実績（FR-41）。
    *
    * 入出金予定表からも実績を直せるようにする。画面遷移させないのは、
@@ -81,6 +90,14 @@ export function CashflowScreen() {
    * 前提（ADR-0003）に Suspense 境界が要るようになるため。
    */
   const [editing, setEditing] = useState<Actual | null>(null);
+
+  /** 範囲。合計のときは undefined を渡して従来どおりにする */
+  const scope = useMemo(
+    () => (accountScope === "all" ? undefined : new Set([accountScope])),
+    [accountScope],
+  );
+  /** 口座別のあいだは生活防衛ラインを出さない（合計に対して決めた額なので） */
+  const reserveLine = scope ? null : data.reserveLine;
 
   const computed = useMemo(() => {
     if (!today || data.accounts.length === 0) return null;
@@ -99,13 +116,14 @@ export function CashflowScreen() {
       { accounts: data.accounts, asOf: data.asOf, forecast, actuals: data.actuals },
       to,
       today,
+      scope,
     );
     return {
       series,
-      monthly: buildMonthlyCashflow(series, data.reserveLine),
+      monthly: buildMonthlyCashflow(series, reserveLine ?? 0, scope),
       months: selectableMonths(data.asOf),
     };
-  }, [data, today]);
+  }, [data, today, scope, reserveLine]);
 
   const range = useMemo(() => {
     if (!today) return { from: "", to: "" };
@@ -138,6 +156,7 @@ export function CashflowScreen() {
       kind,
       status,
       today,
+      scope,
     });
     return buildCashflowViewModel({
       series: computed.series,
@@ -146,10 +165,10 @@ export function CashflowScreen() {
       from: rows[0]?.date ?? today,
       to: rows[rows.length - 1]?.date ?? today,
       today,
-      reserveLine: data.reserveLine,
+      reserveLine,
       stats: buildHeaderStats(computed.series, data.accounts, today),
     });
-  }, [computed, range, kind, status, today, data.reserveLine, data.accounts]);
+  }, [computed, range, kind, status, today, reserveLine, data.accounts, scope]);
 
   /* ---------- 指標（PoC開発計画 §4） ----------
      予定がどこまで先にあるかを記録する。金額も日付も送らない
@@ -186,6 +205,27 @@ export function CashflowScreen() {
 
   return (
     <CashflowView
+      headerAction={
+        <label className="flex shrink-0 items-center gap-8 whitespace-nowrap t-body-sm text-muted-foreground">
+          口座
+          <Select
+            aria-label="見る口座"
+            value={accountScope}
+            onChange={(e) => setAccountScope(e.target.value)}
+          >
+            <option value="all">現預金 合計</option>
+            {/* **カードは出さない。** 合計残高の計算に入らないので、
+                選んでも残高が出ない（CL-3 手順1） */}
+            {data.accounts
+              .filter((a) => !isCard(a))
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+          </Select>
+        </label>
+      }
       stats={model.stats}
       chart={model.chart}
       trend={{

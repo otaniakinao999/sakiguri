@@ -37,7 +37,7 @@ export interface CashflowMonthRow {
   endBalance: Yen;
   /** 月中の最低残高 */
   lowest: Yen;
-  /** 月中の最低が生活防衛ラインを割る月 */
+  /** 月中の最低が生活防衛ラインを割る月。口座別のときは常に false */
   highlight?: boolean;
 }
 
@@ -92,7 +92,8 @@ export interface CashflowViewProps {
   chart: {
     points: ForecastPoint[];
     todayT: number;
-    defenseLine: Yen;
+    /** 口座別に見ているときは null */
+    defenseLine: Yen | null;
   };
   /** 残高推移の 日次 / 月次 */
   trend: TabGroup<"daily" | "monthly">;
@@ -216,10 +217,13 @@ export function CashflowView({
           <div className="flex flex-wrap items-center gap-24">
             <LegendItem series="actual" label="実績（本日まで）" />
             <LegendItem series="forecast" label="予測" />
-            <LegendItem
-              series="defense"
-              label={`生活防衛ライン ${formatYen(chart.defenseLine)}`}
-            />
+            {/* 口座別のときは線を引かないので、凡例も出さない */}
+            {chart.defenseLine !== null && (
+              <LegendItem
+                series="defense"
+                label={`生活防衛ライン ${formatYen(chart.defenseLine)}`}
+              />
+            )}
             {(trend.value ?? trend.defaultValue) === "monthly" ? (
               <span className="t-body-sm text-muted-foreground">
                 棒は入金と出金、細い破線は月中の最低

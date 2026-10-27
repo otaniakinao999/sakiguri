@@ -37,7 +37,14 @@ export interface ForecastChartProps {
   points: ForecastPoint[];
   /** 本日の位置（縦の破線） */
   todayT: number;
-  defenseLine: Yen;
+  /**
+   * 生活防衛ライン。**口座別に見ているときは null。**
+   *
+   * ラインは現預金の合計に対して決めた額なので、1口座の残高と比べても
+   * 意味を持たない。0 を渡して消そうとしないこと。`min` の計算に
+   * 入っているので、軸が0まで伸びてグラフが潰れる。
+   */
+  defenseLine: Yen | null;
   /** 点と吹き出し。キャッシュフロー（02）は空で渡す */
   markers: ForecastMarker[];
   /** 生活防衛ラインを割る最低点。ラベルは付けず、点だけ打つ（Figma 2029:119）。 */
@@ -144,7 +151,7 @@ export function ForecastChart({
   }, [points]);
 
   const values = points.map((p) => p.actual ?? p.forecast ?? 0);
-  const min = Math.min(...values, defenseLine);
+  const min = Math.min(...values, ...(defenseLine === null ? [] : [defenseLine]));
   const max = Math.max(...values);
   const low = min - (max - min) * 0.18;
   const high = max + (max - min) * 0.3;
@@ -197,27 +204,31 @@ export function ForecastChart({
             tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
           />
 
-          <ReferenceArea
-            y1={low}
-            y2={defenseLine}
-            fill="var(--chart-defense-zone)"
-            fillOpacity={1}
-          />
-          <ReferenceLine
-            y={defenseLine}
-            stroke="var(--chart-defense)"
-            strokeDasharray="6 4"
-            label={
-              defenseLabel
-                ? {
-                    value: `生活防衛ライン ${formatYen(defenseLine)}`,
-                    position: "insideTopLeft",
-                    fill: "var(--chart-defense)",
-                    fontSize: 12,
-                  }
-                : undefined
-            }
-          />
+          {defenseLine !== null && (
+            <ReferenceArea
+              y1={low}
+              y2={defenseLine}
+              fill="var(--chart-defense-zone)"
+              fillOpacity={1}
+            />
+          )}
+          {defenseLine !== null && (
+            <ReferenceLine
+              y={defenseLine}
+              stroke="var(--chart-defense)"
+              strokeDasharray="6 4"
+              label={
+                defenseLabel
+                  ? {
+                      value: `生活防衛ライン ${formatYen(defenseLine)}`,
+                      position: "insideTopLeft",
+                      fill: "var(--chart-defense)",
+                      fontSize: 12,
+                    }
+                  : undefined
+              }
+            />
+          )}
           <ReferenceLine
             x={todayT}
             stroke="var(--border)"

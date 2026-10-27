@@ -31,7 +31,8 @@ export interface MonthlyBalancePoint {
 
 export interface MonthlyBalanceChartProps {
   points: MonthlyBalancePoint[];
-  defenseLine: Yen;
+  /** 生活防衛ライン。口座別に見ているときは null（ForecastChart と同じ） */
+  defenseLine: Yen | null;
   height?: number;
 }
 
@@ -58,8 +59,9 @@ export function MonthlyBalanceChart({
      （旧 BalanceChart がそうなっていた）。棒は別軸にして、縮尺は
      それぞれの値だけで決める */
   const balances = points.flatMap((p) => [p.closing, p.lowest, p.actual ?? p.closing]);
-  const min = Math.min(...balances, defenseLine);
-  const max = Math.max(...balances, defenseLine);
+  const line = defenseLine === null ? [] : [defenseLine];
+  const min = Math.min(...balances, ...line);
+  const max = Math.max(...balances, ...line);
   const low = min - (max - min) * 0.18;
   const high = max + (max - min) * 0.12;
 
@@ -93,19 +95,23 @@ export function MonthlyBalanceChart({
           {/* 棒の軸。目盛りは出さない。高さの比較は月次資金繰り表の数字でする */}
           <YAxis yAxisId="flow" hide domain={[-flowMax * 1.15, flowMax * 3.2]} />
 
-          <ReferenceArea
-            yAxisId="balance"
-            y1={low}
-            y2={defenseLine}
-            fill="var(--chart-defense-zone)"
-            fillOpacity={1}
-          />
-          <ReferenceLine
-            yAxisId="balance"
-            y={defenseLine}
-            stroke="var(--chart-defense)"
-            strokeDasharray="6 4"
-          />
+          {defenseLine !== null && (
+            <ReferenceArea
+              yAxisId="balance"
+              y1={low}
+              y2={defenseLine}
+              fill="var(--chart-defense-zone)"
+              fillOpacity={1}
+            />
+          )}
+          {defenseLine !== null && (
+            <ReferenceLine
+              yAxisId="balance"
+              y={defenseLine}
+              stroke="var(--chart-defense)"
+              strokeDasharray="6 4"
+            />
+          )}
 
           <Bar
             yAxisId="flow"
