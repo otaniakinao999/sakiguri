@@ -33,6 +33,9 @@ yarn-debug.log*
 # Claude Code のローカル設定（許可の付与など、端末ごとに変わるもの）
 .claude/settings.local.json
 
+# クラウド側へ渡すための一時アーカイブ（検証のたびに作り直す）
+/.claude-tmp/
+
 # OS
 .DS_Store
 
