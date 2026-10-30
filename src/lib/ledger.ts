@@ -9,7 +9,12 @@
  * 「引落」として現れる（CL-2）。年月別収支の発生日ベースとは日付が違う。
  */
 
-import { accountDelta, isOneSidedTransfer, type BalanceSeries } from "@/core/balance";
+import {
+  accountDelta,
+  oneSidedReason,
+  type BalanceSeries,
+  type OneSidedReason,
+} from "@/core/balance";
 import { groupOfCategory } from "@/core/categories";
 import { compareDate, compareString, toYearMonth } from "@/core/date";
 import type { MonthlyCashflowRow, ShortfallWarning } from "@/core/monthly";
@@ -76,7 +81,7 @@ export interface LedgerEntry extends CashEvent {
    * 反映しないことを画面に出さないと、金額のある行で残高が動かない
    * 理由が分からない。
    */
-  oneSided: boolean;
+  oneSided: OneSidedReason | null;
   /**
    * 今日より前なのに、まだ実績が入っていない予定（要件定義書 §4.2 過去月の表示）。
    *
@@ -267,7 +272,7 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
         entryStatus === "plan" && event.src !== "settle" && event.date < today,
       /* 判定は core の1箇所から借りる。条件を写すと、片方にだけ条件が
          増えたときに食い違う（CLAUDE.md §2.8） */
-      oneSided: isOneSidedTransfer(event, deposits),
+      oneSided: oneSidedReason(event, deposits),
     });
   }
 

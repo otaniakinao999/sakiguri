@@ -110,9 +110,34 @@ export function isOneSidedTransfer(
   event: Pick<CashEvent, "type" | "accountId" | "toAccountId">,
   deposits: ReadonlySet<string>,
 ): boolean {
-  if (event.type !== "transfer") return false;
-  if (!deposits.has(event.accountId)) return true;
-  return !event.toAccountId || !deposits.has(event.toAccountId);
+  return oneSidedReason(event, deposits) !== null;
+}
+
+/**
+ * 閉じない理由。閉じていれば null。
+ *
+ * **理由を区別する。** 真偽値だけだと、画面に出す文言が1つになる。
+ * 実際そうなっていて、**振替先がカードの行にも「振替先が未設定です」と
+ * 出ていた**（設定されているのに）。直すべき場所が違うのに同じ文が出ると、
+ * 利用者はどこを直せばいいのか分からない。
+ *
+ * | 理由 | 何が起きているか | 直し方 |
+ * | --- | --- | --- |
+ * | `noDestination` | 振替先が空のまま保存された | 振替先を選ぶ |
+ * | `destinationOutside` | 振替先がカード | 振替ではなく支出にするか、口座を選び直す |
+ * | `sourceOutside` | 出金元がカード | 同上 |
+ */
+export type OneSidedReason = "noDestination" | "destinationOutside" | "sourceOutside";
+
+export function oneSidedReason(
+  event: Pick<CashEvent, "type" | "accountId" | "toAccountId">,
+  deposits: ReadonlySet<string>,
+): OneSidedReason | null {
+  if (event.type !== "transfer") return null;
+  if (!deposits.has(event.accountId)) return "sourceOutside";
+  if (!event.toAccountId) return "noDestination";
+  if (!deposits.has(event.toAccountId)) return "destinationOutside";
+  return null;
 }
 
 /**

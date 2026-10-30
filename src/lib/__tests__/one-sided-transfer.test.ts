@@ -117,16 +117,32 @@ describe("閉じない振替は合計残高を動かさない", () => {
 
 describe("反映していないことが画面に出る", () => {
   /* 黙って効かないのが一番危ない。金額のある行で残高が動かない理由を出す */
-  it("閉じない振替の行に理由が出る。金額は消さない", () => {
+  /**
+   * **理由ごとに文を変える。** 以前は1文しか無く、振替先がカードの行にも
+   * 「振替先が未設定です」と出ていた（設定されているのに）。直す場所が
+   * 違うのに同じ文だと、どこを直せばいいか分からない。
+   */
+  it.each([
+    ["振替先が未設定", { toAccountId: undefined }, "noDestination",
+      "振替先が未設定です（残高に反映していません）"],
+    ["振替先がカード", { toAccountId: "card" }, "destinationOutside",
+      "振替先がカードです（残高に反映していません）"],
+    ["出金元がカード", { accountId: "card", toAccountId: "bank" }, "sourceOutside",
+      "出金元がカードです（残高に反映していません）"],
+  ])("%s：理由と文が一致する", (_label, over, reason, note) => {
+    const broken = run([transfer(over as Partial<Actual>)]);
+    expect(broken.entry?.oneSided).toBe(reason);
+    expect(broken.ledgerRow?.note).toBe(note);
+  });
+
+  it("金額は消さない", () => {
     const broken = run([transfer({ toAccountId: undefined })]);
-    expect(broken.entry?.oneSided).toBe(true);
     expect(broken.ledgerRow?.amount).toBe(30_000);
-    expect(broken.ledgerRow?.note).toBe("振替先が未設定です（残高に反映していません）");
   });
 
   it("閉じる振替は従来の注記のまま", () => {
     const ok = run([transfer({ toAccountId: "cash" })]);
-    expect(ok.entry?.oneSided).toBe(false);
+    expect(ok.entry?.oneSided).toBeNull();
     expect(ok.ledgerRow?.note).toBe("合計残高は増減なし");
   });
 });

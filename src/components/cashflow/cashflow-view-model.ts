@@ -8,7 +8,7 @@
  * 同じ形（dashboard-view-model.ts）。React を import しない。
  */
 
-import type { BalanceSeries } from "@/core/balance";
+import type { BalanceSeries, OneSidedReason } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
 import type { AmountType } from "@/components/sakiguri/Amount";
@@ -95,6 +95,19 @@ function amountTypeOf(category: Category | null): AmountType {
  * が求めている状態で、落とすと「予定のまま残っている」ことが画面から
  * 消える。語はダッシュボードの「実績が未入力の予定」に合わせた（§2.12）。
  */
+/**
+ * 閉じない振替の注記。**理由ごとに違う文を出す。**
+ *
+ * 以前は1文（「振替先が未設定です」）しか無く、**振替先がカードの行にも
+ * それが出ていた**（設定されているのに未設定と書かれる）。直すべき場所が
+ * 違うのに同じ文だと、どこを直せばいいか分からない。
+ */
+const ONE_SIDED_NOTE: Record<OneSidedReason, string> = {
+  noDestination: "振替先が未設定です（残高に反映していません）",
+  destinationOutside: "振替先がカードです（残高に反映していません）",
+  sourceOutside: "出金元がカードです（残高に反映していません）",
+};
+
 function noteOf(entry: LedgerEntry): string | undefined {
   /* **`editable` で判定しない。** あれは「繰延できるか」で、実績も
      false になる（実績は済んだ事実なので日付をずらせない）。それで
@@ -107,8 +120,9 @@ function noteOf(entry: LedgerEntry): string | undefined {
   if (entry.overdue) return "実績が未入力";
   /* **「増減なし」より先に出す。** 閉じない振替は合計を動かさないが、
      それは「振替だから」ではなく「反映できていないから」である。
-     同じ文言にすると、直すべき行が正常な行に紛れる */
-  if (entry.oneSided) return "振替先が未設定です（残高に反映していません）";
+     同じ文言にすると、直すべき行が正常な行に紛れる。
+     **理由ごとに書き分ける。** 直す場所が違うため（§4.1 の考え方と同じ）。 */
+  if (entry.oneSided) return ONE_SIDED_NOTE[entry.oneSided];
   if (entry.type === "transfer") return "合計残高は増減なし";
   return undefined;
 }
