@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { UNRECORDED_LABEL } from "../unrecorded";
@@ -16,8 +17,7 @@ import { UNRECORDED_LABEL } from "../unrecorded";
  * 倒れる（§9.1 の6つ目：測る側が通る方向に間違っている）。だから
  * **出している箇所を列挙して、文字列で突き合わせる。**
  *
- * 列挙は漏れる。だから「この値を出しているのにここに無いファイル」が
- * あれば落ちるよう、**競合する言い回しを全ソースから探す**ほうも置く。
+ * 列挙は漏れる。だから列挙の外側に2つ置く（下の「列挙の外側」）。
  */
 
 /**
@@ -27,11 +27,19 @@ import { UNRECORDED_LABEL } from "../unrecorded";
  * ダッシュボードは DashboardScreen が金額を計算して DashboardView が
  * 文字にするので、語を持っているのは View 側。Screen を見ていると
  * 「語を使っていない」で落ちるが、実際には揃っている。
+ *
+ * **2026-11-01 に3件から2件に減らした。** 3件目は
+ * `cashflow/BalanceChart.tsx`（日次チャートのツールチップ）だったが、
+ * v0.6.0（ADR-0023）で日次チャートが月次の `MonthlyBalanceChart` に
+ * 置き換わり、**どこからも描かれないファイルになっていた。**
+ * 置き換わった先は月末残高・月中最低・入金・出金を出すだけで、この値を
+ * 出していない。**列挙はそのまま残っていたので、テストは残骸を読んで
+ * 通り続けていた**（§2.11：留め具が差を出せない場所を見張っていた）。
+ * 月次のツールチップにこの値を出すかどうかは別件。
  */
 const SHOWS_THE_VALUE = [
   "src/components/app-shell/BalanceHeader.tsx",
   "src/components/dashboard/DashboardView.tsx",
-  "src/components/cashflow/BalanceChart.tsx",
 ];
 
 /** 同じ値に付けてはいけない別の言い回し */
@@ -42,8 +50,9 @@ const COMPETING = [
   "未入力の予定額",
 ];
 
-const read = (path: string) =>
-  readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+const repoRoot = new URL("../../../", import.meta.url);
+
+const read = (path: string) => readFileSync(new URL(path, repoRoot), "utf8");
 
 /**
  * コメントを落とす。
@@ -67,7 +76,34 @@ function body(source: string): string {
     .join("\n");
 }
 
-describe("AC-49e うち未記録の予定の語が3箇所で揃っている", () => {
+/** `src/` 配下の実装ファイル（テストと、定数そのものの置き場を除く） */
+function sourceFiles(): string[] {
+  const found: string[] = [];
+
+  const walk = (relative: string) => {
+    const absolute = fileURLToPath(new URL(relative, repoRoot));
+
+    for (const name of readdirSync(absolute)) {
+      const child = `${relative}/${name}`;
+
+      if (statSync(fileURLToPath(new URL(child, repoRoot))).isDirectory()) {
+        if (name !== "__tests__") walk(child);
+        continue;
+      }
+
+      if (!/\.tsx?$/.test(name)) continue;
+      if (child === "src/lib/unrecorded.ts") continue;
+
+      found.push(child);
+    }
+  };
+
+  walk("src");
+
+  return found;
+}
+
+describe("AC-49e うち未記録の予定の語が揃っている", () => {
   it.each(SHOWS_THE_VALUE)("%s が定数を**本体で**使っている", (path) => {
     /* **import にあるだけでは足りない。** 使うのをやめても import が
        残っていれば通ってしまう（実際にそれで通った） */
@@ -82,18 +118,46 @@ describe("AC-49e うち未記録の予定の語が3箇所で揃っている", ()
     );
   });
 
-  it.each(SHOWS_THE_VALUE)("%s に競合する言い回しが無い", (path) => {
-    /* **区切り文字を頼りに探さない。** 「どちらにも、まだ記録されて
-       いない予定」のように読点のあとに続くと、区切りでは拾えない
-       （実際に拾えなかった）。コメントだけ落として、あとは全文を見る */
-    const source = code(read(path));
-
-    for (const word of COMPETING) {
-      expect(source, `「${word}」を画面に出している`).not.toContain(word);
-    }
-  });
-
   it("定数は空でない", () => {
     expect(UNRECORDED_LABEL.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 列挙の外側
+ *
+ * **列挙は漏れる。** 上の3つは `SHOWS_THE_VALUE` に書いたファイルしか
+ * 見ないので、**列挙を減らすとそのぶん見張りも減る。** 減らしたことに
+ * 気づけるよう、列挙に依らない2つを置く。
+ *
+ * 1. 競合する言い回しを **`src/` 全体から** 探す。前の版はこれを
+ *    `SHOWS_THE_VALUE` の中だけで見ていた（コメントは「全ソースから
+ *    探す」と書いてあったが、**コードはそうなっていなかった**）。
+ * 2. 定数を取り込んだファイルが列挙に入っているかを見る。**新しい
+ *    箇所でこの値を出し始めたら、列挙の更新を忘れた時点で落ちる。**
+ */
+describe("AC-49e 列挙の外側", () => {
+  it("競合する言い回しが src/ のどこにも無い", () => {
+    const offenders: string[] = [];
+
+    for (const path of sourceFiles()) {
+      const source = code(read(path));
+
+      for (const word of COMPETING) {
+        if (source.includes(word)) offenders.push(`${path}（「${word}」）`);
+      }
+    }
+
+    expect(offenders, "同じ値に別の呼び名を付けている").toEqual([]);
+  });
+
+  it("定数を使っているファイルが列挙に入っている", () => {
+    const users = sourceFiles().filter((path) =>
+      body(read(path)).includes("UNRECORDED_LABEL"),
+    );
+
+    expect([...users].sort(), "この値を出しているのに SHOWS_THE_VALUE に無い").toEqual(
+      [...SHOWS_THE_VALUE].sort(),
+    );
   });
 });
