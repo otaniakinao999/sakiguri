@@ -14,8 +14,8 @@ import { useState } from "react";
 import type { ForecastInstance } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/legacy/Button";
+import { Card } from "@/components/ui/legacy/Card";
 import { DateInput, Field, NumberInput, TextInput } from "@/components/ui/inputs";
 import { clearOverride, markReconciled, setOverride } from "@/lib/mutations";
 

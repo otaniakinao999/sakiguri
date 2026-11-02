@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { categoryOf } from "@/core/categories";
 import type { CostType } from "@/core/types";
-import { Badge } from "@/components/ui/v06/badge";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /** 区分。カード引落は CSV取込 の画面にだけ出てくる（screens.md §1）。 */

@@ -23,7 +23,7 @@ import {
   FIXTURE_TODAY,
 } from "@/components/dashboard/dashboard-fixture";
 import { buildDashboardViewModel } from "@/components/dashboard/dashboard-view-model";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 export default function DevDashboardWiredPage() {

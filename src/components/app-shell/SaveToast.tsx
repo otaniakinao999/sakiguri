@@ -23,7 +23,7 @@
 import { useEffect, useState } from "react";
 
 import { useAppData } from "./AppDataProvider";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/legacy/Button";
 
 /** 「保存しました」を出しておく時間。読めて、邪魔にならない長さ */
 const SAVED_VISIBLE_MS = 2000;

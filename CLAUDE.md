@@ -143,12 +143,28 @@ padding: 15px;        /* スケール外の値を作らない */
 
 | | 役割 |
 |---|---|
-| `docs/design/tokens.css` | **v0.6.0 の正。新しいトークンはここに書く**（131個） |
-| `src/styles/tokens.css` | **旧画面のためだけに残っている**（125個）。新しく足さない |
+| `docs/design/tokens.css` | **v0.6.0 の正。新しいトークンはここに書く**（133個） |
+| `src/styles/tokens.css` | **旧部品と未移行の画面のためだけに残っている**（127個）。新しく足さない |
 
-**同名の変数は0個で、値の衝突は無い**（2026-10-21 に全変数を突き合わせて確認）。どちらが勝つかを気にする必要はない。困るのは「新しいトークンをどちらに書くか」だけなので、上の表のとおりにする。
+**同名の変数は0個で、値の衝突は無い**（2026-11-02 に全変数を突き合わせて再確認。127個すべてが旧にしか無い）。どちらが勝つかを気にする必要はない。困るのは「新しいトークンをどちらに書くか」だけなので、上の表のとおりにする。
 
-**`src/styles/tokens.css` は、旧部品の片付け（`src/components/ui/v06/*` を `ui/` に畳む作業）で消す。** 消したらこの節から過渡期の記述も消す。デザインシステムの定義は `docs/designsystem.md`（旧）と `docs/design/`（v0.6.0）。
+**畳む作業は 2026-11-02 に終わった。** `src/components/ui/v06/*` は `ui/` に上がり、`v06` という名前は無くなった。旧部品は `ui/legacy/` に寄せてある。
+
+**`src/styles/tokens.css` はまだ消せない。** 消すには下の14ファイルを v0.6.0 のトークンに移す必要があり、**それは片付けではなく見た目が変わる作業**なので、ここでは手を付けていない。
+
+| まだ旧トークンを使っている | 何を使っているか |
+|---|---|
+| `ui/legacy/{Button,Card,Modal,Notification}.tsx` | `object-*` `surface-*` `border-*` `text-body-*` `rounded-base` ほか |
+| `auth/confirm/page.tsx`, `auth/SignInScreen.tsx`, `app-shell/AuthGate.tsx` | 上記に加えて `--layout-signin-width` |
+| `app-shell/BalanceHeader.tsx`, `app-shell/SaveToast.tsx` | `object-*` `surface-*` `text-headline-*` `text-body-*` |
+| `entry/ActualForm.tsx`, `entry/DeferralEditor.tsx` | 同上 |
+| `settings/{AccountsTable,OneoffsTable,RecurringTable}.tsx` | **`--layout-field-width` だけ** |
+
+**順序に1つ罠がある。** macOS は大小文字を区別しないので、`ui/Button.tsx`（旧）がある場所に `v06/button.tsx` を移すと**上書きになる**（一度やった。ADR-0023）。旧を `ui/legacy/` へ出してから新を上げること。
+
+**`Field` と `Select` は `ui/inputs.tsx` と `ui/select.tsx` に同名で2つある。** `inputs.tsx` の `Field` は children が `(id) => ReactNode` で label と入力を `useId` で結ぶ。`select.tsx` は `htmlFor` を呼び出し側が渡す。`Select` は前者に矢印が無く `min-w-amount` がある。**統合は label の結び付けと見た目が変わるので別件。** どちらを使うかは、いま触っている画面が既に使っている方に合わせる。
+
+デザインシステムの定義は `docs/designsystem.md`（旧）と `docs/design/`（v0.6.0）。
 
 ### 2.7 依存を増やす前に確認する
 

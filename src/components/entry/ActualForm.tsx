@@ -16,7 +16,7 @@
 
 import { isCard } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/legacy/Button";
 import {
   CategorySelect,
   DateInput,

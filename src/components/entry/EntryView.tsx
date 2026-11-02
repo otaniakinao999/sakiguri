@@ -9,7 +9,7 @@ import { MonthTab, type MonthTabState } from "@/components/sakiguri/MonthTab";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
 import { TodoRow } from "@/components/sakiguri/TodoRow";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { formatAmount } from "@/lib/format";
 
 /* ---------------------------------------------------------------- 型 */

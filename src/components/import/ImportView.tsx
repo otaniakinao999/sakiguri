@@ -15,9 +15,9 @@ import {
   TableHeaderRow,
   TableRow,
 } from "@/components/sakiguri/Table";
-import { Button } from "@/components/ui/v06/button";
-import { Checkbox, CheckboxField } from "@/components/ui/v06/checkbox";
-import { Field, Select } from "@/components/ui/v06/select";
+import { Button } from "@/components/ui/button";
+import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
+import { Field, Select } from "@/components/ui/select";
 import { formatYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 

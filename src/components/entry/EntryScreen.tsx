@@ -30,8 +30,8 @@ import { track } from "@/lib/analytics/track";
 import Link from "next/link";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
-import { Button } from "@/components/ui/v06/button";
-import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/legacy/Modal";
 import { Callout } from "@/components/sakiguri/Callout";
 import { Panel } from "@/components/sakiguri/Panel";
 import { buildHeaderStats } from "@/lib/header-stats";

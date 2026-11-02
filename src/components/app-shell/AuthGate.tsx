@@ -8,8 +8,8 @@
  */
 
 import { SignInScreen } from "@/components/auth/SignInScreen";
-import { Button } from "@/components/ui/Button";
-import { Notification } from "@/components/ui/Notification";
+import { Button } from "@/components/ui/legacy/Button";
+import { Notification } from "@/components/ui/legacy/Notification";
 
 import { useAppData } from "./AppDataProvider";
 

@@ -9,9 +9,9 @@
  * 製品の導線からは繋がない。
  */
 
-import { Badge } from "@/components/ui/v06/badge";
-import { Button } from "@/components/ui/v06/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/v06/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Amount } from "@/components/sakiguri/Amount";
 import { Callout } from "@/components/sakiguri/Callout";
 import { CategoryTag, type Category } from "@/components/sakiguri/CategoryTag";

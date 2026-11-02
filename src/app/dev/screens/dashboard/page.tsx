@@ -22,7 +22,7 @@ import {
   SAMPLE_TODAY as TODAY,
 } from "../../sample-series";
 import { DashboardView, type DashboardTodo } from "@/components/dashboard/DashboardView";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 const TODOS: DashboardTodo[] = [

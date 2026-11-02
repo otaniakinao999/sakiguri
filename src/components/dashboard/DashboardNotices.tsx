@@ -7,7 +7,7 @@ import Link from "next/link";
 
 import type { Yen } from "@/core/types";
 import { Callout } from "@/components/sakiguri/Callout";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import type { DashboardWarning } from "@/lib/dashboard";
 import { formatMonthDayJa, formatYen } from "@/lib/format";
 import { STRANDED_DAYS, type ReconcileWarnings } from "@/lib/reconcile-warnings";

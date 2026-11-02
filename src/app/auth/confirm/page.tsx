@@ -32,9 +32,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/legacy/Button";
 import { Field } from "@/components/ui/inputs";
-import { Notification } from "@/components/ui/Notification";
+import { Notification } from "@/components/ui/legacy/Notification";
 import { resolveAuthLink } from "@/lib/auth-link";
 import {
   confirmFailure,

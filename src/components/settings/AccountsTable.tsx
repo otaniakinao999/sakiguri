@@ -10,7 +10,7 @@
 import type { Account, CardAccount } from "@/core/types";
 import { isCard } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/sakiguri/Panel";
 import { NumberInput, Select, TextInput } from "@/components/ui/inputs";
 import {

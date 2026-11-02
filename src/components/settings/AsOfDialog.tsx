@@ -12,8 +12,8 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "@/components/ui/v06/alert-dialog";
-import { Button } from "@/components/ui/v06/button";
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { formatYearMonthDay } from "@/lib/format";
 
 /**

@@ -10,7 +10,7 @@
 import { compareDate } from "@/core/date";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/sakiguri/Panel";
 import { DateInput, TextInput } from "@/components/ui/inputs";
 import {

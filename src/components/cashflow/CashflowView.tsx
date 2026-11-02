@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import type { Yen } from "@/core/types";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/v06/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Amount, type AmountType } from "@/components/sakiguri/Amount";
 import { CategoryTag, type Category } from "@/components/sakiguri/CategoryTag";
 import {

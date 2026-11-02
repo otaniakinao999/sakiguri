@@ -28,7 +28,7 @@ import {
   TableHeaderRow,
   TableRow,
 } from "@/components/sakiguri/Table";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { DateInput, NumberInput } from "@/components/ui/inputs";
 import { buildHeaderStats } from "@/lib/header-stats";
 import { formatYearMonthDay, formatYen } from "@/lib/format";

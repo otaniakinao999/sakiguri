@@ -26,7 +26,7 @@ import {
   buildEntryTodoRows,
   futureNoteOf,
 } from "@/components/entry/entry-view-model";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/sakiguri/Callout";
 import { buildActualList } from "@/lib/actual-list";
 import { buildHeaderStats } from "@/lib/header-stats";

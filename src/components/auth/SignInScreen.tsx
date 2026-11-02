@@ -13,9 +13,9 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/legacy/Button";
 import { Field } from "@/components/ui/inputs";
-import { Notification } from "@/components/ui/Notification";
+import { Notification } from "@/components/ui/legacy/Notification";
 import {
   ACTION_LABEL,
   resendNotice,

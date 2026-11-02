@@ -2,7 +2,7 @@ import * as React from "react";
 import { ExclamationTriangleIcon } from "@heroicons/react/16/solid";
 
 import type { DateStr, Yen } from "@/core/types";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/v06/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ForecastChart,
   type ForecastMarker,

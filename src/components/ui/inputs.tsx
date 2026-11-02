@@ -3,9 +3,21 @@
 /**
  * 入力の部品
  *
- * 一次情報：docs/designsystem.md §4 TextInput / Select ほか、§2.4
- *   枠線は border-base-high。フォーカスは globals.css の :focus-visible。
+ * 一次情報：docs/design/components.md §1（v0.6.0）
+ *   フォーカスは globals.css の :focus-visible。
  *   金額・件数・日付を含む数値は等幅（tabular-nums）にする。
+ *
+ * **2026-11-02：コメントだけ旧版を指していた。** 中身は v0.6.0 に
+ *   移し終えている（`border-input` / `h-control-md` / `t-body`）のに、
+ *   ここは `docs/designsystem.md` と `border-base-high` を指していた。
+ *   そのため旧トークンの利用者を数えると、この部品が引っかかっていた。
+ *
+ * **`Field` と `Select` は `ui/select.tsx` にも同名で別実装がある。**
+ *   こちらの `Field` は children が `(id) => ReactNode` で、label と
+ *   入力の結び付けを `useId` で自前にやる。あちらは `htmlFor` を
+ *   呼び出し側が渡す。`Select` はこちらに矢印が無く `min-w-amount` が
+ *   ある。**統合すると label の結び付けと見た目が変わるので別件**
+ *   （CLAUDE.md §2.6 に残してある）。
  */
 
 import { useId, useState } from "react";

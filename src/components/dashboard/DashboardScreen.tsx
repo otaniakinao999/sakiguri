@@ -37,7 +37,7 @@ import {
   type Range,
 } from "@/components/dashboard/dashboard-view-model";
 import { Panel } from "@/components/sakiguri/Panel";
-import { Button } from "@/components/ui/v06/button";
+import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics/track";
 import { isEmpty } from "@/lib/app-data";
 import { buildDashboard, DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
