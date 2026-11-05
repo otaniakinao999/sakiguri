@@ -44,3 +44,6 @@ yarn-debug.log*
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# pnpm が入れ替え中に置く空ファイル。削除が止められていると残る
+/_tmp_*

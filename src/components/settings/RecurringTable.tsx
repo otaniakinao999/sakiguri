@@ -7,9 +7,20 @@
  *   day は 1〜31。31 は月末になる（CL-1）。
  *   months が null なら毎月、配列ならその月だけ。
  *   active を false にすると展開しない（停止）。
+ *
+ * **並べ替えは押したときだけ並び直す。** 発生日や金額の欄は編集できるので、
+ * 描画のたびに並べ直すと1打鍵ごとに行が動く（`lib/plan-order.ts`）。
+ *
+ * **既定は発生日の昇順。** これまでは登録した順だった。月の支払いを
+ * 追うときに見る順と違っていた。
  */
 
+import { useMemo } from "react";
+
+import type { RecurringItem } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
+import { SortableHeader } from "@/components/sakiguri/SortableHeader";
+import type { PlanSort } from "@/lib/plan-order";
 import { track } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/sakiguri/Panel";
@@ -24,13 +35,28 @@ import {
 } from "@/lib/mutations";
 
 import { EntryFieldCells } from "./EntryFields";
+import { usePlanOrder } from "./use-plan-order";
 
 const CELL = "border-b border-border px-cell py-8 align-top";
 const HEAD =
   "border-b border-border bg-muted px-cell py-8 text-left t-label-sm text-muted-foreground whitespace-nowrap";
 
+/** 既定は発生日の昇順 */
+const DEFAULT_SORT: PlanSort = { column: "when", direction: "asc" };
+
+/** 日付列の値。**1箇所だけに置く。** 発生日は数なので数のまま渡す */
+const whenOf = (item: RecurringItem) => item.day;
+
 export function RecurringTable() {
   const { data, setData, session } = useAppData();
+
+  const accountIds = useMemo(() => data.accounts.map((a) => a.id), [data.accounts]);
+  const { sort, onSort, visible } = usePlanOrder(
+    data.recurring,
+    accountIds,
+    whenOf,
+    DEFAULT_SORT,
+  );
 
   return (
     <Panel
@@ -60,20 +86,63 @@ export function RecurringTable() {
           <table className="w-max min-w-full border-collapse t-body-sm">
             <thead>
               <tr>
-                <th className={`${HEAD} min-w-[var(--layout-field-width)]`}>内容</th>
-                <th className={HEAD}>収支</th>
-                <th className={HEAD}>固定/変動</th>
-                <th className={HEAD}>費目</th>
-                <th className={`${HEAD} text-right`}>金額</th>
+                <SortableHeader
+                  label="内容"
+                  column="name"
+                  sort={sort}
+                  onSort={onSort}
+                  className={`${HEAD} min-w-[var(--layout-field-width)]`}
+                />
+                <SortableHeader
+                  label="収支"
+                  column="type"
+                  sort={sort}
+                  onSort={onSort}
+                  className={HEAD}
+                />
+                <SortableHeader
+                  label="固定/変動"
+                  column="costType"
+                  sort={sort}
+                  onSort={onSort}
+                  className={HEAD}
+                />
+                <SortableHeader
+                  label="費目"
+                  column="category"
+                  sort={sort}
+                  onSort={onSort}
+                  className={HEAD}
+                />
+                <SortableHeader
+                  label="金額"
+                  column="amount"
+                  sort={sort}
+                  onSort={onSort}
+                  align="right"
+                  className={`${HEAD} text-right`}
+                />
                 <th className={HEAD}>事業%</th>
-                <th className={HEAD}>口座</th>
-                <th className={HEAD}>日</th>
+                <SortableHeader
+                  label="口座"
+                  column="account"
+                  sort={sort}
+                  onSort={onSort}
+                  className={HEAD}
+                />
+                <SortableHeader
+                  label="日"
+                  column="when"
+                  sort={sort}
+                  onSort={onSort}
+                  className={HEAD}
+                />
                 <th className={HEAD}>対象月</th>
                 <th className={HEAD} />
               </tr>
             </thead>
             <tbody>
-              {data.recurring.map((item) => (
+              {visible.map((item) => (
                 <tr key={item.id} className={item.active ? "" : "opacity-50"}>
                   <td className={CELL}>
                     <TextInput
