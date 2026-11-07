@@ -4,6 +4,7 @@
  *     pnpm loadtest:seed                       3,000件 / 550日（v1.0 の目標値）
  *     pnpm loadtest:seed -- --rows=3000 --span=90    ページング用
  *     pnpm loadtest:seed -- --rows=24000 --span=4400 v1.5 の目標値
+ *     pnpm loadtest:seed -- --settled=0              済みの単発予定を作らない
  *
  * **本人セッションで入れる。** RLS があるので、負荷試験アカウント以外の
  * 行には触れない（client.ts）。
@@ -14,11 +15,15 @@
  *   候補照合も FR-43 の未消し込み件数も空振りする
  * - **振替は口座ごとに相殺させない。** 合計が0になる組み合わせにすると、
  *   口座別の付け替えが1円も動かず、正しい実装でも効果が見えない
- * - **実績はすべて `plan_key = null`（未判定）。** 候補照合を総当たりで
- *   通すため
+ * - **負荷試験の実績（`--rows` のぶん）はすべて `plan_key = null`（未判定）。**
+ *   候補照合を総当たりで通すため
+ * - **そのうえで、単発予定を消し込む実績を別に `--settled` 件つくる。**
+ *   全件 `plan_key = null` だと AC-55（実績が付いた単発予定を隠す）が
+ *   **対象行0件のまま全部通る**（§2.11 の3つ目の形）。隠す側と出す側の
+ *   両方が非0になるよう、既定は 40件中 7件にしてある
  */
 
-import { buildForecast, recurringKey } from "../../src/core/forecast.ts";
+import { buildForecast, oneoffKey, recurringKey } from "../../src/core/forecast.ts";
 import { forecastEnd } from "../../src/lib/period.ts";
 import { addDays, arg, fail, signInAsLoadtest } from "./client.ts";
 
@@ -58,10 +63,30 @@ const CHUNK = 500;
 const uuid = (prefix: string, i: number) =>
   `${prefix}-${String(i).padStart(12, "0")}`;
 
+/** 単発予定の総数。`--settled` の上限でもある */
+const ONEOFF_COUNT = 40;
+
+/**
+ * 実績を結ぶ単発予定の件数（AC-55）。
+ *
+ * **`arg()` を使わない。** あちらは0を弾くので `--settled=0` が通らない。
+ * ここは0も意味のある指定（済みを作らない）なので、自前で読む。
+ */
+function settledArg(): number {
+  const hit = process.argv.find((a) => a.startsWith("--settled="));
+  if (!hit) return 7;
+  const value = Number(hit.split("=")[1]);
+  if (!Number.isInteger(value) || value < 0 || value > ONEOFF_COUNT) {
+    fail(`--settled は 0〜${ONEOFF_COUNT} の整数で指定してください: ${hit}`);
+  }
+  return value;
+}
+
 async function main(): Promise<void> {
   const AS_OF = asOfArg();
   const rows = EMPTY ? 0 : arg("rows", 3000);
   const span = arg("span", 550);
+  const SETTLED = EMPTY ? 0 : settledArg();
 
   const { supabase, userId, email } = await signInAsLoadtest();
   console.log(`投入先 ${email}`);
@@ -155,7 +180,7 @@ async function main(): Promise<void> {
   }
 
   /* ---------- 単発予定40件 ---------- */
-  const oneoffs = Array.from({ length: 40 }, (_, k) => {
+  const oneoffs = Array.from({ length: ONEOFF_COUNT }, (_, k) => {
     const i = k + 1;
     const income = i % 8 === 0;
     return {
@@ -174,6 +199,41 @@ async function main(): Promise<void> {
   });
   if (!EMPTY) {
     await check("oneoff_items", (await supabase.from("oneoff_items").upsert(oneoffs)).error);
+  }
+
+  /* ---------- 単発予定を消し込む実績（AC-55） ----------
+   *
+   * **これが無いと AC-55 は対象行0件のまま全部通る。** `settledOneoffIds`
+   * が空集合になるので、「隠す」も「隠した件数」も「0件の文言」も、
+   * 壊れていても気づけない（§2.11 の3つ目の形）。
+   *
+   * **全件は消し込まない。** 全部済みにすると、今度は普通に並んだ表が
+   * 一度も出ない。既定は 40件中 7件で、隠す側（7）と出す側（33）の
+   * 両方を非0にする。
+   *
+   * 金額・日付・費目は**消し込み先の単発予定に合わせる。** 合わせないと
+   * 予実の差が実在しない理由で出て、別の条項の計測を濁す。
+   */
+  const settledActuals = oneoffs.slice(0, SETTLED).map((plan, k) => ({
+    id: uuid("77777777-7777-4777-8777", k + 1),
+    user_id: userId,
+    plan_key: oneoffKey(plan.id),
+    date: plan.date,
+    name: plan.name,
+    type: plan.type,
+    cost_type: plan.cost_type,
+    category_code: plan.category_code,
+    amount: plan.amount,
+    biz_ratio: plan.biz_ratio,
+    account_id: plan.account_id,
+    to_account_id: null,
+  }));
+
+  if (!EMPTY && settledActuals.length > 0) {
+    await check(
+      "actuals(settled)",
+      (await supabase.from("actuals").upsert(settledActuals)).error,
+    );
   }
 
   /* ---------- オーバーライド40件（FR-07） ----------
@@ -264,7 +324,7 @@ async function main(): Promise<void> {
   console.log(`  実績           ${await count("actuals")}`);
   console.log(`  オーバーライド ${await count("overrides")}（繰延20・金額変更20）`);
   console.log(`  定期項目       ${await count("recurring_items")}（うち振替3）`);
-  console.log(`  単発予定       ${await count("oneoff_items")}`);
+  console.log(`  単発予定       ${await count("oneoff_items")}（うち実績で消し込み済 ${SETTLED}）`);
   console.log(`  口座           ${await count("accounts")}`);
   if (actuals.length > 0) {
     console.log(`  期間           ${actuals[0].date} 〜 ${actuals.at(-1)!.date}（${months.size}ヶ月）`);
@@ -277,8 +337,10 @@ async function main(): Promise<void> {
   const forecast = EMPTY
     ? []
     : buildForecast({ recurring, oneoffs, overrides: {} } as never, AS_OF, to);
-  /* 実績はすべて `plan_key = null` なので、消し込まれる予定は無い */
-  const reconciled = 0;
+  /* **数えずに引く。** 「`--settled` 件だから N 件」と書くと、単発予定の
+     日付が予測の期間から外れたときに合わなくなる。展開した結果から引く */
+  const settledKeys = new Set(settledActuals.map((a) => a.plan_key));
+  const reconciled = forecast.filter((f) => settledKeys.has(f.key)).length;
 
   console.log("");
   console.log(`予定インスタンス（CL-1。基準日 ${AS_OF} 〜 ${to}）`);
@@ -293,6 +355,14 @@ async function main(): Promise<void> {
   console.log(`  月内ページング（200件）  ${perMonth > 200 ? "通る" : `**通らない**（--span を小さくする）`}`);
   console.log(`  振替の純額  生活 ${-60_000 + 80_000 - 30_000} / 事業 ${60_000 - 80_000 + 30_000}（どちらも0でない）`);
   console.log(`  overrides の行  ${await count("overrides")}件（0件だと並び替えキーの一意性を試せない。§9.1）`);
+  console.log(
+    `  AC-55 の済み/未済  ${SETTLED} / ${ONEOFF_COUNT - SETTLED}` +
+      (SETTLED > 0 && SETTLED < ONEOFF_COUNT
+        ? "（どちらも非0。隠す側と出す側の両方を試せる）"
+        : SETTLED === 0
+          ? "  **隠す側を試せない**（--settled を1以上に）"
+          : "  **出す側を試せない**（全件が済み。--settled を減らす）"),
+  );
 }
 
 await main();
