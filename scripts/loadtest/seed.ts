@@ -229,6 +229,26 @@ async function main(): Promise<void> {
     to_account_id: null,
   }));
 
+  /* **入れる前に、前回ぶんを消す。**
+   *
+   * `upsert` だけだと id が同じ行しか上書きされないので、**`--settled` は
+   * 減る方向に効かない。** 7件入れたあとに `--settled=0` を流しても前の
+   * 7件が残り、しかも投入結果は「0 / 40」と出る。**出力が事実と逆になる**
+   * のがいちばん悪く、「試せない」と書いてあるのに実際は隠れている。
+   * （2026-11-09 に本番で踏んだ）
+   *
+   * **id の形ではなく `plan_key` で消す。** 「`--settled` が作った行」を
+   * id の形に埋めると、画面から消し込んだ実績が残って同じずれが出る。
+   * 消したいのは「単発予定を消し込んでいる実績」そのもの。`--rows` の
+   * ぶんは全件 `plan_key = null` なので当たらない。
+   */
+  if (!EMPTY) {
+    await check(
+      "actuals(settled) 前回ぶんの削除",
+      (await supabase.from("actuals").delete().like("plan_key", "o:%")).error,
+    );
+  }
+
   if (!EMPTY && settledActuals.length > 0) {
     await check(
       "actuals(settled)",
@@ -319,12 +339,29 @@ async function main(): Promise<void> {
   const months = new Set(actuals.map((a) => a.date.slice(0, 7)));
   const perMonth = months.size ? Math.round(actuals.length / months.size) : 0;
 
+  /* **投入したつもりの数ではなく、DB にある数を読む。**
+   *
+   * 前回ぶんが残っていたり、画面から消し込んだ実績があったりすると、
+   * 「`--settled` 件だから N 件」は事実と食い違う。**実際にそれで
+   * 「0 / 40」と出しながら7件隠れていた**（2026-11-09 に本番で踏んだ）。
+   *
+   * 上の削除で揃うはずだが、**揃っていることを出力に頼らせない。**
+   * 出力が事実とずれると、次に測る人は画面ではなく出力を信じる。
+   */
+  const settledRows = EMPTY
+    ? []
+    : ((await supabase.from("actuals").select("plan_key").like("plan_key", "o:%"))
+        .data ?? []);
+  const settledKeys = new Set(settledRows.map((r) => r.plan_key as string));
+  const settledCount = settledKeys.size;
+  const oneoffRows = (await count("oneoff_items")) ?? 0;
+
   console.log("");
   console.log("投入結果");
   console.log(`  実績           ${await count("actuals")}`);
   console.log(`  オーバーライド ${await count("overrides")}（繰延20・金額変更20）`);
   console.log(`  定期項目       ${await count("recurring_items")}（うち振替3）`);
-  console.log(`  単発予定       ${await count("oneoff_items")}（うち実績で消し込み済 ${SETTLED}）`);
+  console.log(`  単発予定       ${oneoffRows}（うち実績で消し込み済 ${settledCount}）`);
   console.log(`  口座           ${await count("accounts")}`);
   if (actuals.length > 0) {
     console.log(`  期間           ${actuals[0].date} 〜 ${actuals.at(-1)!.date}（${months.size}ヶ月）`);
@@ -337,9 +374,7 @@ async function main(): Promise<void> {
   const forecast = EMPTY
     ? []
     : buildForecast({ recurring, oneoffs, overrides: {} } as never, AS_OF, to);
-  /* **数えずに引く。** 「`--settled` 件だから N 件」と書くと、単発予定の
-     日付が予測の期間から外れたときに合わなくなる。展開した結果から引く */
-  const settledKeys = new Set(settledActuals.map((a) => a.plan_key));
+  /* 期間から外れた単発予定を数えないために、展開した結果と突き合わせる */
   const reconciled = forecast.filter((f) => settledKeys.has(f.key)).length;
 
   console.log("");
@@ -356,12 +391,15 @@ async function main(): Promise<void> {
   console.log(`  振替の純額  生活 ${-60_000 + 80_000 - 30_000} / 事業 ${60_000 - 80_000 + 30_000}（どちらも0でない）`);
   console.log(`  overrides の行  ${await count("overrides")}件（0件だと並び替えキーの一意性を試せない。§9.1）`);
   console.log(
-    `  AC-55 の済み/未済  ${SETTLED} / ${ONEOFF_COUNT - SETTLED}` +
-      (SETTLED > 0 && SETTLED < ONEOFF_COUNT
+    `  AC-55 の済み/未済  ${settledCount} / ${oneoffRows - settledCount}` +
+      (settledCount > 0 && settledCount < oneoffRows
         ? "（どちらも非0。隠す側と出す側の両方を試せる）"
-        : SETTLED === 0
+        : settledCount === 0
           ? "  **隠す側を試せない**（--settled を1以上に）"
-          : "  **出す側を試せない**（全件が済み。--settled を減らす）"),
+          : "  **出す側を試せない**（全件が済み。--settled を減らす）") +
+      (settledCount === SETTLED
+        ? ""
+        : `  **--settled=${SETTLED} と食い違う。DB の数を出している**`),
   );
 }
 
