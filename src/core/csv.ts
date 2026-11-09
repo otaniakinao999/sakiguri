@@ -20,6 +20,7 @@ import {
 } from "./categories";
 import { daysBetween, parseDate } from "./date";
 import type {
+  Actual,
   CostType,
   DateStr,
   EntryType,
@@ -434,6 +435,49 @@ export function matchPlan(
 
 /* ========================= 取込行の組み立て ========================= */
 
+/**
+ * 重複の判定に使うキー（FR-50）。
+ *
+ * **口座・日付・収支・金額・摘要が全部一致したときだけ**同じとみなす。
+ *
+ * **ゆるく当てない。** 同じ日に同じ額の取引が2件あるのは普通のことで
+ * （同じ店で2回買う、同じ額の振込が2件来る）、摘要を見ずに当てると
+ * **本物のデータを落とす。** 取りこぼし（摘要を直したあとの再取込など）は
+ * 「外し忘れた行が1つ混じる」で済むが、取りすぎは**気づかないまま消える。**
+ * 外す側に倒す。
+ *
+ * 取り込んだ実績は摘要をCSVのまま保存する（`ImportScreen`）ので、
+ * 同じファイルを読ませれば同じキーになる。
+ */
+export function duplicateKeyOf(entry: {
+  accountId: string;
+  date: DateStr;
+  type: EntryType;
+  amount: Yen;
+  name: string;
+}): string {
+  return [entry.accountId, entry.date, entry.type, entry.amount, entry.name].join("\u0000");
+}
+
+/**
+ * 既に保存されている実績を、重複の判定用に数える。
+ *
+ * **件数で持つ。** 「そのキーがあるか」で見ると、保存済み1件に対して
+ * CSVの同一行2件が**両方とも重複印になる。** 実際には1件が新しい取引
+ * なので、1件ぶんだけ当てて、残りは通す。
+ */
+function countByKey(existing: readonly Actual[], accountId: string): Map<string, number> {
+  const pool = new Map<string, number>();
+
+  for (const actual of existing) {
+    if (actual.accountId !== accountId) continue;
+    const key = duplicateKeyOf(actual);
+    pool.set(key, (pool.get(key) ?? 0) + 1);
+  }
+
+  return pool;
+}
+
 /** 確認画面に出す1行。利用者が修正できる。 */
 export interface ImportRow {
   /** 元CSVの行番号（見出しを除いた0始まり） */
@@ -464,6 +508,17 @@ export interface ImportRow {
    * 「候補がありません」と同じ文言にしない。
    */
   matchHint: "matched" | "amountDiffers" | "noCandidate";
+  /**
+   * **既に同じ実績が保存されている行**（FR-50）。
+   *
+   * 同じファイルを二度読ませたときや、前回と範囲が重なるファイルを
+   * 読ませたときに立つ。立った行は `include` の初期値が false になる。
+   *
+   * **`matchHint` とは別の軸である。** あちらは「予定と照合できたか」、
+   * こちらは「実績として既に入っているか」。混ぜると、照合できなかった
+   * 重複行と、照合できた新規行の区別がつかなくなる（CLAUDE.md §2.12）。
+   */
+  alreadyRegistered: boolean;
 }
 
 export interface BuildImportRowsInput {
@@ -476,6 +531,12 @@ export interface BuildImportRowsInput {
   candidates?: ForecastInstance[];
   /** 費目推定のもとになる既存の項目 */
   history?: HistoryEntry[];
+  /**
+   * **既に保存されている実績**（FR-50）。重複の判定に使う。
+   *
+   * 口座での絞り込みはこの中でやるので、全件そのまま渡してよい。
+   */
+  existing?: readonly Actual[];
 }
 
 /** 摘要が空のときの表示。 */
@@ -514,6 +575,9 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
 
   const body = mapping.hasHeader ? rows.slice(1) : rows;
   const claimed = new Set<string>();
+  /* **同じファイルの中の同一行どうしは当てない。** 明細に同じ行が2つ
+     並ぶのは実在の2件なので、消費するのは保存済みのぶんだけ */
+  const registered = countByKey(input.existing ?? [], accountId);
   const out: ImportRow[] = [];
 
   body.forEach((cells, rowIndex) => {
@@ -551,9 +615,16 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
           categoryOf(categoryCode).recommendedCostType ??
           "variable");
 
+    const key = duplicateKeyOf({ accountId, date, type, amount, name });
+    const left = registered.get(key) ?? 0;
+    const alreadyRegistered = left > 0;
+    if (alreadyRegistered) registered.set(key, left - 1);
+
     out.push({
       rowIndex,
-      include: true,
+      /* **重複の行は既定で外す。** 消すのではなく外すだけにして、
+         利用者が入れ直せるようにする（取りこぼしよりも取りすぎが怖い） */
+      include: !alreadyRegistered,
       date,
       name,
       type,
@@ -575,6 +646,7 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
             )
           ? ("amountDiffers" as const)
           : ("noCandidate" as const),
+      alreadyRegistered,
     });
   });
 

@@ -84,6 +84,21 @@ function MatchCell({ row }: { row: ImportRow }) {
 }
 
 /**
+ * 重複列（FR-50）。
+ *
+ * **`MatchCell` と別にする。** あちらは「予定と照合できたか」、こちらは
+ * 「実績として既に入っているか」。1つの列にまとめると、照合できなかった
+ * 重複行と、照合できた新規行の区別がつかない（CLAUDE.md §2.12）。
+ *
+ * **色は控えめにする。** これは間違いではなく「こちらで外しました」という
+ * 知らせで、利用者がすることは無い。目を引かせるべきは `要対応` のほう。
+ */
+function DuplicateCell({ row }: { row: ImportRow }) {
+  if (!row.alreadyRegistered) return null;
+  return <span className="t-table text-muted-foreground">登録済み</span>;
+}
+
+/**
  * CSV取込（SC-06）の見た目
  *
  * 一次情報：docs/要件定義書.md §4.1 SC-06・§6.1、docs/design/screens.md 05
@@ -117,6 +132,7 @@ export function ImportView({
   children,
 }: ImportViewProps) {
   const chosen = preview?.filter((r) => r.include).length ?? 0;
+  const duplicates = preview?.filter((r) => r.alreadyRegistered).length ?? 0;
 
   const setColumn = (key: keyof ColumnMapping, value: number) => {
     if (!mapping) return;
@@ -325,6 +341,7 @@ export function ImportView({
                 <TableHead align="right">入金</TableHead>
                 <TableHead align="right">出金</TableHead>
                 <TableHead>照合</TableHead>
+                <TableHead>重複</TableHead>
               </TableHeaderRow>
               <tbody>
                 {preview.map((row, i) => (
@@ -361,11 +378,22 @@ export function ImportView({
                     <TableCell>
                       <MatchCell row={row} />
                     </TableCell>
+                    <TableCell>
+                      <DuplicateCell row={row} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </tbody>
             </Table>
 
+            {duplicates > 0 ? (
+              <p className="t-body-sm text-fg-warning">
+                同じ内容が既に登録されている{duplicates}件は、あらかじめ「取込」を
+                外してあります。口座・日付・収支・金額・摘要が
+                <strong className="font-semibold">すべて</strong>一致した行だけです。
+                入れ直すこともできます。
+              </p>
+            ) : null}
             <p className="t-body-sm text-muted-foreground">
               金額が完全に一致し、日付の差が12日以内で、口座も同じ予定は、
               その場で消し込まれて「やること」には出ません。

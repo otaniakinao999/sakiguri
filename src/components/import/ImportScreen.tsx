@@ -145,6 +145,9 @@ export function ImportScreen() {
         accountId: activeAccount,
         candidates,
         history,
+        /* 既に保存されている実績との突き合わせ（FR-50）。口座での絞り込みは
+           core 側でやるので全件渡す */
+        existing: data.actuals,
       }),
     );
   };
