@@ -7,6 +7,7 @@
  *   収支・固定変動・費目・金額・事業割合・口座（振替なら振替先）。
  */
 
+import { costTypeApplies, fitCostType } from "@/core/categories";
 import { isCard } from "@/core/types";
 import type { Account, CostType, EntryType } from "@/core/types";
 import { CategorySelect, fitCategory, NumberInput, Select } from "@/components/ui/inputs";
@@ -28,17 +29,35 @@ const CELL = "border-b border-border px-cell py-8 align-top";
  *
  * 費用でなければ固定／変動は持たない（要件定義書 §3.1.2 適用規則6）。
  * 費目もグループが変わるので合わせる。
+ *
+ * **固定／変動の判定は費目グループから引く**（`fitCostType`）。`type` から
+ * 引くと、支出の行が資金移動の費目を持てるようになった以上（適用規則5a）
+ * 振替の行に固定変動が付く。
  */
 export function onTypeChange(
   current: EntryFieldsValue,
   type: EntryType,
 ): Partial<EntryFieldsValue> {
+  const categoryCode = fitCategory(type, current.categoryCode);
   return {
     type,
-    costType: type === "expense" ? (current.costType ?? "variable") : null,
-    categoryCode: fitCategory(type, current.categoryCode),
+    costType: fitCostType(categoryCode, current.costType),
+    categoryCode,
     toAccountId: type === "transfer" ? current.toAccountId : undefined,
   };
+}
+
+/**
+ * 費目を変えたときの後始末。
+ *
+ * **費目だけを変えても固定／変動を整える。** 支出のまま費目を資金移動に
+ * すると、固定変動が残ったままになる（適用規則6）。
+ */
+export function onCategoryChange(
+  current: EntryFieldsValue,
+  categoryCode: string,
+): Partial<EntryFieldsValue> {
+  return { categoryCode, costType: fitCostType(categoryCode, current.costType) };
 }
 
 export function EntryFieldCells({
@@ -67,7 +86,7 @@ export function EntryFieldCells({
         <Select
           aria-label="固定/変動"
           value={value.costType ?? ""}
-          disabled={value.type !== "expense"}
+          disabled={!costTypeApplies(value.categoryCode)}
           onChange={(e) =>
             onChange({ costType: e.target.value === "fixed" ? "fixed" : "variable" })
           }
@@ -80,7 +99,7 @@ export function EntryFieldCells({
         <CategorySelect
           type={value.type}
           value={value.categoryCode}
-          onChange={(categoryCode) => onChange({ categoryCode })}
+          onChange={(categoryCode) => onChange(onCategoryChange(value, categoryCode))}
         />
       </td>
       <td className={CELL}>

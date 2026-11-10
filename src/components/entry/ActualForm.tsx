@@ -17,6 +17,7 @@
 import { isCard } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
 import { Button } from "@/components/ui/legacy/Button";
+import { costTypeApplies, fitCostType } from "@/core/categories";
 import {
   CategorySelect,
   DateInput,
@@ -27,16 +28,25 @@ import {
   TextInput,
 } from "@/components/ui/inputs";
 
-/** 収支を変えたときに、合わなくなった項目を整える。 */
+/**
+ * 収支や費目を変えたときに、合わなくなった項目を整える。
+ *
+ * **固定／変動は費目グループから決める**（`fitCostType`、適用規則6）。
+ * `type` から決めると、支出の行に資金移動の費目を選んだとき（適用規則5a）
+ * 振替の行に固定変動が付く。**費目だけを変えたときも整える** ―― 以前は
+ * 収支を変えたときだけ見ていたので、支出のまま費目を TRF にすると
+ * 固定変動が残っていた。
+ */
 export function applyActualPatch(
   current: Actual,
   patch: Partial<Actual>,
 ): Actual {
   const next = { ...current, ...patch };
   if (patch.type) {
-    next.costType =
-      patch.type === "expense" ? (current.costType ?? "variable") : null;
     next.categoryCode = fitCategory(patch.type, current.categoryCode);
+  }
+  if (patch.type || patch.categoryCode) {
+    next.costType = fitCostType(next.categoryCode, current.costType);
   }
   return next;
 }
@@ -122,7 +132,7 @@ export function ActualForm({
             <Select
               id={id}
               value={value.costType ?? ""}
-              disabled={value.type !== "expense"}
+              disabled={!costTypeApplies(value.categoryCode)}
               onChange={(e) =>
                 onChange({
                   costType: e.target.value === "fixed" ? "fixed" : "variable",

@@ -16,6 +16,7 @@
 import {
   affectsProfitLoss,
   categoryOf,
+  costTypeApplies,
   groupOfCategory,
 } from "./categories";
 import { daysBetween, parseDate } from "./date";
@@ -607,13 +608,15 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       guess?.categoryCode ??
       (type === "income" ? FALLBACK_INCOME : FALLBACK_EXPENSE);
 
-    const costType =
-      type === "income"
-        ? null
-        : (matched?.costType ??
-          guess?.costType ??
-          categoryOf(categoryCode).recommendedCostType ??
-          "variable");
+    /* **固定／変動は費目グループから決める**（適用規則6）。`type` で決めると、
+       費目が資金移動の行（適用規則5a）に固定変動が付く。いまは照合先から
+       TRF の費目が来る経路しかないが、CL-10 のルールが入ると常時通る */
+    const costType = costTypeApplies(categoryCode)
+      ? (matched?.costType ??
+        guess?.costType ??
+        categoryOf(categoryCode).recommendedCostType ??
+        "variable")
+      : null;
 
     const key = duplicateKeyOf({ accountId, date, type, amount, name });
     const left = registered.get(key) ?? 0;

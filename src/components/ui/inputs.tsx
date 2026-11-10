@@ -23,9 +23,9 @@
 import { useId, useState } from "react";
 
 import {
-  CATEGORIES,
   categoriesInGroup,
-  type CategoryGroup,
+  categoryFitsType,
+  groupsForType,
 } from "@/core/categories";
 import type { EntryType } from "@/core/types";
 import { parseMonthsField, parseNumberField } from "@/lib/number-field";
@@ -202,11 +202,21 @@ export function Select({
   );
 }
 
-/** 収支の向きから、選べる費目のグループを決める。 */
-export function categoryGroupFor(type: EntryType): CategoryGroup {
-  if (type === "income") return "INC";
-  if (type === "transfer") return "TRF";
-  return "EXP";
+/**
+ * その収支で選べる費目（掲載順、自動生成を除く）。
+ *
+ * **選べるグループの決め方は core にある**（`groupsForType`、適用規則5a）。
+ * 画面ごとに書くと、支出で振替の費目が選べる画面と選べない画面ができる
+ * （CLAUDE.md §2.8）。
+ *
+ * 自動生成される費目（カード引落 TRF-04・借入返済の元金 TRF-06）は
+ * 選ばせない。**CL-2 と CL-8 がこれらを生成するので、手で同じ費目の行を
+ * 作ると二重に乗る。**
+ */
+export function categoryOptionsFor(type: EntryType) {
+  return groupsForType(type).flatMap((group) =>
+    categoriesInGroup(group).filter((c) => !c.generated),
+  );
 }
 
 /**
@@ -227,9 +237,7 @@ export function CategorySelect({
   onChange: (code: string) => void;
   id?: string;
 }) {
-  const options = categoriesInGroup(categoryGroupFor(type)).filter(
-    (c) => !c.generated,
-  );
+  const options = categoryOptionsFor(type);
 
   return (
     <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -242,10 +250,16 @@ export function CategorySelect({
   );
 }
 
-/** 収支の向きを変えたとき、費目が合わなくなっていれば先頭に寄せる。 */
+/**
+ * 収支の向きを変えたとき、費目が合わなくなっていれば先頭に寄せる。
+ *
+ * **資金移動（TRF）の費目は、支出と収入のあいだで持ち越す**（適用規則5a）。
+ * 寄せ直すと「振替にしたのに支出に戻る」ことになる。
+ */
 export function fitCategory(type: EntryType, current: string): string {
-  const group = categoryGroupFor(type);
-  const found = CATEGORIES.find((c) => c.code === current);
-  if (found && found.group === group && !found.generated) return current;
-  return categoriesInGroup(group).find((c) => !c.generated)!.code;
+  const options = categoryOptionsFor(type);
+  if (options.some((c) => c.code === current) && categoryFitsType(current, type)) {
+    return current;
+  }
+  return options[0].code;
 }

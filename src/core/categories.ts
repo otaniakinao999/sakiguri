@@ -28,7 +28,7 @@
  *   費目ごとの推奨値をオンボーディングで当てる案は v1.5 の検討事項（OI-14）。
  */
 
-import type { CostType } from "./types";
+import type { CostType, EntryType } from "./types";
 
 /** 費目のグループ。TRF は損益に計上しない。 */
 export type CategoryGroup = "INC" | "EXP" | "TRF";
@@ -169,4 +169,54 @@ export function categoryOrder(code: string): number {
 /** グループに属する費目を掲載順で返す。 */
 export function categoriesInGroup(group: CategoryGroup): Category[] {
   return CATEGORIES.filter((c) => c.group === group);
+}
+
+/**
+ * その収支で選べる費目グループ（要件定義書 §3.1.2 適用規則5a）。
+ *
+ * **資金移動（TRF）は符号を選ばない。** 振替を両側の明細から1行ずつ
+ * 記録するため、`type = expense` にも `income` にも TRF の費目を持たせる
+ * （ADR-0025）。この形は新しくなく、カード引落（TRF-04）と借入返済の
+ * 元金（TRF-06）が既に `type = expense` の資金移動である。
+ *
+ * 逆向きは許さない。収入の行に EXP の費目、支出の行に INC の費目は持てない。
+ */
+export function groupsForType(type: EntryType): readonly CategoryGroup[] {
+  if (type === "income") return ["INC", "TRF"];
+  if (type === "transfer") return ["TRF"];
+  return ["EXP", "TRF"];
+}
+
+/** その費目がその収支で持てるか（適用規則5a）。 */
+export function categoryFitsType(code: string, type: EntryType): boolean {
+  return groupsForType(type).includes(groupOfCategory(code));
+}
+
+/**
+ * 固定／変動が意味を持つ費目か（要件定義書 §3.1.2 適用規則6）。
+ *
+ * **判定の鍵は費目グループであって `type` ではない。** 適用規則5a で
+ * `type = expense` の行が TRF の費目を持てるようになったため、`type` で
+ * 決めると**振替の行に固定変動が付く。** 以前は両者が一致していたので
+ * `type === "expense"` と書いた箇所が5つあり、すべてここを呼ぶように直した
+ * （CLAUDE.md §2.8）。
+ */
+export function costTypeApplies(code: string): boolean {
+  return groupOfCategory(code) === "EXP";
+}
+
+/**
+ * 費目に合わせて固定／変動を整える（適用規則6）。
+ *
+ * 費目か収支が変わったときに呼ぶ。費用でなくなったら null に落とし、
+ * 費用になったら既存の値を保つ。**費目から固定／変動を決めてはならない**
+ * ので、初期値は呼び出し側が渡す（適用規則1）。
+ */
+export function fitCostType(
+  code: string,
+  current: CostType | null,
+  fallback: CostType = "variable",
+): CostType | null {
+  if (!costTypeApplies(code)) return null;
+  return current ?? fallback;
 }
