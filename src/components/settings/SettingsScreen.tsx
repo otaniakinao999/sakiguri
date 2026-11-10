@@ -40,6 +40,7 @@ import { AccountsTable } from "./AccountsTable";
 import { AsOfDialog } from "./AsOfDialog";
 import { OneoffsTable } from "./OneoffsTable";
 import { RecurringTable } from "./RecurringTable";
+import { RulesTable } from "./RulesTable";
 
 export function SettingsScreen() {
   const { data, setData, today } = useAppData();
@@ -171,6 +172,7 @@ export function SettingsScreen() {
         <AccountsTable />
         <RecurringTable />
         <OneoffsTable />
+        <RulesTable />
 
         {/* この回だけ変更した予定 — 2034:1150 */}
         <Panel title={`この回だけ変更した予定（${overrides.length}件）`}>

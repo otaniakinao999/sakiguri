@@ -187,6 +187,45 @@ export interface Override {
 /** 予定インスタンスキーをキーとするマップ */
 export type Overrides = Record<string, Override>;
 
+/** 行の向き。入金が `in`（要件定義書 §3.2 ImportRule） */
+export type RuleDirection = "in" | "out";
+
+/**
+ * CSV仕分けルール（要件定義書 §3.2 ImportRule・§3.3 CL-10・FR-18）
+ *
+ * **利用者が作る。自動では作らない**（OI-2 の結論）。取込の確認画面で、
+ * 照合が成立しなかった行の費目を決める。
+ *
+ * **`type` を持たない。** 収支は金額の符号で決まり（CL-7）、ルールはそれを
+ * 変えない。振替は `type` ではなく費目で表すので、符号を上書きする必要が
+ * そもそも無い（適用規則5a）。
+ */
+export interface ImportRule {
+  id: string;
+  /**
+   * 摘要に**含まれていれば**当たり。
+   *
+   * 利用者が書いた文字列をそのまま使い、**切り詰めない。** 機械が切ると
+   * 利用者が意図した範囲とずれる（`historyKeyOf` の先頭4文字とは別物）。
+   */
+  pattern: string;
+  /** 指定するとその口座のCSVにだけ当たる。null は全口座 */
+  accountId: string | null;
+  /**
+   * 指定するとその向きの行にだけ当たる。null は両方。
+   *
+   * **意味を持つのは TRF の費目のときだけ。** INC / EXP の費目は符号が
+   * 決まっているので、向きは費目から導く（`effectiveDirection`）。
+   * 両方に持たせると同じ規則が2箇所になる（CLAUDE.md §2.8）。
+   */
+  direction: RuleDirection | null;
+  categoryCode: string;
+  /** 費目グループが EXP のときだけ非 null（適用規則6） */
+  costType: CostType | null;
+  /** 0〜100。TRF の費目では 0 に固定（効かない値を保存させない） */
+  bizRatio: number;
+}
+
 /** 予定インスタンスの生成元 */
 export type ForecastSource = "recurring" | "oneoff";
 

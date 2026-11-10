@@ -65,6 +65,7 @@ describe("ADR-0013 イベントに資金繰りの中身を入れない", () => {
       actual_recorded: { settled: true, fromCsv: false },
       candidate_resolved: { confirmed: true, candidateCount: 2 },
       csv_imported: { rows: 12, matched: 3 },
+      import_rule_created: { patternLength: 5, fromImport: true },
       shortfall_warned: { shortfall: false, daysAhead: 41 },
       shortfall_acted: { toEntry: true },
       plan_deferred: { skipped: false },

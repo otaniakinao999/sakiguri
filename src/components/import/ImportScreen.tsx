@@ -16,7 +16,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
-import type { Actual, ForecastInstance } from "@/core/types";
+import type { Actual, ForecastInstance, ImportRule } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
 import { Callout } from "@/components/sakiguri/Callout";
@@ -29,11 +29,13 @@ import {
   decodeCsv,
   detectColumns,
   parseCsv,
+  redecideWithoutRule,
   type ColumnMapping,
   type HistoryEntry,
   type ImportRow,
 } from "@/core/csv";
-import { addActuals, markReconciled, newId } from "@/lib/mutations";
+import { categoryOf, groupOfCategory } from "@/core/categories";
+import { addActuals, addRule, markReconciled, newId } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
 import { ImportView } from "./ImportView";
@@ -136,6 +138,18 @@ export function ImportScreen() {
     load(decodeCsv(await file.arrayBuffer()));
   };
 
+  /**
+   * **この取込で使わないことにしたルールの id**（AC-57b）。
+   *
+   * 画面の状態であって保存しない。ルールそのものは消さないので、次の
+   * 取込では また当たる。
+   */
+  const [disabledRuleIds, setDisabledRuleIds] = useState<string[]>([]);
+  const activeRules = useMemo(
+    () => data.rules.filter((r) => !disabledRuleIds.includes(r.id)),
+    [data.rules, disabledRuleIds],
+  );
+
   const read = () => {
     if (!rows || !mapping) return;
     setPreview(
@@ -148,7 +162,59 @@ export function ImportScreen() {
         /* 既に保存されている実績との突き合わせ（FR-50）。口座での絞り込みは
            core 側でやるので全件渡す */
         existing: data.actuals,
+        /* 仕分けルール（CL-10）。使わないことにしたぶんは除いて渡す */
+        rules: activeRules,
       }),
+    );
+  };
+
+  /**
+   * 「このルールを使わない」（AC-57b）。
+   *
+   * **決め直すのは、そのルールで決まっていた行だけ。** 取込行を作り直すと、
+   * ここまでに手で直した費目も、外した取込のチェックも全部消える。
+   */
+  const disableRule = (ruleId: string) => {
+    const remaining = activeRules.filter((r) => r.id !== ruleId);
+    setDisabledRuleIds((ids) => [...ids, ruleId]);
+    setPreview((rows) =>
+      rows ? redecideWithoutRule(rows, ruleId, remaining, history) : rows,
+    );
+  };
+
+  /**
+   * 「次回もこうする」（AC-57c）。
+   *
+   * **作ったルールは設定のルール表に行として現れる**（同じ `data.rules` を
+   * 出しているため）。現れないと自動学習と区別がつかない。
+   *
+   * `accountId` と `direction` は null にする。口座を限ると、同じ取引先が
+   * 別の口座に出たときに当たらない。向きは費目から決まる（INC / EXP）か、
+   * 資金移動なら両側に当てたい（ADR-0025）。
+   */
+  const createRule = (draft: {
+    pattern: string;
+    categoryCode: string;
+    costType: ImportRule["costType"];
+    bizRatio: number;
+  }) => {
+    const rule: ImportRule = {
+      id: newId(),
+      pattern: draft.pattern.trim(),
+      accountId: null,
+      direction: null,
+      categoryCode: draft.categoryCode,
+      costType: draft.costType,
+      /* 資金移動では効かない値を持たせない（§3.2 ImportRule） */
+      bizRatio: groupOfCategory(draft.categoryCode) === "TRF" ? 0 : draft.bizRatio,
+    };
+    setData((d) => addRule(d, rule));
+    track(session?.user.id, "import_rule_created", {
+      patternLength: [...rule.pattern].length,
+      fromImport: true,
+    });
+    setNotice(
+      `ルールを保存しました。「${rule.pattern}」を含む行は、次回から${categoryOf(rule.categoryCode).name}になります。`,
     );
   };
 
@@ -261,6 +327,9 @@ export function ImportScreen() {
         preview={preview}
         onPreviewChange={setPreview}
         onCommit={commit}
+        disabledRules={data.rules.filter((r) => disabledRuleIds.includes(r.id))}
+        onDisableRule={disableRule}
+        onCreateRule={createRule}
         notices={
           <>
             {error && <Callout tone="error">{error}</Callout>}

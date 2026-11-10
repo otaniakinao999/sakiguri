@@ -10,7 +10,7 @@
  * 純関数。Supabase には触れない。
  */
 
-import type { Actual, OneoffItem, Overrides, RecurringItem } from "@/core/types";
+import type { Actual, ImportRule, OneoffItem, Overrides, RecurringItem } from "@/core/types";
 import type { Account } from "@/core/types";
 
 import type { AppData } from "../app-data";
@@ -30,6 +30,7 @@ export interface DataDiff {
   oneoffs: TableDiff<OneoffItem>;
   actuals: TableDiff<Actual>;
   overrides: TableDiff<{ key: string; value: Overrides[string] }>;
+  rules: TableDiff<ImportRule>;
   /** 送るものが何も無いか */
   empty: boolean;
 }
@@ -89,6 +90,7 @@ export function diffAppData(previous: AppData | null, next: AppData): DataDiff {
   const oneoffs = diffById(base?.oneoffs ?? [], next.oneoffs);
   const actuals = diffById(base?.actuals ?? [], next.actuals);
   const overrides = diffOverrides(base?.overrides ?? {}, next.overrides);
+  const rules = diffById(base?.rules ?? [], next.rules);
 
   /* **項目を並べ直さない。** 送る中身そのものを比べる。ここに項目名を
      書き写すと、settings に列が増えたときに片方だけ古くなる
@@ -103,12 +105,18 @@ export function diffAppData(previous: AppData | null, next: AppData): DataDiff {
     oneoffs,
     actuals,
     overrides,
+    rules,
+    /* **テーブルを1つ足したらここにも足す。** 漏れると「変わったのに
+       何も送らない」になる。漏れたら落ちるテストを置いてある
+       （`supabase-diff.test.ts` の「どのテーブルの変更でも empty が
+       false になる」。CLAUDE.md §2.8 の列挙） */
     empty:
       !settingsChanged &&
       nothing(accounts) &&
       nothing(recurring) &&
       nothing(oneoffs) &&
       nothing(actuals) &&
-      nothing(overrides),
+      nothing(overrides) &&
+      nothing(rules),
   };
 }

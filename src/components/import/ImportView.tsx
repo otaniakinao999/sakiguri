@@ -2,8 +2,14 @@
 
 import * as React from "react";
 
-import type { Yen } from "@/core/types";
-import type { ColumnMapping, ImportRow } from "@/core/csv";
+import type { ImportRule, Yen } from "@/core/types";
+import {
+  countRuleMatches,
+  editImportRowCategory,
+  type ColumnMapping,
+  type ImportRow,
+} from "@/core/csv";
+import { categoryOf } from "@/core/categories";
 import { Callout } from "@/components/sakiguri/Callout";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
@@ -17,6 +23,7 @@ import {
 } from "@/components/sakiguri/Table";
 import { Button } from "@/components/ui/button";
 import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
+import { CategorySelect, TextInput } from "@/components/ui/inputs";
 import { Field, Select } from "@/components/ui/select";
 import { formatYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -59,6 +66,22 @@ export interface ImportViewProps {
   onPreviewChange?: (rows: ImportRow[]) => void;
   onCommit?: () => void;
 
+  /**
+   * **この取込で使わないことにしたルール**（FR-18・AC-57b）。
+   *
+   * 消したわけではないことを画面に出すために渡す。空なら何も出ない。
+   */
+  disabledRules?: readonly Pick<ImportRule, "id" | "pattern">[];
+  /** 「このルールを使わない」。その取込のあいだだけ効く（ルールは消さない） */
+  onDisableRule?: (ruleId: string) => void;
+  /** 「次回もこうする」で新しいルールを作る */
+  onCreateRule?: (draft: {
+    pattern: string;
+    categoryCode: string;
+    costType: ImportRule["costType"];
+    bizRatio: number;
+  }) => void;
+
   /* 差し込み口 */
   notices?: React.ReactNode;
   /** 口座が無いときなど */
@@ -99,6 +122,34 @@ function DuplicateCell({ row }: { row: ImportRow }) {
 }
 
 /**
+ * 費目がどう決まったか（AC-57a）。
+ *
+ * **ルールで決まった行と推定で決まった行を書き分ける。** 区別しないと、
+ * 利用者は消せるもの（ルール）と消せないもの（推定）の見分けがつかない。
+ * 手で直した行はどちらでもなくなる（`editImportRowCategory` が両方を外す）。
+ */
+function DecidedBy({ row }: { row: ImportRow }) {
+  if (row.matchedKey !== null) {
+    return <span className="t-table text-muted-foreground">予定から</span>;
+  }
+  if (row.ruleId !== null) {
+    return (
+      <span className="t-table text-foreground">
+        ルール（{row.rulePattern}）
+      </span>
+    );
+  }
+  if (row.guessedFrom !== null) {
+    return (
+      <span className="t-table text-muted-foreground">
+        推定（{row.guessedFrom}）
+      </span>
+    );
+  }
+  return <span className="t-table text-muted-foreground">—</span>;
+}
+
+/**
  * CSV取込（SC-06）の見た目
  *
  * 一次情報：docs/要件定義書.md §4.1 SC-06・§6.1、docs/design/screens.md 05
@@ -128,9 +179,18 @@ export function ImportView({
   preview,
   onPreviewChange,
   onCommit,
+  disabledRules,
+  onDisableRule,
+  onCreateRule,
   notices,
   children,
 }: ImportViewProps) {
+  /** 「次回もこうする」で開いている行と、その `pattern`（AC-57e） */
+  const [draft, setDraft] = React.useState<{
+    rowIndex: number;
+    pattern: string;
+  } | null>(null);
+
   const chosen = preview?.filter((r) => r.include).length ?? 0;
   const duplicates = preview?.filter((r) => r.alreadyRegistered).length ?? 0;
 
@@ -342,9 +402,13 @@ export function ImportView({
                 <TableHead align="right">出金</TableHead>
                 <TableHead>照合</TableHead>
                 <TableHead>重複</TableHead>
+                {/* CL-7「行ごとに費目を修正できること」。FR-18 のルールは
+                    ここで直した結果から作る */}
+                <TableHead>費目</TableHead>
+                <TableHead>決まり方</TableHead>
               </TableHeaderRow>
               <tbody>
-                {preview.map((row, i) => (
+                {preview.flatMap((row, i) => [
                   <TableRow
                     key={row.rowIndex}
                     fixedHeight
@@ -381,10 +445,117 @@ export function ImportView({
                     <TableCell>
                       <DuplicateCell row={row} />
                     </TableCell>
-                  </TableRow>
-                ))}
+                    <TableCell>
+                      <CategorySelect
+                        type={row.type}
+                        value={row.categoryCode}
+                        onChange={(categoryCode) =>
+                          onPreviewChange?.(
+                            preview.map((r) =>
+                              r.rowIndex === row.rowIndex
+                                ? editImportRowCategory(r, categoryCode)
+                                : r,
+                            ),
+                          )
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-8">
+                        <DecidedBy row={row} />
+                        {row.matchedKey === null ? (
+                          row.ruleId !== null ? (
+                            <Button
+                              variant="ghost"
+                              onClick={() => onDisableRule?.(row.ruleId!)}
+                            >
+                              このルールを使わない
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              onClick={() =>
+                                setDraft(
+                                  draft?.rowIndex === row.rowIndex
+                                    ? null
+                                    : { rowIndex: row.rowIndex, pattern: row.name },
+                                )
+                              }
+                            >
+                              次回もこうする
+                            </Button>
+                          )
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>,
+                  draft?.rowIndex === row.rowIndex ? (
+                    <TableRow key={`${row.rowIndex}-draft`} last={i === preview.length - 1}>
+                      <TableCell colSpan={9} className="bg-muted">
+                        <div className="flex flex-wrap items-end gap-16">
+                          <Field
+                            label="摘要のどこで当てるか"
+                            htmlFor={`rule-pattern-${row.rowIndex}`}
+                            className="min-w-0 flex-1"
+                          >
+                            <TextInput
+                              id={`rule-pattern-${row.rowIndex}`}
+                              value={draft.pattern}
+                              onChange={(e) =>
+                                setDraft({ rowIndex: row.rowIndex, pattern: e.target.value })
+                              }
+                            />
+                          </Field>
+                          <p className="t-body-sm text-muted-foreground">
+                            {/* **広すぎる pattern を捕まえる手段**（AC-57e）。
+                                狭すぎる側は次回まで分からない（仕様で受け入れ） */}
+                            このファイルの
+                            <strong className="font-semibold">
+                              {countRuleMatches(preview, {
+                                pattern: draft.pattern,
+                                accountId: null,
+                                direction: null,
+                                categoryCode: row.categoryCode,
+                              })}
+                              行
+                            </strong>
+                            に当たります（費目は
+                            {categoryOf(row.categoryCode).name}）
+                          </p>
+                          <Button
+                            disabled={draft.pattern.trim() === ""}
+                            onClick={() => {
+                              onCreateRule?.({
+                                pattern: draft.pattern,
+                                categoryCode: row.categoryCode,
+                                costType: row.costType,
+                                bizRatio: row.bizRatio,
+                              });
+                              setDraft(null);
+                            }}
+                          >
+                            このルールを保存する
+                          </Button>
+                          <Button variant="ghost" onClick={() => setDraft(null)}>
+                            やめる
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : null,
+                ])}
               </tbody>
             </Table>
+
+            {disabledRules && disabledRules.length > 0 ? (
+              <p className="t-body-sm text-muted-foreground">
+                {/* **消していないことを画面に出す**（AC-57b）。消すのは
+                    設定のルール表だけ */}
+                このファイルでは{disabledRules.length}件のルールを使っていません
+                （{disabledRules.map((r) => r.pattern).join("、")}）。
+                ルールは消えていないので、次の取込では また当たります。
+              </p>
+            ) : null}
 
             {duplicates > 0 ? (
               <p className="t-body-sm text-fg-warning">

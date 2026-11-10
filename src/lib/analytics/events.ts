@@ -73,6 +73,19 @@ export interface EventMap {
     matched: number;
   };
 
+  /**
+   * **CSV仕分けルールを作った**（FR-18）。
+   *
+   * 既存のイベントを流用しない（CLAUDE.md §4.1）。`csv_imported` に混ぜると
+   * 取込の件数が実際より多く出る。
+   */
+  import_rule_created: {
+    /** `pattern` の長さ（コードポイント数）。**文字そのものは入れない** */
+    patternLength: number;
+    /** 取込の確認画面から作ったか（設定画面のルール表からなら false） */
+    fromImport: boolean;
+  };
+
   /** 残高の警告を見せた。警告からの操作率の分母 */
   shortfall_warned: {
     /** 残高がマイナスになるか（false なら防衛ライン割れ） */

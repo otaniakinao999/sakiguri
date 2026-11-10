@@ -26,6 +26,8 @@ import type {
   DateStr,
   EntryType,
   ForecastInstance,
+  ImportRule,
+  RuleDirection,
   Yen,
 } from "./types";
 
@@ -347,6 +349,267 @@ export function guessFromHistory(
   return null;
 }
 
+/* ========================= CL-10 仕分けルール ========================= */
+
+/** 行の向き（CL-10）。入金が `in` */
+export function directionOf(type: EntryType): RuleDirection {
+  return type === "income" ? "in" : "out";
+}
+
+/**
+ * そのルールが当たる向き（CL-10）。
+ *
+ * **INC / EXP の費目は符号が決まっているので、費目から導く。**
+ * `direction` を書かなくても入金のルールが出金の行に当たらない（AC-57d）。
+ * `direction` が意味を持つのは TRF の費目のときだけで、null なら両方に当たる
+ * ―― 振替を両側の明細から記録するとき、出金側と入金側の両方に同じルールを
+ * 当てたいためである（ADR-0025）。
+ *
+ * **ここが唯一の導出である。** ルール側にも符号を持たせると、費目を変えた
+ * ときに片方が古いまま残る（CLAUDE.md §2.8）。
+ */
+export function effectiveDirection(
+  rule: Pick<ImportRule, "direction" | "categoryCode">,
+): RuleDirection | null {
+  const group = groupOfCategory(rule.categoryCode);
+  if (group === "INC") return "in";
+  if (group === "EXP") return "out";
+  return rule.direction;
+}
+
+/** CL-10 の当たり判定の対象になる行の情報。 */
+export interface RuleTarget {
+  name: string;
+  type: EntryType;
+  accountId: string;
+}
+
+/**
+ * CL-10 当たりの判定。
+ *
+ * **空の `pattern` は当たらない。** `"".includes()` は常に true なので、
+ * 空のまま保存できると**全行に当たるルール**になる。登録側でも弾くが、
+ * 既に入っている行から読むこともあるのでここでも止める。
+ */
+export function ruleMatches(
+  rule: Pick<ImportRule, "pattern" | "accountId" | "direction" | "categoryCode">,
+  row: RuleTarget,
+): boolean {
+  if (rule.pattern.trim() === "") return false;
+  if (!row.name.includes(rule.pattern)) return false;
+  if (rule.accountId !== null && rule.accountId !== row.accountId) return false;
+  const want = effectiveDirection(rule);
+  if (want !== null && want !== directionOf(row.type)) return false;
+  return true;
+}
+
+/**
+ * 当たったルールから1件を採る（CL-10）。
+ *
+ * **`pattern` の長い順に1件。同じ長さなら `id` の昇順。** 長いほうを採るのは
+ * 細かいルールが大まかなルールに勝つようにするためで、利用者は例外をあとから
+ * 足すだけで済む（`ｱﾏｿﾞﾝ` より `ｱﾏｿﾞﾝｳｴﾌﾞｻ-ﾋﾞｽ` が勝つ）。
+ *
+ * 長さは**コードポイント数**で数える（`[...pattern].length`）。`length` は
+ * サロゲートペアを2つ数えるので、絵文字を含む `pattern` が不当に勝つ。
+ */
+export function pickRule(
+  rules: readonly ImportRule[],
+  row: RuleTarget,
+): ImportRule | null {
+  let best: ImportRule | null = null;
+  let bestLength = -1;
+  for (const rule of rules) {
+    if (!ruleMatches(rule, row)) continue;
+    const length = [...rule.pattern].length;
+    if (length > bestLength || (length === bestLength && best !== null && rule.id < best.id)) {
+      best = rule;
+      bestLength = length;
+    }
+  }
+  return best;
+}
+
+/**
+ * ルールとして登録できない組み合わせか。理由を返す（AC-57d）。
+ *
+ * **符号と矛盾する費目グループを弾く。** `direction = 'in'` に EXP の費目、
+ * `'out'` に INC の費目は、どの行にも当たらないルールになる。作れてしまうと
+ * 「作ったのに当たらない」理由が利用者に分からない。
+ *
+ * **ここが唯一の判定である。** 画面側で書くと、設定画面と取込の確認画面で
+ * 違う組み合わせを通す（CLAUDE.md §2.8）。
+ */
+export function ruleConflict(
+  rule: Pick<ImportRule, "pattern" | "direction" | "categoryCode" | "bizRatio">,
+): string | null {
+  if (rule.pattern.trim() === "") {
+    /* `"".includes()` は常に true。空のままだと全行に当たる */
+    return "摘要のどこで当てるかを入れてください";
+  }
+  const group = groupOfCategory(rule.categoryCode);
+  if (rule.direction === "in" && group === "EXP") {
+    return "入金の行に支出の費目は当たりません";
+  }
+  if (rule.direction === "out" && group === "INC") {
+    return "出金の行に収入の費目は当たりません";
+  }
+  if (group === "TRF" && rule.bizRatio !== 0) {
+    /* 資金移動は CL-4 も CL-5 も通らないので、事業割合が効かない */
+    return "資金移動の費目では事業割合が効きません（0にしてください）";
+  }
+  return null;
+}
+
+/** 行の費目がどう決まったか。 */
+export interface Classification {
+  categoryCode: string;
+  costType: CostType | null;
+  bizRatio: number;
+  /** ルールで決まったときだけ、そのルールの id */
+  ruleId: string | null;
+  /** 同じルールの `pattern`。確認画面に出す */
+  rulePattern: string | null;
+  /** 推定で決まったときだけ、もとになった名称 */
+  guessedFrom: string | null;
+}
+
+/**
+ * 費目・固定変動・事業割合を決める（CL-7 と CL-10 の優先順位）。
+ *
+ * **照合 → ルール → 推定 → 受け皿** の順に決まる。
+ *
+ * - 照合が成立した行は照合先の予定から引き継ぐ（AC-45）
+ * - 次に仕分けルール。**利用者が意図して作ったものが、機械の推定に勝つ**
+ *   （AC-57a・CLAUDE.md §2.9）
+ * - ルールが当たらなかった行では推定が従来どおり働く
+ *
+ * **ここが唯一の決め方である。** `buildImportRows` と、ルールを使わないと
+ * したときの決め直し（`redecideWithoutRule`）の両方がこれを呼ぶ。2箇所に
+ * 書くと、片方に条件が増えたときもう片方が古いまま残る（§2.8）。
+ */
+export function classifyImportRow(
+  row: RuleTarget,
+  source: {
+    matched?: Pick<ForecastInstance, "categoryCode" | "costType" | "bizRatio"> | null;
+    rules?: readonly ImportRule[];
+    history?: readonly HistoryEntry[];
+  },
+): Classification {
+  const matched = source.matched ?? null;
+  const rule = matched ? null : pickRule(source.rules ?? [], row);
+  const guess =
+    matched || rule
+      ? null
+      : guessFromHistory(row.name, [...(source.history ?? [])], row.type);
+
+  const categoryCode =
+    matched?.categoryCode ??
+    rule?.categoryCode ??
+    guess?.categoryCode ??
+    (row.type === "income" ? FALLBACK_INCOME : FALLBACK_EXPENSE);
+
+  /* **固定／変動は費目グループから決める**（適用規則6）。`type` で決めると、
+     費目が資金移動の行（適用規則5a）に固定変動が付く */
+  const costType = costTypeApplies(categoryCode)
+    ? (matched?.costType ??
+      rule?.costType ??
+      guess?.costType ??
+      categoryOf(categoryCode).recommendedCostType ??
+      "variable")
+    : null;
+
+  return {
+    categoryCode,
+    costType,
+    /* 事業割合の初期値は0。費目マスタは事業割合を持たない
+       （要件定義書 §3.1.2 適用規則7） */
+    bizRatio: matched?.bizRatio ?? rule?.bizRatio ?? guess?.bizRatio ?? 0,
+    ruleId: rule?.id ?? null,
+    rulePattern: rule?.pattern ?? null,
+    guessedFrom: guess?.from ?? null,
+  };
+}
+
+/**
+ * 「このルールを使わない」で、その取込のあいだだけルールを外す（AC-57b）。
+ *
+ * **決め直すのは、そのルールで決まっていた行だけ。ほかの行は同じ参照で
+ * 返す。** 取込行を丸ごと作り直すと、利用者がそこまでに手で直した費目も、
+ * 外した取込のチェックも全部消える（FR-50 が既定で外したチェックも巻き戻る）。
+ *
+ * **手で直した行は決め直さない。** 行を手で直したとき呼び出し側が `ruleId`
+ * を外すので（`ImportRow.ruleId` が null になる）、ここでは対象から自然に
+ * 落ちる。印を別に持たせると、印とルールの紐づけが2箇所になる。
+ *
+ * `rules` には**外したあとの残り**を渡す。外したルールが隠していた、より
+ * 短い `pattern` のルールが当たることがあり、それは「そのルールが無かった
+ * ものとして扱う」の意味どおりである。
+ */
+export function redecideWithoutRule(
+  rows: readonly ImportRow[],
+  ruleId: string,
+  rules: readonly ImportRule[],
+  history?: readonly HistoryEntry[],
+): ImportRow[] {
+  return rows.map((row) => {
+    if (row.ruleId !== ruleId) return row;
+    const next = classifyImportRow(row, { rules, history });
+    return { ...row, ...next };
+  });
+}
+
+/**
+ * 確認画面で費目を手で直したときの行（CL-7 確認画面・AC-57b）。
+ *
+ * **`ruleId` と `guessedFrom` を外す。** その行の費目はもうルールや推定が
+ * 決めた値ではない。外すことで2つが同時に起きる。
+ *
+ * 1. 確認画面の表示が「ルールで決まった」と言わなくなる（AC-57a）
+ * 2. 「このルールを使わない」で**決め直す対象から外れる**（AC-57b）
+ *
+ * 「手で直した」という印を別に持たせていないのはこのためである。印と
+ * `ruleId` の2つを持つと、どちらが本当かを決める規則がもう1つ要る（§2.8）。
+ *
+ * **固定／変動も費目に合わせる**（適用規則6）。資金移動の費目に変えたら
+ * 固定変動は落ちる。
+ */
+export function editImportRowCategory(
+  row: ImportRow,
+  categoryCode: string,
+): ImportRow {
+  return {
+    ...row,
+    categoryCode,
+    costType: costTypeApplies(categoryCode)
+      ? (row.costType ?? categoryOf(categoryCode).recommendedCostType ?? "variable")
+      : null,
+    ruleId: null,
+    rulePattern: null,
+    guessedFrom: null,
+  };
+}
+
+/**
+ * その `pattern` が、この取込の何行に当たるか（AC-57e）。
+ *
+ * 広すぎる `pattern`（`ﾃﾞ` が20行に当たる）に気づくための数。**判定は
+ * `ruleMatches` を使う** ―― 数え方を別に書くと、当たる条件が増えたときに
+ * 数だけ古くなる（CLAUDE.md §2.8）。
+ *
+ * **照合が成立した行は数えない。** CL-10 の対象外なので、数えると「当たる」
+ * と言いながらその行では使われないことになる。**既に登録済みの行は数える**
+ * ―― 取込から外れているだけで、画面にはルールで決まった費目が出る。
+ */
+export function countRuleMatches(
+  rows: readonly ImportRow[],
+  draft: Pick<ImportRule, "pattern" | "accountId" | "direction" | "categoryCode">,
+): number {
+  return rows.filter(
+    (row) => row.matchedKey === null && ruleMatches(draft, row),
+  ).length;
+}
+
 /* ========================= 予定との自動照合 ========================= */
 
 /** 自動照合で候補にできる最大の日数差（CL-7）。 */
@@ -502,6 +765,20 @@ export interface ImportRow {
   /** 費目推定のもとになった名称。無ければ null */
   guessedFrom: string | null;
   /**
+   * **仕分けルールで決まった行**（FR-18・CL-10）。そのルールの id。
+   *
+   * `guessedFrom` とは**排他である。** ルールが当たった行には推定を当てない
+   * （AC-57a。利用者が意図して作ったものが機械の推定に勝つ）。確認画面は
+   * この2つで「ルールで決まった」「推定で決まった」を書き分ける。
+   *
+   * **行を手で直したら null に戻す。** そのルールで決まった値ではなくなる
+   * ので、表示も「ルール」ではなくなり、「このルールを使わない」で
+   * 決め直す対象からも外れる（AC-57b）。
+   */
+  ruleId: string | null;
+  /** 当たったルールの `pattern`。確認画面に出す */
+  rulePattern: string | null;
+  /**
    * 照合の結果（screens.md 05「照合」列）。
    *
    * `amountDiffers` は「日付も口座も種別も合う予定はあるが、金額が違う」。
@@ -538,6 +815,14 @@ export interface BuildImportRowsInput {
    * 口座での絞り込みはこの中でやるので、全件そのまま渡してよい。
    */
   existing?: readonly Actual[];
+  /**
+   * **仕分けルール**（FR-18・CL-10）。利用者が作ったもの全件。
+   *
+   * 口座と向きでの絞り込みは `ruleMatches` がやるので、そのまま渡してよい。
+   * 「このルールを使わない」で外したぶんは**呼び出し側が除いて渡す**
+   * （ここで外すと取込行を丸ごと作り直すことになる。AC-57b）。
+   */
+  rules?: readonly ImportRule[];
 }
 
 /** 摘要が空のときの表示。 */
@@ -600,23 +885,12 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
     );
     if (matched) claimed.add(matched.key);
 
-    /* 名称からの推定は、照合が成立しなかった行にだけ当てる（AC-45） */
-    const guess = matched ? null : guessFromHistory(name, history, type);
 
-    const categoryCode =
-      matched?.categoryCode ??
-      guess?.categoryCode ??
-      (type === "income" ? FALLBACK_INCOME : FALLBACK_EXPENSE);
-
-    /* **固定／変動は費目グループから決める**（適用規則6）。`type` で決めると、
-       費目が資金移動の行（適用規則5a）に固定変動が付く。いまは照合先から
-       TRF の費目が来る経路しかないが、CL-10 のルールが入ると常時通る */
-    const costType = costTypeApplies(categoryCode)
-      ? (matched?.costType ??
-        guess?.costType ??
-        categoryOf(categoryCode).recommendedCostType ??
-        "variable")
-      : null;
+    /* **照合 → ルール → 推定 → 受け皿。** 決め方は1箇所にある（CL-10） */
+    const decided = classifyImportRow(
+      { name, type, accountId },
+      { matched, rules: input.rules, history },
+    );
 
     const key = duplicateKeyOf({ accountId, date, type, amount, name });
     const left = registered.get(key) ?? 0;
@@ -631,17 +905,16 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       date,
       name,
       type,
-      costType,
-      categoryCode,
-      /* 事業割合の初期値は0。費目マスタは事業割合を持たない
-         （要件定義書 §3.1.2 適用規則7）。照合先の予定か、過去の項目から
-         推定できた場合だけ、その値を引き継ぐ */
-      bizRatio: matched?.bizRatio ?? guess?.bizRatio ?? 0,
+      costType: decided.costType,
+      categoryCode: decided.categoryCode,
+      bizRatio: decided.bizRatio,
       amount,
       accountId,
       matchedKey: matched?.key ?? null,
       matchedName: matched?.name ?? null,
-      guessedFrom: guess?.from ?? null,
+      guessedFrom: decided.guessedFrom,
+      ruleId: decided.ruleId,
+      rulePattern: decided.rulePattern,
       matchHint: matched
         ? ("matched" as const)
         : candidates.some((plan) =>

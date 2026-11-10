@@ -21,18 +21,21 @@ import { fetchAll } from "./fetch-all";
 import {
   fromAccount,
   fromActual,
+  fromImportRule,
   fromOneoff,
   fromOverride,
   fromRecurring,
   fromSettings,
   toAccount,
   toActual,
+  toImportRule,
   toOneoff,
   toOverrides,
   toRecurring,
   SETTINGS_COLUMNS,
   type AccountRow,
   type ActualRow,
+  type ImportRuleRow,
   type OneoffRow,
   type OverrideRow,
   type RecurringRow,
@@ -73,14 +76,16 @@ export async function loadAppData(
   /* 段階2：残りを取る。日付を持つ2つだけ基準日以降に絞る。
      overrides は予定インスタンスキーで引くので日付で絞れない。
      accounts と recurring_items はもともと件数が小さい */
-  const [accounts, recurring, oneoffs, actuals, overrides] = await Promise.all([
-    fetchAll<AccountRow>(supabase, "accounts"),
-    fetchAll<RecurringRow>(supabase, "recurring_items"),
-    fetchAll<OneoffRow>(supabase, "oneoff_items", { since }),
-    fetchAll<ActualRow>(supabase, "actuals", { since }),
-    /* overrides の主キーは plan_key。id 列を持たない */
-    fetchAll<OverrideRow>(supabase, "overrides", { idColumn: "plan_key" }),
-  ]);
+  const [accounts, recurring, oneoffs, actuals, overrides, rules] =
+    await Promise.all([
+      fetchAll<AccountRow>(supabase, "accounts"),
+      fetchAll<RecurringRow>(supabase, "recurring_items"),
+      fetchAll<OneoffRow>(supabase, "oneoff_items", { since }),
+      fetchAll<ActualRow>(supabase, "actuals", { since }),
+      /* overrides の主キーは plan_key。id 列を持たない */
+      fetchAll<OverrideRow>(supabase, "overrides", { idColumn: "plan_key" }),
+      fetchRules(supabase),
+    ]);
 
   return {
     asOf,
@@ -91,8 +96,46 @@ export async function loadAppData(
     oneoffs: oneoffs.map(toOneoff),
     actuals: actuals.map(toActual),
     overrides: toOverrides(overrides),
+    rules,
     ...(settingsRow ? {} : emptyDefaults(fallbackAsOf)),
   };
+}
+
+/**
+ * **そのテーブルがまだ無い**ことを表すエラーか。
+ *
+ * PostgREST は未作成のテーブルに 42P01（undefined_table）か、スキーマ
+ * キャッシュに無いとき PGRST205 を返す。**この2つだけを見分ける。**
+ * ほかのエラーは投げる ―― 権限や通信の失敗を「空」として扱うと、
+ * 利用者のルールが消えたように見える。
+ */
+function isMissingTable(error: { code?: string }): boolean {
+  return error.code === "42P01" || error.code === "PGRST205";
+}
+
+/**
+ * 仕分けルールを読む（FR-18）。
+ *
+ * **マイグレーション 0008 が未適用でも落ちないようにしてある。**
+ * `loadAppData` は `Promise.all` の中で読むので、1つの「テーブルが無い」で
+ * **アプリ全体が読み込めなくなる。** 適用とデプロイの順序（§2.5.1）を人の
+ * 手順だけに任せると、逆順になった瞬間に全員が画面を開けない。
+ *
+ * ルールが作れるようになるのは適用後で、**未適用のままルールを作ると保存が
+ * 失敗する**（画面に「保存できませんでした」が出る）。黙って消えるよりは
+ * よいが、**適用を先に行うこと。**
+ */
+async function fetchRules(supabase: SupabaseClient): Promise<AppData["rules"]> {
+  /* 先に1件も取らない問い合わせで、テーブルの有無だけを見る */
+  const probe = await supabase
+    .from("import_rules")
+    .select("id", { count: "exact", head: true });
+  if (probe.error) {
+    if (isMissingTable(probe.error)) return [];
+    throw new Error(probe.error.message);
+  }
+  const rows = await fetchAll<ImportRuleRow>(supabase, "import_rules");
+  return rows.map(toImportRule);
 }
 
 /** 設定が無いときの既定。空のデータと同じ値にする。 */
@@ -180,6 +223,15 @@ export async function saveDiff(
     );
   }
   remove("overrides", diff.overrides.deleteIds, "plan_key");
+
+  if (diff.rules.upsert.length > 0) {
+    tasks.push(
+      supabase
+        .from("import_rules")
+        .upsert(diff.rules.upsert.map((r) => fromImportRule(r, userId))),
+    );
+  }
+  remove("import_rules", diff.rules.deleteIds);
 
   const results = await Promise.all(tasks);
   const failed = results.find((r) => r.error);

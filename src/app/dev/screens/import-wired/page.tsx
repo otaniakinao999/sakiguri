@@ -16,7 +16,9 @@ import {
   buildImportRows,
   detectColumns,
   parseCsv,
+  redecideWithoutRule,
   type ColumnMapping,
+  type HistoryEntry,
   type ImportRow,
 } from "@/core/csv";
 import {
@@ -27,7 +29,7 @@ import {
   FIXTURE_RECURRING,
   FIXTURE_TODAY,
 } from "@/components/dashboard/dashboard-fixture";
-import type { Actual } from "@/core/types";
+import type { Actual, ImportRule } from "@/core/types";
 import { ImportView } from "@/components/import/ImportView";
 import { buildHeaderStats } from "@/lib/header-stats";
 import { forecastEnd } from "@/lib/period";
@@ -42,12 +44,18 @@ import { forecastEnd } from "@/lib/period";
  * （1日・5日・27日）がどこかの12日以内に入ってしまい、必ず
  * 「金額が一致しません」になる。入金の予定は25日だけなので、
  * そこから13日以上離れた10/10にした。
+ *
+ * **5件目は「何行に当たるか」のために足した**（AC-57e）。4件だと、
+ * どう縮めても当たるのは1行だけで、**数が増えるところを一度も見られない。**
+ * 1行しか当たらないデータでは、数え方が違っても 1 と出る
+ * （CLAUDE.md §2.11）。`ﾌﾘｺﾐ` で2行に当たる状態を作っている。
  */
 const CSV = `お取引日,お取引内容,お預入額,お引出額
 2026/09/25,ﾌﾘｺﾐ ｼﾖｳｶｲ,330000,
 2026/09/27,ｼﾞﾑｼﾖﾔﾁﾝ,,95000
 2026/10/01,ﾂｳｼﾝﾋ,,10230
-2026/10/10,ﾌﾘｺﾐ ﾀﾅｶ,200000,`;
+2026/10/10,ﾌﾘｺﾐ ﾀﾅｶ,200000,
+2026/10/11,ﾌﾘｺﾐ ｽｽﾞｷ,150000,`;
 
 /**
  * 既に保存されている実績（FR-50 の重複検出の相手）。
@@ -81,6 +89,26 @@ const ALREADY_IMPORTED: Actual[] = [
   },
 ];
 
+/**
+ * 仕分けルールと履歴（FR-18・AC-57a）。
+ *
+ * **「ルールで決まった行」と「推定で決まった行」を同じ画面に出すために
+ * 両方を入れてある。** どちらかが0件だと、確認画面の「決まり方」の
+ * 書き分けを一度も見られない（CLAUDE.md §2.11 の3つ目の形）。
+ *
+ *   3行目 ﾂｳｼﾝﾋ   → ルールが当たる（長さ違いの2件のうち長いほうが勝つ）
+ *   4行目 ﾌﾘｺﾐ ﾀﾅｶ → ルールは当たらず、履歴からの推定が当たる
+ */
+const DEV_RULES: ImportRule[] = [
+  { id: "d1", pattern: "ﾂｳ", accountId: null, direction: null, categoryCode: "EXP-20", costType: "variable", bizRatio: 0 },
+  { id: "d2", pattern: "ﾂｳｼﾝﾋ", accountId: null, direction: null, categoryCode: "EXP-03", costType: "fixed", bizRatio: 50 },
+];
+
+/** `historyKeyOf` は先頭4文字。`ﾌﾘｺﾐ` が4行目の摘要に当たる */
+const DEV_HISTORY: HistoryEntry[] = [
+  { name: "ﾌﾘｺﾐ ﾀﾅｶｻﾝ", categoryCode: "INC-01", costType: null, bizRatio: 100 },
+];
+
 const to = forecastEnd(FIXTURE_ASOF);
 const forecast = buildForecast(
   { recurring: FIXTURE_RECURRING, oneoffs: FIXTURE_ONEOFFS, overrides: {} },
@@ -102,14 +130,17 @@ const rows = parseCsv(CSV);
 
 export default function DevImportWiredPage() {
   const [mapping, setMapping] = useState<ColumnMapping>(detectColumns(rows));
+  const [rules, setRules] = useState<ImportRule[]>(DEV_RULES);
+  const [disabled, setDisabled] = useState<string[]>([]);
   const [preview, setPreview] = useState<ImportRow[]>(() =>
     buildImportRows({
       rows,
       mapping: detectColumns(rows),
       accountId: "a1",
       candidates: series.unmatchedForecast,
-      history: [],
+      history: DEV_HISTORY,
       existing: ALREADY_IMPORTED,
+      rules: DEV_RULES,
     }),
   );
 
@@ -136,6 +167,28 @@ export default function DevImportWiredPage() {
           onMappingChange={setMapping}
           preview={preview}
           onPreviewChange={setPreview}
+          disabledRules={rules.filter((r) => disabled.includes(r.id))}
+          onDisableRule={(id) => {
+            const remaining = rules.filter(
+              (r) => r.id !== id && !disabled.includes(r.id),
+            );
+            setDisabled((ids) => [...ids, id]);
+            setPreview((p) => redecideWithoutRule(p, id, remaining, DEV_HISTORY));
+          }}
+          onCreateRule={(draft) =>
+            setRules((rs) => [
+              ...rs,
+              {
+                id: `d${rs.length + 1}`,
+                pattern: draft.pattern,
+                accountId: null,
+                direction: null,
+                categoryCode: draft.categoryCode,
+                costType: draft.costType,
+                bizRatio: draft.bizRatio,
+              },
+            ])
+          }
         />
   );
 }

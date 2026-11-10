@@ -128,6 +128,7 @@ const TABLES = [
   "oneoff_items",
   "actuals",
   "overrides",
+  "import_rules",
 ];
 const defined = Object.keys(SELECT_COLUMNS as object).sort();
 if (defined.join(",") !== [...TABLES].sort().join(",")) {

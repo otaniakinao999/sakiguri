@@ -12,6 +12,7 @@ import type {
   Actual,
   CardAccount,
   DateStr,
+  ImportRule,
   OneoffItem,
   Override,
   Overrides,
@@ -73,6 +74,22 @@ export interface ActualRow extends EntryRowBase {
   plan_key: string | null;
   /** key が null である理由が「予定に対応しない」と確定済みか（FR-46） */
   unplanned: boolean;
+}
+
+/**
+ * CSV仕分けルールの行（要件定義書 §3.2 ImportRule・FR-18）。
+ *
+ * **`type` 列を持たない。** 収支は金額の符号で決まる（CL-7）。
+ */
+export interface ImportRuleRow {
+  id: string;
+  user_id: string;
+  pattern: string;
+  account_id: string | null;
+  direction: "in" | "out" | null;
+  category_code: string;
+  cost_type: "fixed" | "variable" | null;
+  biz_ratio: number;
 }
 
 export interface OverrideRow {
@@ -172,6 +189,15 @@ export const SELECT_COLUMNS = {
     skipped: true,
     note: true,
   }),
+  import_rules: columns<ImportRuleRow>({
+    id: true,
+    pattern: true,
+    account_id: true,
+    direction: true,
+    category_code: true,
+    cost_type: true,
+    biz_ratio: true,
+  }),
 } as const;
 
 /** `fetchAll` が引けるテーブル。列を定義していないテーブルは引けない */
@@ -249,6 +275,18 @@ export function toActual(row: ActualRow): Actual {
     bizRatio: row.biz_ratio,
     accountId: row.account_id,
     toAccountId: row.to_account_id ?? undefined,
+  };
+}
+
+export function toImportRule(row: ImportRuleRow): ImportRule {
+  return {
+    id: row.id,
+    pattern: row.pattern,
+    accountId: row.account_id,
+    direction: row.direction,
+    categoryCode: row.category_code,
+    costType: row.cost_type,
+    bizRatio: row.biz_ratio,
   };
 }
 
@@ -352,6 +390,19 @@ export function fromActual(item: Actual, userId: string): ActualRow {
     biz_ratio: item.bizRatio,
     account_id: item.accountId,
     to_account_id: item.toAccountId ?? null,
+  };
+}
+
+export function fromImportRule(rule: ImportRule, userId: string): ImportRuleRow {
+  return {
+    id: rule.id,
+    user_id: userId,
+    pattern: rule.pattern,
+    account_id: rule.accountId,
+    direction: rule.direction,
+    category_code: rule.categoryCode,
+    cost_type: rule.costType,
+    biz_ratio: rule.bizRatio,
   };
 }
 

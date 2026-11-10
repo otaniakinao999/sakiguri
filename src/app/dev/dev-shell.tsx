@@ -36,6 +36,21 @@ export const DEV_DATA: AppData = {
   actuals: FIXTURE_ACTUALS,
   overrides: {},
   lastReconciledAt: null,
+  /* **ルールを1件入れてある。** 0件だと、取込の確認画面の「決まり方」が
+     いつも「推定」か「—」になり、**ルールで決まった行を一度も出せない**
+     （CLAUDE.md §2.11 の3つ目の形）。`ﾂｳｼﾝﾋ` は import-wired の CSV に
+     1行ある。長さ違いの2件目はそちらの画面で足している */
+  rules: [
+    {
+      id: "dev-rule-1",
+      pattern: "ﾂｳｼﾝﾋ",
+      accountId: null,
+      direction: null,
+      categoryCode: "EXP-03",
+      costType: "fixed",
+      bizRatio: 50,
+    },
+  ],
 };
 
 /** /dev/screens/* と本番のルートの対応。現在地をサイドバーに出すため */

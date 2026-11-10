@@ -16,6 +16,7 @@ import type {
   Account,
   Actual,
   DateStr,
+  ImportRule,
   OneoffItem,
   Overrides,
   RecurringItem,
@@ -39,6 +40,8 @@ export interface AppData {
   oneoffs: OneoffItem[];
   actuals: Actual[];
   overrides: Overrides;
+  /** CSV仕分けルール（要件定義書 §3.2 ImportRule・FR-18） */
+  rules: ImportRule[];
 }
 
 /**
@@ -58,10 +61,16 @@ export function emptyAppData(asOf: DateStr): AppData {
     oneoffs: [],
     actuals: [],
     overrides: {},
+    rules: [],
   };
 }
 
-/** まだ何も登録されていないか。空状態の表示に使う。 */
+/**
+ * まだ何も登録されていないか。空状態の表示に使う。
+ *
+ * **仕分けルールは数えない。** ルールだけがある状態は「予定も実績も無い」
+ * ままなので、空状態の案内を出すのが正しい（ルールは取込のときに効く）。
+ */
 export function isEmpty(data: AppData): boolean {
   return (
     data.accounts.length === 0 &&

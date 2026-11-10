@@ -16,6 +16,7 @@ import type {
   Actual,
   DateStr,
   ForecastInstance,
+  ImportRule,
   OneoffItem,
   Override,
   RecurringItem,
@@ -101,6 +102,7 @@ export const ACCOUNT_SCOPED_COLLECTIONS = [
   "oneoffs",
   "actuals",
   "overrides",
+  "rules",
 ] as const;
 
 export function removeAccount(data: AppData, id: string): AppData {
@@ -124,6 +126,11 @@ export function removeAccount(data: AppData, id: string): AppData {
     }),
   );
 
+  /* **その口座に限っていたルールも消す。** 口座が無くなれば二度と当たらず、
+     ルール表に当たらない行が残るだけになる。全口座のルール（`accountId`
+     が null）は残す ―― 口座に紐づいていない */
+  const rules = data.rules.filter((r) => r.accountId !== id);
+
   return {
     ...data,
     accounts: data.accounts
@@ -137,6 +144,7 @@ export function removeAccount(data: AppData, id: string): AppData {
     oneoffs,
     actuals: data.actuals.filter((a) => !uses(a)),
     overrides,
+    rules,
   };
 }
 
@@ -155,6 +163,51 @@ export function updateRecurring(
     ...data,
     recurring: data.recurring.map((r) => (r.id === id ? { ...r, ...patch } : r)),
   };
+}
+
+/* ========================= 仕分けルール（FR-18） ========================= */
+
+/**
+ * ルールを足す（CL-10）。
+ *
+ * **同じ中身のルールは足さない。** 「次回もこうする」を2回押すと、同じ
+ * `pattern` のルールが2つでき、どちらが勝つかは `id` の順で決まる。
+ * 利用者にはルール表に同じ行が2つ見えるだけで、違いが説明できない。
+ */
+export function addRule(data: AppData, rule: ImportRule): AppData {
+  const same = data.rules.find(
+    (r) =>
+      r.pattern === rule.pattern &&
+      r.accountId === rule.accountId &&
+      r.direction === rule.direction,
+  );
+  if (same) {
+    /* 当たる条件が同じなら、決める内容を上書きする（増やさない） */
+    return {
+      ...data,
+      rules: data.rules.map((r) =>
+        r.id === same.id
+          ? { ...r, categoryCode: rule.categoryCode, costType: rule.costType, bizRatio: rule.bizRatio }
+          : r,
+      ),
+    };
+  }
+  return { ...data, rules: [...data.rules, rule] };
+}
+
+export function updateRule(
+  data: AppData,
+  id: string,
+  patch: Partial<ImportRule>,
+): AppData {
+  return {
+    ...data,
+    rules: data.rules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+  };
+}
+
+export function removeRule(data: AppData, id: string): AppData {
+  return { ...data, rules: data.rules.filter((r) => r.id !== id) };
 }
 
 /** 停止と再開。定期項目そのものは残る（FR-02） */

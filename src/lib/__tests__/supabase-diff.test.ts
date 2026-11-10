@@ -182,6 +182,87 @@ describe("diffAppData", () => {
     expect(diffAppData(before, after).overrides.upsert).toHaveLength(1);
   });
 
+  /**
+   * **`empty` はテーブルを手で並べている。** 並べ忘れると「変わったのに
+   * 何も送らない」になり、利用者の変更が静かに消える。
+   *
+   * テーブルが1つ増えたら、この `CHANGES` に足さないと落ちる
+   * （CLAUDE.md §2.8 の「列挙は集合と突き合わせる」）。
+   */
+  describe("どのテーブルの変更でも empty が false になる", () => {
+    const CHANGES: Record<string, (data: AppData) => AppData> = {
+      accounts: (d) => addAccount(d, { ...bank, id: "a2", name: "増やした" }),
+      recurring: (d) => addRecurring(d, { ...rent, id: "r2" }),
+      oneoffs: (d) => ({
+        ...d,
+        oneoffs: [
+          {
+            id: "o1",
+            date: ASOF,
+            name: "単発",
+            type: "expense",
+            costType: "variable",
+            categoryCode: "EXP-20",
+            amount: 1_000,
+            bizRatio: 0,
+            accountId: "a1",
+          },
+        ],
+      }),
+      actuals: (d) => ({
+        ...d,
+        actuals: [
+          {
+            id: "x1",
+            key: null,
+            date: ASOF,
+            name: "実績",
+            type: "expense",
+            costType: "variable",
+            categoryCode: "EXP-20",
+            amount: 1_000,
+            bizRatio: 0,
+            accountId: "a1",
+          },
+        ],
+      }),
+      overrides: (d) => setOverride(d, "r:rent:2026-04-27", { amount: 1 }),
+      rules: (d) => ({
+        ...d,
+        rules: [
+          {
+            id: "rule1",
+            pattern: "ﾃﾞﾝｷ",
+            accountId: null,
+            direction: null,
+            categoryCode: "EXP-05",
+            costType: "variable",
+            bizRatio: 0,
+          },
+        ],
+      }),
+    };
+
+    it("並べたテーブルが DataDiff の全テーブルと一致している", () => {
+      const diff = diffAppData(base(), base()) as unknown as Record<string, unknown>;
+      const tables = Object.entries(diff)
+        .filter(([, v]) => typeof v === "object" && v !== null && "upsert" in (v as object))
+        .map(([key]) => key)
+        .sort();
+      expect(tables).toEqual(Object.keys(CHANGES).sort());
+    });
+
+    for (const [table, change] of Object.entries(CHANGES)) {
+      it(table, () => {
+        const before = base();
+        /* **変える前は empty であること。** そうでないと、この後の
+           false が別の原因で出ていても気づけない */
+        expect(diffAppData(before, before).empty).toBe(true);
+        expect(diffAppData(before, change(before)).empty).toBe(false);
+      });
+    }
+  });
+
   it("入力を書き換えない", () => {
     const before = base();
     const after = updateRecurring(before, "rent", { amount: 130_000 });
