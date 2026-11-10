@@ -17,6 +17,7 @@ import {
   detectColumns,
   parseCsv,
   redecideWithoutRule,
+  ruleFromImport,
   type ColumnMapping,
   type HistoryEntry,
   type ImportRow,
@@ -145,6 +146,7 @@ export default function DevImportWiredPage() {
   );
 
   return (
+    <>
         <ImportView
           stats={buildHeaderStats(series, FIXTURE_ACCOUNTS, FIXTURE_TODAY)}
           steps={[
@@ -175,20 +177,24 @@ export default function DevImportWiredPage() {
             setDisabled((ids) => [...ids, id]);
             setPreview((p) => redecideWithoutRule(p, id, remaining, DEV_HISTORY));
           }}
+          /* **組み立ては本番と同じ `ruleFromImport`。** ここで写し取ると、
+             本番の `accountId` を変えてもこの画面は古いまま動き、**本番と
+             違うものを確かめることになる**（CLAUDE.md §2.8） */
           onCreateRule={(draft) =>
-            setRules((rs) => [
-              ...rs,
-              {
-                id: `d${rs.length + 1}`,
-                pattern: draft.pattern,
-                accountId: null,
-                direction: null,
-                categoryCode: draft.categoryCode,
-                costType: draft.costType,
-                bizRatio: draft.bizRatio,
-              },
-            ])
+            setRules((rs) => [...rs, ruleFromImport(draft, "a1", `d${rs.length + 1}`)])
           }
         />
+      {/* **開発用の覗き窓。** 「次回もこうする」で作ったルールの `accountId`
+          が取込先の口座になることは、確認画面のどこにも出ない（AC-57e）。
+          設定のルール表まで行かないと見えないので、ここに出しておく */}
+      <pre className="t-body-sm text-muted-foreground">
+        {rules
+          .map(
+            (r) =>
+              `${r.id}  pattern=${r.pattern}  accountId=${r.accountId ?? "（すべての口座）"}  費目=${r.categoryCode}`,
+          )
+          .join("\n")}
+      </pre>
+    </>
   );
 }

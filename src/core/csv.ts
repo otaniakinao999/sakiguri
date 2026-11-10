@@ -404,44 +404,153 @@ export function ruleMatches(
 }
 
 /**
+ * 当たったルールの強さ。**前の項から順に見て、大きいほうが勝つ**（CL-10）。
+ *
+ * 1. `pattern` の長さ（**コードポイント数**。`length` はサロゲートペアを2つ
+ *    数えるので、絵文字を含む `pattern` が不当に勝つ）
+ * 2. 口座を指定したほう
+ * 3. 向きを指定したほう
+ *
+ * ここで並びきらなければ `id` の昇順（`strongerRule`）。
+ *
+ * **長さを口座より先に見るのは意図である**（要件定義書 §3.3 CL-10）。
+ * 口座の指定を先に見ると、**1文字の雑なルールが、口座を指定しただけで
+ * 精密なルールに勝つ。** 長さが先なら、勝つのは「取引の内容をより細かく
+ * 言い当てている側」になる。したがって「全口座の長いルールが、口座を指定した
+ * 短いルールに勝つ」という並びは**直さない。**
+ *
+ * **向きは `direction` 列を見る。`effectiveDirection` ではない。** ここで
+ * 測っているのは「利用者がどれだけ条件を絞ったか」で、費目から導かれる向きは
+ * 絞り込みではなく費目の性質である。
+ */
+function ruleStrength(rule: ImportRule): readonly number[] {
+  return [
+    [...rule.pattern].length,
+    rule.accountId !== null ? 1 : 0,
+    rule.direction !== null ? 1 : 0,
+  ];
+}
+
+/**
+ * `a` が `b` より勝つか。
+ *
+ * **最後は `id` の昇順。** 当たる条件が同じ2行は持てない（§3.2 ImportRule の
+ * 一意制約）が、**長さが同じで条件の違う2つ**は持てる（`ｱｱ` と `ｲｲ` が同じ
+ * 摘要に当たる）ので、最後の決め手が要る。
+ */
+function strongerRule(a: ImportRule, b: ImportRule): boolean {
+  const sa = ruleStrength(a);
+  const sb = ruleStrength(b);
+  for (let i = 0; i < sa.length; i += 1) {
+    if (sa[i] !== sb[i]) return sa[i] > sb[i];
+  }
+  return a.id < b.id;
+}
+
+/**
  * 当たったルールから1件を採る（CL-10）。
  *
- * **`pattern` の長い順に1件。同じ長さなら `id` の昇順。** 長いほうを採るのは
- * 細かいルールが大まかなルールに勝つようにするためで、利用者は例外をあとから
- * 足すだけで済む（`ｱﾏｿﾞﾝ` より `ｱﾏｿﾞﾝｳｴﾌﾞｻ-ﾋﾞｽ` が勝つ）。
- *
- * 長さは**コードポイント数**で数える（`[...pattern].length`）。`length` は
- * サロゲートペアを2つ数えるので、絵文字を含む `pattern` が不当に勝つ。
+ * **`pattern` の長い順に1件。同じ長さなら口座を指定したほう → 向きを指定した
+ * ほう → `id` の昇順。** 長いほうを採るのは細かいルールが大まかなルールに
+ * 勝つようにするためで、利用者は例外をあとから足すだけで済む
+ * （`ｱﾏｿﾞﾝ` より `ｱﾏｿﾞﾝｳｴﾌﾞｻ-ﾋﾞｽ` が勝つ）。順序の理由は `ruleStrength`。
  */
 export function pickRule(
   rules: readonly ImportRule[],
   row: RuleTarget,
 ): ImportRule | null {
   let best: ImportRule | null = null;
-  let bestLength = -1;
   for (const rule of rules) {
     if (!ruleMatches(rule, row)) continue;
-    const length = [...rule.pattern].length;
-    if (length > bestLength || (length === bestLength && best !== null && rule.id < best.id)) {
-      best = rule;
-      bestLength = length;
-    }
+    if (best === null || strongerRule(rule, best)) best = rule;
   }
   return best;
 }
 
 /**
- * ルールとして登録できない組み合わせか。理由を返す（AC-57d）。
+ * 当たる条件が同じか（§3.2 ImportRule・AC-57f）。
+ *
+ * **DB の一意制約 `(user_id, pattern, account_id, direction) nulls not
+ * distinct` と同じ組み合わせを見る。** 片方だけ直すと、画面が通した組み合わせ
+ * を DB が弾いて、利用者には理由の分からないエラーが出る（CLAUDE.md §2.8）。
+ *
+ * `pattern` は前後の空白を落として比べる。**DB は落とさないので、ここは DB より
+ * 厳しい。** 厳しい側に振れている分は「保存の前に知らせる」で済み、DB のエラー
+ * にはならない。文字種の正規化は OI-22。
+ */
+export function sameMatchKey(
+  a: Pick<ImportRule, "pattern" | "accountId" | "direction">,
+  b: Pick<ImportRule, "pattern" | "accountId" | "direction">,
+): boolean {
+  return (
+    a.pattern.trim() === b.pattern.trim() &&
+    a.accountId === b.accountId &&
+    a.direction === b.direction
+  );
+}
+
+/**
+ * 確認画面の「次回もこうする」が作るルール（CL-10・AC-57e）。
+ *
+ * **`accountId` は取込先の口座にする。** 当たる行数はいま開いている取込
+ * （＝その口座）から数えるので、全口座のルールにすると**表示した数より広く
+ * 当たる。** 口座を限れば、出した数がそのルールの当たる範囲とそろう。
+ * 広げたくなったら設定のルール表で外す（要件定義書 §3.3 CL-10）。
+ *
+ * `direction` は null。向きは費目から決まるか（INC / EXP）、資金移動なら
+ * 両側に当てたい（ADR-0025）。
+ */
+export function ruleFromImport(
+  draft: {
+    pattern: string;
+    categoryCode: string;
+    costType: CostType | null;
+    bizRatio: number;
+  },
+  accountId: string,
+  id: string,
+): ImportRule {
+  const isTransfer = groupOfCategory(draft.categoryCode) === "TRF";
+  return {
+    id,
+    pattern: draft.pattern.trim(),
+    accountId,
+    direction: null,
+    categoryCode: draft.categoryCode,
+    /* 固定変動が意味を持つのは費目グループが EXP のときだけ（適用規則6） */
+    costType: costTypeApplies(draft.categoryCode) ? draft.costType : null,
+    /* 資金移動では効かない値を持たせない（§3.2 ImportRule） */
+    bizRatio: isTransfer ? 0 : draft.bizRatio,
+  };
+}
+
+/** 保存前のルール。設定画面の下書きは `id` を持つが、確認画面は持たない。 */
+export interface RuleDraft {
+  id?: string;
+  pattern: string;
+  accountId: string | null;
+  direction: RuleDirection | null;
+  categoryCode: string;
+  bizRatio: number;
+}
+
+/**
+ * ルールとして登録できない組み合わせか。理由を返す（AC-57d・AC-57f）。
  *
  * **符号と矛盾する費目グループを弾く。** `direction = 'in'` に EXP の費目、
  * `'out'` に INC の費目は、どの行にも当たらないルールになる。作れてしまうと
  * 「作ったのに当たらない」理由が利用者に分からない。
  *
+ * **`others` を渡すと、当たる条件が同じルールがあるかも見る**（AC-57f）。
+ * DB の一意制約で弾かれる前に知らせるためで、**知らせる文言はこの関数が持つ**
+ * ―― DB のエラーメッセージを利用者に見せない。
+ *
  * **ここが唯一の判定である。** 画面側で書くと、設定画面と取込の確認画面で
  * 違う組み合わせを通す（CLAUDE.md §2.8）。
  */
 export function ruleConflict(
-  rule: Pick<ImportRule, "pattern" | "direction" | "categoryCode" | "bizRatio">,
+  rule: RuleDraft,
+  others: readonly ImportRule[] = [],
 ): string | null {
   if (rule.pattern.trim() === "") {
     /* `"".includes()` は常に true。空のままだと全行に当たる */
@@ -457,6 +566,10 @@ export function ruleConflict(
   if (group === "TRF" && rule.bizRatio !== 0) {
     /* 資金移動は CL-4 も CL-5 も通らないので、事業割合が効かない */
     return "資金移動の費目では事業割合が効きません（0にしてください）";
+  }
+  /* **自分は除く。** 設定画面は既にある行を直すので、自分と衝突してしまう */
+  if (others.some((other) => other.id !== rule.id && sameMatchKey(other, rule))) {
+    return "当たる条件が同じルールが既にあります（費目だけを直してください）";
   }
   return null;
 }

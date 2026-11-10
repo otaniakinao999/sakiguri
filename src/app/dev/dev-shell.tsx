@@ -50,6 +50,19 @@ export const DEV_DATA: AppData = {
       costType: "fixed",
       bizRatio: 50,
     },
+    /* **2件目は衝突（AC-57f）を画面で出すために要る。** 1件だと、
+       `pattern` を打ち替えても衝突する相手がいない ―― 相手が0件の条項は
+       必ず通る（CLAUDE.md §2.11 の3つ目の形）。`ﾂｳｼﾝﾋ` に打ち替えると
+       1件目と同じ条件になる */
+    {
+      id: "dev-rule-2",
+      pattern: "ﾖｳﾋﾝ",
+      accountId: null,
+      direction: null,
+      categoryCode: "EXP-09",
+      costType: "variable",
+      bizRatio: 100,
+    },
   ],
 };
 

@@ -5,6 +5,7 @@ import * as React from "react";
 import type { ImportRule, Yen } from "@/core/types";
 import {
   countRuleMatches,
+  ruleFromImport,
   editImportRowCategory,
   type ColumnMapping,
   type ImportRow,
@@ -511,12 +512,22 @@ export function ImportView({
                                 狭すぎる側は次回まで分からない（仕様で受け入れ） */}
                             このファイルの
                             <strong className="font-semibold">
-                              {countRuleMatches(preview, {
-                                pattern: draft.pattern,
-                                accountId: null,
-                                direction: null,
-                                categoryCode: row.categoryCode,
-                              })}
+                              {/* **数えるのは「保存されるルール」そのもの。**
+                                  当たる条件を2通りに書くと、片方だけ直したときに
+                                  数が当たる範囲とずれる（§2.8・AC-57e） */}
+                              {countRuleMatches(
+                                preview,
+                                ruleFromImport(
+                                  {
+                                    pattern: draft.pattern,
+                                    categoryCode: row.categoryCode,
+                                    costType: row.costType,
+                                    bizRatio: row.bizRatio,
+                                  },
+                                  row.accountId,
+                                  "draft",
+                                ),
+                              )}
                               行
                             </strong>
                             に当たります（費目は

@@ -167,6 +167,43 @@ export const FIXTURE_ACTUALS: Actual[] = [
     accountId: "a1",
     date: "2026-09-24",
   },
+  /* **両側記録の振替**（FR-51・AC-58・AC-20d）。`type` は入出金のまま、
+     費目だけが資金移動である。
+
+     **1組入れてあるのは、画面で見られるようにするため。** 0件だと、
+     月次資金繰り表で「振替の費目を持つ入出金が、入金と出金にそれぞれ
+     乗る」ところを一度も見られない ―― **行が無い条項は必ず通る**
+     （CLAUDE.md §2.11 の3つ目の形）。
+
+     **金額は他の行に出てこない 77,777。** 両側が同額なので差引では0に
+     なって消える。入金・出金を個別に見るための額である。
+     **現預金の合計は動かない**（a1 から a2 への移動なので）。 */
+  {
+    id: "ac2",
+    key: null,
+    unplanned: true,
+    name: "△△信金へ移動",
+    type: "expense",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 77_777,
+    bizRatio: 0,
+    accountId: "a1",
+    date: "2026-10-09",
+  },
+  {
+    id: "ac3",
+    key: null,
+    unplanned: true,
+    name: "○○銀行から移動",
+    type: "income",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 77_777,
+    bizRatio: 0,
+    accountId: "a2",
+    date: "2026-10-09",
+  },
 ];
 
 export interface FixtureModel {

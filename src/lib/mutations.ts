@@ -9,6 +9,7 @@
 
 import { categoriesInGroup } from "@/core/categories";
 import { applyClassification } from "@/core/classification";
+import { sameMatchKey } from "@/core/csv";
 import { planKeySource } from "@/core/forecast";
 import { touchesAccount } from "@/core/types";
 import type {
@@ -175,12 +176,9 @@ export function updateRecurring(
  * 利用者にはルール表に同じ行が2つ見えるだけで、違いが説明できない。
  */
 export function addRule(data: AppData, rule: ImportRule): AppData {
-  const same = data.rules.find(
-    (r) =>
-      r.pattern === rule.pattern &&
-      r.accountId === rule.accountId &&
-      r.direction === rule.direction,
-  );
+  /* **当たる条件が同じかの判定は core に1つ**（`sameMatchKey`）。ここで
+     書き直すと、DB の一意制約と画面の知らせと3箇所に同じ規則が散る（§2.8） */
+  const same = data.rules.find((r) => sameMatchKey(r, rule));
   if (same) {
     /* 当たる条件が同じなら、決める内容を上書きする（増やさない） */
     return {

@@ -137,6 +137,41 @@ describe("口座・カード", () => {
   });
 
   /**
+   * AC-57g。存在しない口座を指すルールは当たらないまま溜まる。
+   * **`accountId` が null のルールは残す** ―― その口座に限っていない。
+   */
+  it("AC-57g 削除した口座に限ったルールも消える。全口座のルールは残る", () => {
+    const data = {
+      ...base(),
+      rules: [
+        {
+          id: "r1",
+          pattern: "\uFF83\uFF9E\uFF9D\uFF77",
+          accountId: "a1",
+          direction: null,
+          categoryCode: "EXP-05",
+          costType: "fixed" as const,
+          bizRatio: 0,
+        },
+        {
+          id: "r2",
+          pattern: "\uFF8C\uFF98\uFF7A\uFF90",
+          accountId: null,
+          direction: null,
+          categoryCode: "INC-01",
+          costType: null,
+          bizRatio: 0,
+        },
+      ],
+    };
+
+    /* **消す前に2件あることを見る。** 0件だと、消す実装でも残す実装でも
+       同じ結果になる（CLAUDE.md §2.11） */
+    expect(data.rules).toHaveLength(2);
+    expect(removeAccount(data, "a1").rules.map((r) => r.id)).toEqual(["r2"]);
+  });
+
+  /**
    * AC-47。オーバーライドは `plan_key` で予定インスタンスを指しており
    * 外部キーではないので、DB の cascade には任せられない。消し忘れると
    * 「元の予定が見つかりません」と表示される行が、口座を消すたびに増える。

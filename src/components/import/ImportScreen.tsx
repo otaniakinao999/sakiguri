@@ -30,11 +30,13 @@ import {
   detectColumns,
   parseCsv,
   redecideWithoutRule,
+  ruleFromImport,
+  sameMatchKey,
   type ColumnMapping,
   type HistoryEntry,
   type ImportRow,
 } from "@/core/csv";
-import { categoryOf, groupOfCategory } from "@/core/categories";
+import { categoryOf } from "@/core/categories";
 import { addActuals, addRule, markReconciled, newId } from "@/lib/mutations";
 import { forecastEnd } from "@/lib/period";
 
@@ -183,14 +185,11 @@ export function ImportScreen() {
   };
 
   /**
-   * 「次回もこうする」（AC-57c）。
+   * 「次回もこうする」（CL-10・AC-57e / AC-57c）。
    *
-   * **作ったルールは設定のルール表に行として現れる**（同じ `data.rules` を
-   * 出しているため）。現れないと自動学習と区別がつかない。
-   *
-   * `accountId` と `direction` は null にする。口座を限ると、同じ取引先が
-   * 別の口座に出たときに当たらない。向きは費目から決まる（INC / EXP）か、
-   * 資金移動なら両側に当てたい（ADR-0025）。
+   * **ルールの組み立ては core の `ruleFromImport`。** `accountId` は
+   * **取込先の口座**にする ―― 当たる行数はこの取込（＝その口座）から数える
+   * ので、全口座のルールにすると表示した数より広く当たる（要件定義書 §3.3）。
    */
   const createRule = (draft: {
     pattern: string;
@@ -198,23 +197,19 @@ export function ImportScreen() {
     costType: ImportRule["costType"];
     bizRatio: number;
   }) => {
-    const rule: ImportRule = {
-      id: newId(),
-      pattern: draft.pattern.trim(),
-      accountId: null,
-      direction: null,
-      categoryCode: draft.categoryCode,
-      costType: draft.costType,
-      /* 資金移動では効かない値を持たせない（§3.2 ImportRule） */
-      bizRatio: groupOfCategory(draft.categoryCode) === "TRF" ? 0 : draft.bizRatio,
-    };
+    const rule = ruleFromImport(draft, activeAccount, newId());
+    /* 当たる条件が同じルールは増やさず上書きする（`addRule`）。
+       黙って変わると「作ったのに1件のまま」に見えるので、文言を分ける */
+    const replaced = data.rules.some((r) => sameMatchKey(r, rule));
     setData((d) => addRule(d, rule));
     track(session?.user.id, "import_rule_created", {
       patternLength: [...rule.pattern].length,
       fromImport: true,
     });
     setNotice(
-      `ルールを保存しました。「${rule.pattern}」を含む行は、次回から${categoryOf(rule.categoryCode).name}になります。`,
+      replaced
+        ? `当たる条件が同じルールがあったので、費目を${categoryOf(rule.categoryCode).name}に差し替えました。`
+        : `ルールを保存しました。「${rule.pattern}」を含む行は、次回から${categoryOf(rule.categoryCode).name}になります。`,
     );
   };
 

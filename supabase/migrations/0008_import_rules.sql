@@ -39,6 +39,21 @@ create table if not exists public.import_rules (
 create index if not exists import_rules_user_id_idx on public.import_rules (user_id);
 
 -- ------------------------------------------------------------
+-- 当たる条件は一意（§3.2 ImportRule・AC-57f）
+--   同じ条件で決める内容だけが違う2行があると、**どちらが勝つかは id の順で
+--   決まり、画面からは見分けられない。**
+--
+--   **`nulls not distinct` が要る**（PostgreSQL 15 以上）。既定では null は
+--   互いに異なるので、素直に張ると **account_id が null のルール（全口座）と
+--   direction が null のルール（両方）だけ重複し放題になる。** いちばん
+--   作られやすい組み合わせがいちばん守られない。落ちていないことは
+--   このファイルの末尾で検査する。
+-- ------------------------------------------------------------
+create unique index if not exists import_rules_match_key_idx
+  on public.import_rules (user_id, pattern, account_id, direction)
+  nulls not distinct;
+
+-- ------------------------------------------------------------
 -- RLS（CLAUDE.md §2.5）
 --   自分の行だけ。読みも書きも同じ条件で絞る。
 --   with check を付けないと、他人の user_id で insert できてしまう。
@@ -62,12 +77,15 @@ comment on column public.import_rules.direction is
 
 -- ------------------------------------------------------------
 -- 適用後の確認
---   RLS が有効でポリシーが1本あること。rls_guard が拾わないこと。
+--   RLS が有効でポリシーが1本あること。
+--   一意制約があり、**null を同じとみなす設定が落ちていないこと**
+--   ―― ここが落ちると、全口座のルールだけ重複できる状態で通ってしまう。
 -- ------------------------------------------------------------
 do $$
 declare
   guarded boolean;
   policies int;
+  nulls_merged boolean;
 begin
   select relrowsecurity into guarded
     from pg_class where oid = 'public.import_rules'::regclass;
@@ -77,5 +95,15 @@ begin
   if not guarded or policies = 0 then
     raise exception 'import_rules の RLS が有効でない、またはポリシーが無い（RLS=%、ポリシー=%件）',
       guarded, policies;
+  end if;
+
+  select indnullsnotdistinct into nulls_merged
+    from pg_index where indexrelid = 'public.import_rules_match_key_idx'::regclass;
+
+  if nulls_merged is null then
+    raise exception 'import_rules の一意制約（import_rules_match_key_idx）が無い';
+  end if;
+  if not nulls_merged then
+    raise exception 'import_rules_match_key_idx に nulls not distinct が無い（全口座のルールだけ重複できる）';
   end if;
 end $$;

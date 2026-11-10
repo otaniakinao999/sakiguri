@@ -97,11 +97,175 @@ const GROUP_LABEL = { INC: "収入", EXP: "支出", TRF: "資金移動" } as con
  */
 const needsDirection = (code: string) => groupOfCategory(code) === "TRF";
 
+/**
+ * 既にあるルールの行。
+ *
+ * **当たる条件を変える操作は、適用の前に `ruleConflict` を通す**（AC-57f）。
+ * 通さずに書くと、DB の一意制約に当たって**保存のエラーとして**出る ――
+ * 利用者には何が衝突したのか分からないし、画面には変わった値が残ったまま
+ * になる。
+ *
+ * `pattern` は**打っているあいだは手元に置き、離れたときに確かめる。**
+ * 一打ごとに確かめると、`ﾃﾞﾝｷ` が既にあるとき `ﾃﾞﾝｷﾀﾞｲ` を打ち切れない
+ * （途中の `ﾃﾞﾝｷ` で弾かれる）。
+ */
+function RuleRow({
+  rule,
+  accounts,
+  others,
+  onPatch,
+  onRemove,
+}: {
+  rule: ImportRule;
+  accounts: readonly { id: string; name: string }[];
+  others: readonly ImportRule[];
+  onPatch: (patch: Partial<ImportRule>) => void;
+  onRemove: () => void;
+}) {
+  const [pattern, setPattern] = useState(rule.pattern);
+  const [message, setMessage] = useState<string | null>(null);
+
+  /** 当たる条件を変える操作。通らなければ**当てない**（画面も戻す） */
+  const applyPatch = (patch: Partial<ImportRule>): boolean => {
+    const reason = ruleConflict({ ...rule, ...patch }, others);
+    if (reason) {
+      setMessage(reason);
+      return false;
+    }
+    setMessage(null);
+    onPatch(patch);
+    return true;
+  };
+
+  const commitPattern = () => {
+    if (pattern === rule.pattern) return;
+    if (!applyPatch({ pattern })) setPattern(rule.pattern);
+  };
+
+  return (
+    <>
+      <tr>
+        <td className={CELL}>
+          <TextInput
+            aria-label="摘要に含まれる文字列"
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            onBlur={commitPattern}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+          />
+        </td>
+        <td className={CELL}>
+          <Select
+            aria-label="口座"
+            value={rule.accountId ?? ""}
+            onChange={(e) => applyPatch({ accountId: e.target.value || null })}
+          >
+            <option value="">すべての口座</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+        </td>
+        <td className={CELL}>
+          {needsDirection(rule.categoryCode) ? (
+            <Select
+              aria-label="向き"
+              value={rule.direction ?? ""}
+              onChange={(e) =>
+                applyPatch({
+                  direction: (e.target.value || null) as RuleDirection | null,
+                })
+              }
+            >
+              <option value="">入金・出金の両方</option>
+              <option value="out">出金だけ</option>
+              <option value="in">入金だけ</option>
+            </Select>
+          ) : (
+            <span className="t-body-sm text-muted-foreground">
+              {/* 費目から決まる。選ばせない（§2.8） */}
+              {groupOfCategory(rule.categoryCode) === "INC" ? "入金の行" : "出金の行"}
+            </span>
+          )}
+        </td>
+        <td className={CELL}>
+          <RuleCategorySelect
+            label="費目"
+            value={rule.categoryCode}
+            onChange={(categoryCode) =>
+              /* **費目を変えると向きが落ちることがあるので、ここも確かめる。**
+                 資金移動から支出に変えると `direction` が null になり、同じ
+                 `pattern` で向きを書いていないルールと衝突しうる */
+              applyPatch({
+                categoryCode,
+                /* 固定変動は費目グループから決まる（適用規則6）。
+                   資金移動では事業割合も効かない */
+                costType: fitCostType(categoryCode, rule.costType),
+                /* **資金移動でなくなったら向きを落とす。** 向きは費目から
+                   決まるので、残すと「入金だけ」の支出のルールという、どの行
+                   にも当たらない組み合わせが画面から見えないまま残る（AC-57d） */
+                ...(groupOfCategory(categoryCode) === "TRF"
+                  ? { bizRatio: 0 }
+                  : { direction: null }),
+              })
+            }
+          />
+        </td>
+        <td className={CELL}>
+          {costTypeApplies(rule.categoryCode) ? (
+            <Select
+              aria-label="固定/変動"
+              value={rule.costType ?? "variable"}
+              onChange={(e) =>
+                onPatch({ costType: e.target.value === "fixed" ? "fixed" : "variable" })
+              }
+            >
+              <option value="variable">変動費</option>
+              <option value="fixed">固定費</option>
+            </Select>
+          ) : (
+            /* 費目グループが EXP でなければ意味を持たない（適用規則6） */
+            <span className="t-body-sm text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className={CELL}>
+          {groupOfCategory(rule.categoryCode) === "TRF" ? (
+            <span className="t-body-sm text-muted-foreground">—</span>
+          ) : (
+            <NumberInput
+              aria-label="事業割合"
+              value={rule.bizRatio}
+              max={100}
+              onValueChange={(bizRatio) => onPatch({ bizRatio })}
+            />
+          )}
+        </td>
+        <td className={CELL}>
+          <Button variant="destructive" size="sm" onClick={onRemove}>
+            削除
+          </Button>
+        </td>
+      </tr>
+      {message ? (
+        <tr>
+          <td className={`${CELL} t-body-sm text-fg-warning`} colSpan={7}>
+            {message}
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
 export function RulesTable() {
   const { data, setData, session } = useAppData();
   const [draft, setDraft] = useState<ImportRule | null>(null);
 
-  const conflict = draft ? ruleConflict(draft) : null;
+  const conflict = draft ? ruleConflict(draft, data.rules) : null;
 
   const save = () => {
     if (!draft || conflict) return;
@@ -155,128 +319,15 @@ export function RulesTable() {
           </thead>
           <tbody>
             {data.rules.map((rule) => (
-              <tr key={rule.id}>
-                <td className={CELL}>
-                  <TextInput
-                    aria-label="摘要に含まれる文字列"
-                    value={rule.pattern}
-                    onChange={(e) =>
-                      setData((d) => updateRule(d, rule.id, { pattern: e.target.value }))
-                    }
-                  />
-                </td>
-                <td className={CELL}>
-                  <Select
-                    aria-label="口座"
-                    value={rule.accountId ?? ""}
-                    onChange={(e) =>
-                      setData((d) =>
-                        updateRule(d, rule.id, { accountId: e.target.value || null }),
-                      )
-                    }
-                  >
-                    <option value="">すべての口座</option>
-                    {data.accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </Select>
-                </td>
-                <td className={CELL}>
-                  {needsDirection(rule.categoryCode) ? (
-                    <Select
-                      aria-label="向き"
-                      value={rule.direction ?? ""}
-                      onChange={(e) =>
-                        setData((d) =>
-                          updateRule(d, rule.id, {
-                            direction: (e.target.value || null) as RuleDirection | null,
-                          }),
-                        )
-                      }
-                    >
-                      <option value="">入金・出金の両方</option>
-                      <option value="out">出金だけ</option>
-                      <option value="in">入金だけ</option>
-                    </Select>
-                  ) : (
-                    <span className="t-body-sm text-muted-foreground">
-                      {/* 費目から決まる。選ばせない（§2.8） */}
-                      {groupOfCategory(rule.categoryCode) === "INC"
-                        ? "入金の行"
-                        : "出金の行"}
-                    </span>
-                  )}
-                </td>
-                <td className={CELL}>
-                  <RuleCategorySelect
-                    label="費目"
-                    value={rule.categoryCode}
-                    onChange={(categoryCode) =>
-                      setData((d) =>
-                        updateRule(d, rule.id, {
-                          categoryCode,
-                          /* 固定変動は費目グループから決まる（適用規則6）。
-                             資金移動では事業割合も効かない */
-                          costType: fitCostType(categoryCode, rule.costType),
-                          /* **資金移動でなくなったら向きを落とす。** 向きは
-                             費目から決まるので、残すと「入金だけ」の支出の
-                             ルールという、どの行にも当たらない組み合わせが
-                             画面から見えないまま残る（AC-57d） */
-                          ...(groupOfCategory(categoryCode) === "TRF"
-                            ? { bizRatio: 0 }
-                            : { direction: null }),
-                        }),
-                      )
-                    }
-                  />
-                </td>
-                <td className={CELL}>
-                  {costTypeApplies(rule.categoryCode) ? (
-                    <Select
-                      aria-label="固定/変動"
-                      value={rule.costType ?? "variable"}
-                      onChange={(e) =>
-                        setData((d) =>
-                          updateRule(d, rule.id, {
-                            costType: e.target.value === "fixed" ? "fixed" : "variable",
-                          }),
-                        )
-                      }
-                    >
-                      <option value="variable">変動費</option>
-                      <option value="fixed">固定費</option>
-                    </Select>
-                  ) : (
-                    /* 費目グループが EXP でなければ意味を持たない（適用規則6） */
-                    <span className="t-body-sm text-muted-foreground">—</span>
-                  )}
-                </td>
-                <td className={CELL}>
-                  {groupOfCategory(rule.categoryCode) === "TRF" ? (
-                    <span className="t-body-sm text-muted-foreground">—</span>
-                  ) : (
-                    <NumberInput
-                      aria-label="事業割合"
-                      value={rule.bizRatio}
-                      max={100}
-                      onValueChange={(bizRatio) =>
-                        setData((d) => updateRule(d, rule.id, { bizRatio }))
-                      }
-                    />
-                  )}
-                </td>
-                <td className={CELL}>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setData((d) => removeRule(d, rule.id))}
-                  >
-                    削除
-                  </Button>
-                </td>
-              </tr>
+              <RuleRow
+                key={rule.id}
+                rule={rule}
+                accounts={data.accounts}
+                /* 自分も渡す。`ruleConflict` が `id` で自分を除く */
+                others={data.rules}
+                onPatch={(patch) => setData((d) => updateRule(d, rule.id, patch))}
+                onRemove={() => setData((d) => removeRule(d, rule.id))}
+              />
             ))}
 
             {draft ? (

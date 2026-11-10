@@ -11,11 +11,14 @@ import {
   pickRule,
   redecideWithoutRule,
   ruleConflict,
+  ruleFromImport,
   ruleMatches,
   type HistoryEntry,
   type ImportRow,
 } from "../csv";
 import type { ImportRule } from "../types";
+import { addRule } from "@/lib/mutations";
+import { emptyAppData } from "@/lib/app-data";
 
 /**
  * CL-10 仕分けルールの適用（FR-18・AC-57〜57e）
@@ -272,19 +275,19 @@ describe("AC-57d 符号と矛盾する組み合わせ", () => {
 
   it("矛盾する組み合わせは理由付きで弾かれる", () => {
     expect(
-      ruleConflict({ pattern: "ｱ", direction: "in", categoryCode: "EXP-13", bizRatio: 0 }),
+      ruleConflict({ pattern: "ｱ", accountId: null, direction: "in", categoryCode: "EXP-13", bizRatio: 0 }),
     ).toMatch(/支出の費目/);
     expect(
-      ruleConflict({ pattern: "ｱ", direction: "out", categoryCode: "INC-01", bizRatio: 0 }),
+      ruleConflict({ pattern: "ｱ", accountId: null, direction: "out", categoryCode: "INC-01", bizRatio: 0 }),
     ).toMatch(/収入の費目/);
     expect(
-      ruleConflict({ pattern: "", direction: null, categoryCode: "EXP-13", bizRatio: 0 }),
+      ruleConflict({ pattern: "", accountId: null, direction: null, categoryCode: "EXP-13", bizRatio: 0 }),
     ).toMatch(/摘要/);
     expect(
-      ruleConflict({ pattern: "ｱ", direction: null, categoryCode: "TRF-01", bizRatio: 50 }),
+      ruleConflict({ pattern: "ｱ", accountId: null, direction: null, categoryCode: "TRF-01", bizRatio: 50 }),
     ).toMatch(/事業割合/);
     expect(
-      ruleConflict({ pattern: "ｱ", direction: null, categoryCode: "EXP-13", bizRatio: 50 }),
+      ruleConflict({ pattern: "ｱ", accountId: null, direction: null, categoryCode: "EXP-13", bizRatio: 50 }),
     ).toBeNull();
   });
 
@@ -396,5 +399,174 @@ describe("費目を手で直した行", () => {
     expect(edited.guessedFrom).toBeNull();
     /* 資金移動は固定変動を持たない（適用規則6） */
     expect(edited.costType).toBeNull();
+  });
+});
+
+/* ============ AC-57 同じ長さのときの決め方（判断1：長さが先） ============ */
+
+/**
+ * **長さを揃えないと測れない**（CLAUDE.md §2.11）。口座の指定は
+ * **長さが同じときにだけ**見るので、長さが違うデータで組むと、
+ * 口座を見ない実装でも同じ結果になる。
+ *
+ * 同じ行に当てるため、`pattern` は**同じ摘要の別の場所**を取る
+ * （`ｶﾌｪ ｺｰﾋ` に `ｶﾌｪ` と `ｺｰﾋ`。どちらも2字）。
+ */
+describe("AC-57 同じ長さのルールが当たったとき", () => {
+  const row = { name: "ｶﾌｪ ｺｰﾋ ﾀﾞｲ", type: "expense" as const, accountId: ACCOUNT };
+
+  it("長さが同じなら、口座を指定したほうが勝つ", () => {
+    const all = rule({ id: "r1", pattern: "ｶﾌｪ", categoryCode: "EXP-13" });
+    const scoped = rule({
+      id: "r2",
+      pattern: "ｺｰﾋ",
+      categoryCode: "EXP-11",
+      accountId: ACCOUNT,
+    });
+    expect([...all.pattern].length).toBe([...scoped.pattern].length);
+    /* 並び順で決まっていないことを、両方の順で見る */
+    expect(pickRule([all, scoped], row)?.id).toBe("r2");
+    expect(pickRule([scoped, all], row)?.id).toBe("r2");
+  });
+
+  it("長いほうが勝つ。口座を指定しても、短いほうは勝てない", () => {
+    /* 要件定義書 §3.3：この並びは**直さない**。口座を先に見ると、
+       1文字の雑なルールが精密なルールに勝つ */
+    const longAll = rule({ id: "r1", pattern: "ｺｰﾋ ﾀﾞｲ", categoryCode: "EXP-13" });
+    const shortScoped = rule({
+      id: "r2",
+      pattern: "ｺｰﾋ",
+      categoryCode: "EXP-11",
+      accountId: ACCOUNT,
+    });
+    expect(pickRule([shortScoped, longAll], row)?.id).toBe("r1");
+  });
+
+  it("長さと口座が同じなら、向きを指定したほうが勝つ", () => {
+    const both = rule({
+      id: "r1",
+      pattern: "ｶﾌｪ",
+      categoryCode: "TRF-01",
+      accountId: ACCOUNT,
+    });
+    const outOnly = rule({
+      id: "r2",
+      pattern: "ｺｰﾋ",
+      categoryCode: "TRF-01",
+      accountId: ACCOUNT,
+      direction: "out",
+    });
+    expect(pickRule([both, outOnly], row)?.id).toBe("r2");
+    expect(pickRule([outOnly, both], row)?.id).toBe("r2");
+  });
+
+  it("長さも絞り方も同じなら、`id` の昇順", () => {
+    const a = rule({ id: "r1", pattern: "ｶﾌｪ", categoryCode: "EXP-13" });
+    const b = rule({ id: "r2", pattern: "ｺｰﾋ", categoryCode: "EXP-11" });
+    expect(pickRule([b, a], row)?.id).toBe("r1");
+    expect(pickRule([a, b], row)?.id).toBe("r1");
+  });
+});
+
+/* ============ AC-57f 当たる条件が同じルールを2つ持てない ============ */
+
+describe("AC-57f 当たる条件の一意性", () => {
+  const existing = rule({ id: "r1", pattern: "ﾃﾞﾝｷ", categoryCode: "EXP-05" });
+
+  it("`accountId` が null どうしでも、同じ条件とみなす", () => {
+    /* **ここが落とし穴**（CLAUDE.md §2.11）。両方に口座が入った組み合わせ
+       だけで測ると、null を「互いに異なる」とする実装でも通る */
+    expect(existing.accountId).toBeNull();
+    expect(
+      ruleConflict(
+        { pattern: "ﾃﾞﾝｷ", accountId: null, direction: null, categoryCode: "EXP-11", bizRatio: 0 },
+        [existing],
+      ),
+    ).toMatch(/同じ/);
+  });
+
+  it("口座が違えば別の条件", () => {
+    expect(
+      ruleConflict(
+        { pattern: "ﾃﾞﾝｷ", accountId: ACCOUNT, direction: null, categoryCode: "EXP-11", bizRatio: 0 },
+        [existing],
+      ),
+    ).toBeNull();
+  });
+
+  it("向きが違えば別の条件", () => {
+    const trf = rule({ id: "r1", pattern: "ﾌﾘｶｴ", categoryCode: "TRF-01" });
+    expect(
+      ruleConflict(
+        { pattern: "ﾌﾘｶｴ", accountId: null, direction: "out", categoryCode: "TRF-01", bizRatio: 0 },
+        [trf],
+      ),
+    ).toBeNull();
+    expect(
+      ruleConflict(
+        { pattern: "ﾌﾘｶｴ", accountId: null, direction: null, categoryCode: "TRF-02", bizRatio: 0 },
+        [trf],
+      ),
+    ).toMatch(/同じ/);
+  });
+
+  it("自分自身とは衝突しない（設定画面は既にある行を直す）", () => {
+    expect(ruleConflict({ ...existing }, [existing])).toBeNull();
+  });
+
+  it("前後の空白を落として比べる（DBより厳しい側）", () => {
+    expect(
+      ruleConflict(
+        { pattern: " ﾃﾞﾝｷ ", accountId: null, direction: null, categoryCode: "EXP-11", bizRatio: 0 },
+        [existing],
+      ),
+    ).toMatch(/同じ/);
+  });
+
+  it("`addRule` は同じ条件のルールを増やさず、決める内容を差し替える", () => {
+    const first = ruleFromImport(
+      { pattern: "ﾃﾞﾝｷ", categoryCode: "EXP-05", costType: "fixed", bizRatio: 40 },
+      ACCOUNT,
+      "r1",
+    );
+    const second = ruleFromImport(
+      { pattern: "ﾃﾞﾝｷ", categoryCode: "EXP-11", costType: "variable", bizRatio: 0 },
+      ACCOUNT,
+      "r2",
+    );
+    const after = addRule(addRule(emptyAppData("2026-10-01"), first), second);
+    expect(after.rules).toHaveLength(1);
+    expect(after.rules[0]).toMatchObject({ id: "r1", categoryCode: "EXP-11", bizRatio: 0 });
+  });
+});
+
+/* ====== AC-57e 「次回もこうする」が作るルール（判断3：取込先の口座） ====== */
+
+describe("AC-57e 作るルールの口座", () => {
+  it("取込先の口座になる。ほかの口座の同じ摘要には当たらない", () => {
+    /* **口座が1つのフィクスチャでは測れない**（CLAUDE.md §2.11）。
+       null でも取込先でも同じ結果になる */
+    const other = "a2";
+    const made = ruleFromImport(
+      { pattern: "ﾌﾘｺﾐ ﾀﾅｶ", categoryCode: "INC-01", costType: null, bizRatio: 0 },
+      ACCOUNT,
+      "r1",
+    );
+    expect(made.accountId).toBe(ACCOUNT);
+    expect(made.direction).toBeNull();
+
+    const row = { name: "ﾌﾘｺﾐ ﾀﾅｶ ｼﾖｳｼﾞ", type: "income" as const };
+    expect(ruleMatches(made, { ...row, accountId: ACCOUNT })).toBe(true);
+    expect(ruleMatches(made, { ...row, accountId: other })).toBe(false);
+  });
+
+  it("資金移動の費目では事業割合を持たせない。固定変動も落とす", () => {
+    const made = ruleFromImport(
+      { pattern: "ﾌﾘｶｴ", categoryCode: "TRF-01", costType: "fixed", bizRatio: 60 },
+      ACCOUNT,
+      "r1",
+    );
+    expect(made).toMatchObject({ bizRatio: 0, costType: null });
+    expect(ruleConflict(made)).toBeNull();
   });
 });
