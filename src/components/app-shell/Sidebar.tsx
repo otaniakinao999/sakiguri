@@ -23,6 +23,7 @@ import {
   HomeIcon,
   PencilSquareIcon,
   PresentationChartLineIcon,
+  QueueListIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
 
@@ -36,6 +37,7 @@ const ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> 
   "/cashflow": PresentationChartLineIcon,
   "/pl": TableCellsIcon,
   "/entry": PencilSquareIcon,
+  "/actuals": QueueListIcon,
   "/import": ArrowUpTrayIcon,
   "/settings": Cog6ToothIcon,
 };

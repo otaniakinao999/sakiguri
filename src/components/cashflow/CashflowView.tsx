@@ -89,7 +89,14 @@ export interface TabGroup<T extends string> {
 export interface CashflowViewProps {
   /** PageHeader 右側の残高サマリー */
   stats: PageHeaderStat[];
-  headerAction?: React.ReactNode;
+  /**
+   * 見ている口座の選択（FR-56・AC-62）。
+   *
+   * **追従する領域に入る。** 以前は `PageHeader` の右にあったので、
+   * 明細の末尾まで送ると「いまどの口座を見ているのか」が画面から消えて
+   * いた。月の切り替え（`ledgerMonths`）と同じバーに並べる。
+   */
+  accountControl?: React.ReactNode;
 
   chart: {
     points: ForecastPoint[];
@@ -121,8 +128,15 @@ export interface CashflowViewProps {
   ledgerTotal?: React.ReactNode;
   /** 期間に「期間を指定」を選んだときの開始月・終了月 */
   periodDetail?: React.ReactNode;
-  /** 明細の上に出す編集フォーム（FR-41） */
-  ledgerEditor?: React.ReactNode;
+  /**
+   * 実績を編集する画面（FR-41・FR-55）。
+   *
+   * **明細の上ではなく、末尾に置く。** 以前は入出金予定表の上端に箱を
+   * 出していたので、下のほうの行を押しても**開いた画面が画面外**にあった。
+   * いまは `Modal` が渡ってくる（`fixed` なので置き場所に関わらず画面の
+   * 中に出る。AC-60）。
+   */
+  dialog?: React.ReactNode;
   /** 実績の行を押したとき（FR-41） */
   onEditActual?: (actualId: string) => void;
 }
@@ -166,7 +180,7 @@ function FilterTabs<T extends string>({ group }: { group: TabGroup<T> }) {
  */
 export function CashflowView({
   stats,
-  headerAction,
+  accountControl,
   chart,
   trend,
   monthlyChart,
@@ -181,7 +195,7 @@ export function CashflowView({
   footer,
   ledgerTotal,
   periodDetail,
-  ledgerEditor,
+  dialog,
   onEditActual,
 }: CashflowViewProps) {
   return (
@@ -190,8 +204,30 @@ export function CashflowView({
         title="キャッシュフロー"
         subtitle="実績と予定から、日々の残高と月ごとの資金繰りを見ます"
         stats={stats}
-        action={headerAction}
       />
+
+      {/* 追従する領域（FR-56・AC-62）
+          ─────────────────────────────────────────────────────────
+          **この画面で追従するのはこの1つだけ。** 「見ている口座」と
+          「月の切り替え」を同じバーに入れてある。明細は縦に長く、
+          末尾まで送った位置からどちらも操作できる必要がある。
+
+          **2つに分けない。** 以前は月の見出しが自分で `sticky top-0
+          z-30` を持っていて、狭い幅で残高ヘッダー（z-10）を覆っていた。
+          上辺に2つ置くと、下の要素の `top` に上の要素の高さを定数で
+          書くしかなく、折り返す幅でずれる。
+
+          **1行に収める。** 折り返させると高さが変わり、飛び先の
+          `scroll-mt-64` が足りなくなって行がバーの下に潜る。
+          狭い幅では横に送る（サイドバーのナビと同じ扱い）。
+
+          重なり順：表の固定セル z-10 ＜ このバー z-20 ＜ 編集の覆い z-40 */}
+      {accountControl || ledgerMonths ? (
+        <div className="sticky top-0 z-20 flex items-center gap-16 overflow-x-auto border-b border-border bg-card px-32 py-8">
+          {accountControl}
+          {ledgerMonths ? <MonthJumpNav months={ledgerMonths} /> : null}
+        </div>
+      ) : null}
 
       <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
         {notices}
@@ -283,14 +319,6 @@ export function CashflowView({
             <FilterTabs group={kindFilter} />
             {periodDetail}
           </div>
-
-          {ledgerEditor}
-
-          {/* 月へ飛ぶ見出し（要望9）。**スクロールしても残す。** 明細は
-              縦に長く、上に戻らないと押せない位置にあると使われない。
-              id は view-model が区切り行と同じループで作っているので、
-              押しても飛ばない見出しは構造上できない */}
-          {ledgerMonths ? <MonthJumpNav months={ledgerMonths} /> : null}
 
           <Table density="compact">
             {/* 列幅は Figma 2030:349。1088px 中 88 / 364 / 140 / 120 / 96 / 280 */}
@@ -389,6 +417,8 @@ export function CashflowView({
 
         {footer}
       </div>
+
+      {dialog}
     </>
   );
 }

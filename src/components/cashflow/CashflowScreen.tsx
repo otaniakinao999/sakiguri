@@ -25,6 +25,7 @@ import { daysBetween, toYearMonth } from "@/core/date";
 import { isCard } from "@/core/types";
 import type { Actual } from "@/core/types";
 import { Select } from "@/components/ui/inputs";
+import { Modal } from "@/components/ui/legacy/Modal";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Panel } from "@/components/sakiguri/Panel";
 import { track } from "@/lib/analytics/track";
@@ -51,7 +52,7 @@ import {
   applyActualPatch,
   isSubmittable,
 } from "@/components/entry/ActualForm";
-import { updateActual } from "@/lib/mutations";
+import { editableActualFields, updateActual } from "@/lib/mutations";
 
 import { CashflowView } from "./CashflowView";
 import {
@@ -88,6 +89,11 @@ export function CashflowScreen() {
    * 入出金予定表からも実績を直せるようにする。画面遷移させないのは、
    * 明細の並びの中で直したいためと、クエリパラメータを足すと静的生成の
    * 前提（ADR-0003）に Suspense 境界が要るようになるため。
+   *
+   * **出し方は `Modal` に揃えてある**（FR-55・AC-60）。以前はこの画面
+   * だけインラインの箱を表の上端に出しており、下のほうの行を押すと
+   * 開いた画面が画面外にあった。「期間絞り込みでリンクが動作しない」と
+   * 報告された症状は、**開いていたのに見えていなかった**ものである。
    */
   const [editing, setEditing] = useState<Actual | null>(null);
 
@@ -205,7 +211,7 @@ export function CashflowScreen() {
 
   return (
     <CashflowView
-      headerAction={
+      accountControl={
         <label className="flex shrink-0 items-center gap-8 whitespace-nowrap t-body-sm text-muted-foreground">
           口座
           <Select
@@ -297,10 +303,9 @@ export function CashflowScreen() {
         ) : undefined
       }
       /* FR-41。明細の内容を押すとここが開く */
-      ledgerEditor={
+      dialog={
         editing ? (
-          <div className="rounded-md border border-border-primary-subtle bg-primary-subtle p-16">
-            <h3 className="mb-12 t-card-title text-foreground">実績を編集</h3>
+          <Modal title="実績を編集" onClose={() => setEditing(null)}>
             <ActualForm
               value={editing}
               accounts={data.accounts}
@@ -311,25 +316,18 @@ export function CashflowScreen() {
               onSubmit={() => {
                 if (!editing || !isSubmittable(editing)) return;
                 const target = editing;
-                /* id と key は updateActual が保持する（AC-24・AC-25） */
+                /* **編集できる項目は1箇所で決める**（§2.8）。以前はここで
+                   手で並べていて、`unplanned` が漏れていた ―― 「『予定に
+                   ない支出』を取り消す」を押しても、保存で落ちていた。
+                   id と key は updateActual が保持する（AC-24・AC-25） */
                 setData((d) =>
-                  updateActual(d, target.id, {
-                    date: target.date,
-                    name: target.name.trim(),
-                    type: target.type,
-                    costType: target.costType,
-                    categoryCode: target.categoryCode,
-                    amount: target.amount,
-                    bizRatio: target.bizRatio,
-                    accountId: target.accountId,
-                    toAccountId: target.toAccountId,
-                  }),
+                  updateActual(d, target.id, editableActualFields(target)),
                 );
                 setEditing(null);
               }}
               onCancel={() => setEditing(null)}
             />
-          </div>
+          </Modal>
         ) : undefined
       }
       onEditActual={(actualId) =>

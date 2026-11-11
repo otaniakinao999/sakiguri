@@ -72,6 +72,7 @@ const ROUTES: Array<[RegExp, string]> = [
   [/^\/dev\/screens\/cashflow/, "/cashflow"],
   [/^\/dev\/screens\/pl/, "/pl"],
   [/^\/dev\/screens\/entry/, "/entry"],
+  [/^\/dev\/screens\/actuals/, "/actuals"],
   [/^\/dev\/screens\/import/, "/import"],
   [/^\/dev\/screens\/settings/, "/settings"],
 ];

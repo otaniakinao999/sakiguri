@@ -5,7 +5,18 @@
  *
  * 一次情報：docs/要件定義書.md §4.1 SC-01、docs/designsystem.md §5
  *   現預金残高・30日後・90日後・カード未払を横に並べる。
- *   スティッキー。白背景、下に border-base-low の罫線。
+ *   白背景、下に border-base-low の罫線。
+ *
+ * **追従させない**（FR-56・AC-62）。designsystem.md §5 は「スティッキー」と
+ * 書いているが、この帯は狭い幅でしか出ないうえ、**同じ幅で画面側の追従バー
+ * （見ている口座と月の切り替え）も上辺に来る。** 上辺に2つ置くと、下の
+ * 要素の `top` に上の要素の高さを定数で書くしかなく、この帯は
+ * `flex-wrap` で折り返すので幅によって高さが変わる ―― 375px でずれる。
+ * 実際いままでは月の見出し（z-30）がこの帯（z-10）を覆っていた。
+ *
+ * **追従するのは画面側のバー1つだけ**にして、重なりの余地を無くしてある。
+ * AC-62 が求めているのは「見ている口座」と「月の切り替え」であって、
+ * 残高ではない。
  */
 
 import { useMemo } from "react";
@@ -51,7 +62,7 @@ export function BalanceHeader() {
   return (
     <header
       className="
-        bg-surface-base-primary border-b-border-base-low sticky top-0 z-10
+        bg-surface-base-primary border-b-border-base-low
         flex flex-wrap items-end gap-16 border-b px-12 py-16
         wide:gap-32 wide:px-24
       "

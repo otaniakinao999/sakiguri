@@ -306,6 +306,28 @@ export function updateActual(
 }
 
 /**
+ * 編集の画面が持っている値から、`updateActual` に渡す差分を作る。
+ *
+ * **1箇所にする**（CLAUDE.md §2.8）。以前は実績一覧・入出金予定表の
+ * 2箇所が項目を手で並べていて、`unplanned` を**一覧の側だけが渡していた。**
+ * そのため明細から開いた編集では「『予定にない支出』を取り消す」を
+ * 押しても何も起きなかった ―― ボタンは出るのに、保存で落ちていた。
+ *
+ * **並べない。** `id` と `key` を外した残り全部を渡す。項目が増えたときに
+ * 片方へ足し忘れる形そのものを無くす（`ActualPatch` が型で `id`・`key` を
+ * 弾き、`updateActual` が実行時にも元の値へ戻す）。
+ *
+ * `name` の前後の空白は落とす。`unplanned` は未設定を `false` に寄せる
+ * ―― 取り消し（AC-38）が「未設定に戻す」ではなく「false にする」操作で
+ * あり、差分に現れないと保存されない。
+ */
+export function editableActualFields(form: Actual): ActualPatch {
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+  const { id: _id, key: _key, ...rest } = form;
+  return { ...rest, name: form.name.trim(), unplanned: form.unplanned ?? false };
+}
+
+/**
  * 既存の実績を予定に紐づける（FR-46、AC-30）。
  *
  * `key` を張る**唯一の**経路。`updateActual` は編集で `key` が壊れないよう

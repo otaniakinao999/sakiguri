@@ -19,6 +19,12 @@ export interface MonthJumpItem {
  *
  * 飛び先の id は view-model が明細と同じループで作っている。ここで
  * 組み立て直さないこと。押しても飛ばない見出しができる。
+ *
+ * **自分で追従しない**（FR-56・AC-62）。以前は `sticky top-0 z-30` を
+ * 自分で持っていて、狭い幅では残高ヘッダーを**覆っていた**（z が上）。
+ * 追従する領域は画面に1つだけ置き、この見出しはその中に入る。
+ * 追従する要素を2つ重ねると、上の要素の高さを定数で書くしかなくなり、
+ * 折り返す幅で必ずずれる。
  */
 export function MonthJumpNav({ months }: { months: readonly MonthJumpItem[] }) {
   const [active, setActive] = React.useState<string | null>(null);
@@ -88,7 +94,7 @@ export function MonthJumpNav({ months }: { months: readonly MonthJumpItem[] }) {
   return (
     <nav
       aria-label="月へ移動"
-      className="sticky top-0 z-30 -mx-16 flex flex-wrap items-center gap-8 border-b border-border bg-card px-16 py-8"
+      className="flex shrink-0 items-center gap-8"
     >
       {months.map((m) => (
         <a key={m.id} href={`#${m.id}`}>

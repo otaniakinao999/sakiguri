@@ -21,7 +21,7 @@ import type {
   EntryActualRow,
   EntryMonth,
   EntryTodoRow,
-} from "./EntryView";
+} from "./rows";
 
 /**
  * 符号を見る範囲（AC-58b）。

@@ -16,6 +16,7 @@ import {
   blankOneoff,
   blankRecurring,
   clearOverride,
+  editableActualFields,
   removeAccount,
   ACCOUNT_SCOPED_COLLECTIONS,
   removeActual,
@@ -667,5 +668,59 @@ describe("FR-41 実績の編集", () => {
     updateActual(data, "act1", { amount: 1 });
 
     expect(data).toEqual(snapshot);
+  });
+});
+
+/**
+ * 編集できる項目を1箇所で決める（§2.8）
+ *
+ * **並べない形になっていること**を測る。以前は実績一覧と入出金予定表が
+ * 項目を手で並べていて、片方だけに `unplanned` があった。
+ *
+ * ここは**集合の全体と突き合わせる**（CLAUDE.md §2.8）。`Actual` に
+ * 項目が増えたとき、`editableActualFields` が返す鍵の集合も自動で増える
+ * ことを確かめる ―― 増えなければ、どこかで並べ直していることになる。
+ */
+describe("editableActualFields", () => {
+  const actual = {
+    ...blankActual("act1", "a1", "2026-04-10"),
+    key: "r1#2026-04-10",
+    name: "  スーパー  ",
+    amount: 1_200,
+  };
+
+  it("id と key 以外の全部を返す（手で並べていない）", () => {
+    const patch = editableActualFields(actual);
+    const expected = Object.keys(actual).filter((k) => k !== "id" && k !== "key");
+
+    expect(Object.keys(patch).sort()).toEqual(expected.sort());
+    /* 渡してはいけない2つが入っていないこと */
+    expect(Object.keys(patch)).not.toContain("id");
+    expect(Object.keys(patch)).not.toContain("key");
+  });
+
+  it("内容の前後の空白を落とす", () => {
+    expect(editableActualFields(actual).name).toBe("スーパー");
+  });
+
+  it("unplanned の未設定を false に寄せる（取り消しが保存される。AC-38）", () => {
+    const without = { ...actual };
+    delete (without as { unplanned?: boolean }).unplanned;
+
+    expect(editableActualFields(without).unplanned).toBe(false);
+    expect(editableActualFields({ ...actual, unplanned: true }).unplanned).toBe(true);
+  });
+
+  it("updateActual に通しても id と key は変わらない（AC-24・AC-25）", () => {
+    const data = addActual(emptyAppData(ASOF), actual);
+    const after = updateActual(
+      data,
+      "act1",
+      editableActualFields({ ...actual, id: "ちがう", key: null, amount: 9_000 }),
+    );
+
+    expect(after.actuals[0].id).toBe("act1");
+    expect(after.actuals[0].key).toBe("r1#2026-04-10");
+    expect(after.actuals[0].amount).toBe(9_000);
   });
 });

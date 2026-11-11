@@ -4,52 +4,25 @@ import * as React from "react";
 
 import type { Yen } from "@/core/types";
 import { Amount } from "@/components/sakiguri/Amount";
-import type { AmountView } from "@/components/sakiguri/amount-view";
-import { CategoryTag, type Category } from "@/components/sakiguri/CategoryTag";
-import { MonthTab, type MonthTabState } from "@/components/sakiguri/MonthTab";
+import { CategoryTag } from "@/components/sakiguri/CategoryTag";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
 import { TodoRow } from "@/components/sakiguri/TodoRow";
 import { Button } from "@/components/ui/button";
 import { formatAmount } from "@/lib/format";
 
+import type { EntryTodoRow, RowBase } from "./rows";
+
+export type {
+  EntryActualRow,
+  EntryCandidateRow,
+  EntryMonth,
+  EntryPlanRow,
+  EntryTodoRow,
+  RowBase,
+} from "./rows";
+
 /* ---------------------------------------------------------------- 型 */
-
-interface RowBase {
-  id: string;
-  /** 整形済み。例：9/27 */
-  date: string;
-  title: string;
-  /** 行の金額（正の額）。［実際の金額］の初期値にも使う */
-  amount: Yen;
-  /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
-  display: AmountView;
-  category: Category | null;
-}
-
-/** 消し込まれていない予定（行の種類 A） */
-export interface EntryPlanRow extends RowBase {
-  kind: "plan";
-}
-
-/** 照合されていない実績（行の種類 B。CSV由来） */
-export interface EntryCandidateRow extends RowBase {
-  kind: "candidate";
-  candidates: RowBase[];
-}
-
-export type EntryTodoRow = EntryPlanRow | EntryCandidateRow;
-
-export interface EntryActualRow extends RowBase {
-  /** 編集・削除（FR-41）。Figma には無い */
-  actions?: React.ReactNode;
-}
-
-export interface EntryMonth {
-  value: string;
-  label: string;
-  state: MonthTabState;
-}
 
 export interface EntryViewProps {
   stats: PageHeaderStat[];
@@ -63,21 +36,24 @@ export interface EntryViewProps {
   onSettleAsIs?: (id: string) => void;
   onToggleOther?: (id: string) => void;
   onSettleWithAmount?: (id: string, amount: Yen) => void;
-  onDefer?: (id: string) => void;
+  /**
+   * 「払えなかった」（繰延）。**打った額を一緒に渡す**（AC-59）。
+   *
+   * ［実際の金額］に打った額が捨てられていて、繰延の画面では予定の額が
+   * 出ていた。一部だけ払えた回を繰延するのに、同じ額を2度打つことに
+   * なっていた。打っていなければ `undefined`。
+   */
+  onDefer?: (id: string, amount?: Yen) => void;
   onLink?: (rowId: string, candidateId: string) => void;
   onUnplanned?: (id: string) => void;
-
-  months: EntryMonth[];
-  onSelectMonth?: (value: string) => void;
-  /** 未来の月を選んだときだけ */
-  futureNote?: string;
-  actuals: EntryActualRow[];
 
   /* 差し込み口。v0.6.0 に無いもの（ADR-0023） */
   notices?: React.ReactNode;
   todoFooter?: React.ReactNode;
-  listAction?: React.ReactNode;
-  listFooter?: React.ReactNode;
+  /** やることの見出しに出す操作。手入力（§4.1.1） */
+  todoAction?: React.ReactNode;
+  /** 実績一覧への導線（FR-54） */
+  footer?: React.ReactNode;
   dialog?: React.ReactNode;
 }
 
@@ -91,7 +67,7 @@ function OtherActions({
 }: {
   defaultAmount: Yen;
   onRecord?: (amount: Yen) => void;
-  onDefer?: () => void;
+  onDefer?: (amount?: Yen) => void;
 }) {
   /* 桁区切りを付けて出す。Figma 2032:850 は「10,230」 */
   const [text, setText] = React.useState(formatAmount(defaultAmount));
@@ -112,7 +88,9 @@ function OtherActions({
       <Button disabled={!valid} onClick={() => valid && onRecord?.(parsed)}>
         この金額で記録
       </Button>
-      <Button variant="outline" onClick={onDefer}>
+      {/* **ここで打った額を繰延に渡す**（AC-59）。触っていなければ
+          `defaultAmount` のままなので、渡しても予定の額と同じになる */}
+      <Button variant="outline" onClick={() => onDefer?.(valid ? parsed : undefined)}>
         払えなかった
       </Button>
       <p className="t-body-sm text-muted-foreground">
@@ -159,7 +137,7 @@ function CandidateBox({
 /* ------------------------------------------------------------ 本体 */
 
 /**
- * 実績入力（SC-05）の見た目
+ * やること（SC-05 実績入力）の見た目
  *
  * 一次情報：docs/要件定義書.md §4.1 SC-05、docs/design/screens.md 04
  * （Figma 2032:753）
@@ -169,6 +147,11 @@ function CandidateBox({
  * 行は2種類。消し込まれていない予定（plan）と、照合されていない実績
  * （candidate）。操作5つは既存の TodoActions と1対1で対応する。
  * 「払えなかった」が繰延（FR-07）。
+ *
+ * **実績一覧は別のページにある**（FR-54・AC-61）。1つのページに並べて
+ * いたので、やることを片付けるあいだも長い一覧が下に付いていた。
+ * **照合の候補はこちらに置く** ―― 未照合の実績を予定に結びつけるのは、
+ * やることを片付ける操作である。
  */
 export function EntryView({
   stats,
@@ -182,14 +165,10 @@ export function EntryView({
   onDefer,
   onLink,
   onUnplanned,
-  months,
-  onSelectMonth,
-  futureNote,
-  actuals,
   notices,
   todoFooter,
-  listAction,
-  listFooter,
+  todoAction,
+  footer,
   dialog,
 }: EntryViewProps) {
   return (
@@ -203,7 +182,7 @@ export function EntryView({
 
       <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
         {/* やること — 2032:760 */}
-        <Panel title="やること" count={`${todoCount}件`}>
+        <Panel title="やること" count={`${todoCount}件`} action={todoAction}>
           <p className="t-body-sm text-muted-foreground">
             予定日の古い順に、2種類の行が並びます。どちらも残高が正しくない状態です。
           </p>
@@ -264,7 +243,7 @@ export function EntryView({
                     <OtherActions
                       defaultAmount={row.amount}
                       onRecord={(amount) => onSettleWithAmount?.(row.id, amount)}
-                      onDefer={() => onDefer?.(row.id)}
+                      onDefer={(amount) => onDefer?.(row.id, amount)}
                     />
                   ) : null}
                 </TodoRow>
@@ -283,55 +262,10 @@ export function EntryView({
           </p>
         </Panel>
 
-        {/* 実績一覧 — 2032:900 */}
-        <Panel title="実績一覧" action={listAction}>
-          <div className="flex flex-wrap items-center gap-4">
-            {months.map((m) => (
-              <MonthTab
-                key={m.value}
-                state={m.state}
-                onClick={() => onSelectMonth?.(m.value)}
-              >
-                {m.label}
-              </MonthTab>
-            ))}
-          </div>
-
-          {/* screens.md は Callout（caution）だが、Figma は枠も背景も無い
-              ただの注記だった。Figma を採った（ADR-0023） */}
-          {futureNote ? (
-            <p className="t-body-sm text-fg-warning">{futureNote}</p>
-          ) : null}
-
-          {actuals.length === 0 ? (
-            <p className="py-24 text-center t-body-sm text-muted-foreground">
-              この月の実績はありません。
-            </p>
-          ) : (
-            <div>
-              {actuals.map((row, i) => (
-                <TodoRow
-                  key={row.id}
-                  date={row.date}
-                  title={row.title}
-                  amount={row.display.value}
-                  amountType={row.display.type}
-                  signed={row.display.signed}
-                  category={row.category}
-                  status="実績"
-                  last={i === actuals.length - 1}
-                  actions={row.actions}
-                />
-              ))}
-            </div>
-          )}
-
-          {listFooter}
-        </Panel>
+        {footer}
       </div>
 
       {dialog}
     </>
   );
 }
-
