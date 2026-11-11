@@ -5,20 +5,26 @@ import { actualToEvent } from "@/core/cash";
 import {
   CATEGORIES,
   categoryFitsType,
+  categoryOptionsFor,
   costTypeApplies,
+  fitCategory,
+  fitToType,
   groupsForType,
 } from "@/core/categories";
 import { buildMonthlyCashflow } from "@/core/monthly";
 import { buildPLMatrix, plGroupOf } from "@/core/pl";
-import type { Account, Actual } from "@/core/types";
+import { touchesAccount } from "@/core/types";
+import type { Account, Actual, EntryType } from "@/core/types";
 import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
+import { ACCOUNT_LABEL, applyActualPatch } from "@/components/entry/ActualForm";
 import {
   buildEntryActualRows,
   entryAmountScope,
 } from "@/components/entry/entry-view-model";
-import { categoryOptionsFor, fitCategory } from "@/components/ui/inputs";
 import { buildLedgerView } from "@/lib/ledger";
+import { emptyAppData } from "@/lib/app-data";
+import { removeAccount } from "@/lib/mutations";
 
 /**
  * AC-58 / AC-20d 振替を両側の明細から記録する（FR-51・ADR-0025）
@@ -352,5 +358,173 @@ describe("AC-58b 符号は残高の動きで決まる", () => {
     });
     const rows = buildEntryActualRows([cardUse], entryAmountScope(withCard));
     expect(rows[0].display).toMatchObject({ value: -12_000, signed: true });
+  });
+});
+
+/* ============== AC-58c/d/e 収支を変えたあとの振替先 ============== */
+
+/**
+ * AC-58c / AC-58d / AC-58e 収入の行に振替先が残っていた
+ *
+ * **利用者の報告：** 入金先が銀行のはずなのに、現金で絞り込むと
+ * その行が出る。
+ *
+ * 振替で入れて振替先に現金を選び、**そのあと収支を収入に変える。**
+ * 振替先の欄は画面から消えるのに値が残り、`touchesAccount` が
+ * 拾っていた。**残高は本当に正しかった**（`accountDelta` は振替以外で
+ * `toAccountId` を見ない）ので、残高を測る AC-58 は通り続けた
+ * （CLAUDE.md §2.11 の「経路が2つある」）。
+ *
+ * 直す場所は2つある。**どちらも要る。**
+ *
+ * | | |
+ * |---|---|
+ * | 書き込み（AC-58c） | `fitToType` が収支を変えたときに落とす。**新しく入らない** |
+ * | 読み取り（AC-58d） | `touchesAccount` が振替以外で見ない。**既に入っている行が無害になる** |
+ */
+describe("AC-58c 収支を変えると振替先が落ちる", () => {
+  /** 振替で入れて、振替先に現金を選んだ状態 */
+  const asTransfer = (): Actual =>
+    side({
+      id: "t1",
+      type: "transfer",
+      categoryCode: "TRF-01",
+      accountId: "bank",
+      toAccountId: "shinkin",
+    });
+
+  /* **在ることを先に測る**（CLAUDE.md §2.11）。振替のままなら残る。
+     これが無いと、常に落とす実装と区別がつかない */
+  it("振替のままなら振替先は残る", () => {
+    const next = applyActualPatch(asTransfer(), { amount: 50_000 });
+    expect(next.toAccountId).toBe("shinkin");
+  });
+
+  it("実績編集で、収入に変えると落ちる", () => {
+    expect(applyActualPatch(asTransfer(), { type: "income" }).toAccountId).toBeUndefined();
+  });
+
+  it("実績編集で、支出に変えると落ちる", () => {
+    expect(applyActualPatch(asTransfer(), { type: "expense" }).toAccountId).toBeUndefined();
+  });
+
+  /**
+   * **予定の設定と実績編集が同じ規則を通ること。** 以前は2箇所に
+   * 同じ規則があり、実績編集の側だけ落としていなかった（§2.8）。
+   * いまは `fitToType` の1本で、ここは両方がそれを通ることを見る。
+   */
+  it("予定の設定でも落ちる。両方が同じ1本を通る", () => {
+    const planned = {
+      type: "transfer" as EntryType,
+      costType: null,
+      categoryCode: "TRF-01",
+      amount: 100_000,
+      bizRatio: 0,
+      accountId: "bank",
+      toAccountId: "shinkin",
+    };
+    expect(fitToType(planned, "transfer").toAccountId).toBe("shinkin");
+    expect(fitToType(planned, "income").toAccountId).toBeUndefined();
+
+    /* 実績編集の側も、同じ入力に同じ答えを返す */
+    const actual = asTransfer();
+    for (const type of ["income", "expense", "transfer"] as EntryType[]) {
+      expect(applyActualPatch(actual, { type }).toAccountId).toBe(
+        fitToType(actual, type).toAccountId,
+      );
+    }
+  });
+
+  it("収支を変えても、費目と固定／変動の整えは変わらない（AC-58a）", () => {
+    const next = applyActualPatch(asTransfer(), { type: "income" });
+    /* 資金移動の費目は持ち越す（適用規則5a） */
+    expect(next.categoryCode).toBe("TRF-01");
+    /* 資金移動なので固定／変動は持たない（適用規則6） */
+    expect(next.costType).toBeNull();
+  });
+});
+
+describe("AC-58d 振替先が残っている行は、その口座に属さない", () => {
+  /** 本番に入っていた形。収入なのに振替先が残っている */
+  const leftover = side({
+    id: "left",
+    name: "ﾆﾕｳｷﾝ",
+    type: "income",
+    categoryCode: "TRF-08",
+    costType: null,
+    amount: 500_000,
+    accountId: "bank",
+    toAccountId: "shinkin",
+  });
+
+  /** 同じ組に、振替先がちゃんと効く行も入れる（§2.11「在ることも測る」） */
+  const realTransfer = side({
+    id: "real",
+    name: "ｱﾂﾌﾟ",
+    type: "transfer",
+    categoryCode: "TRF-01",
+    costType: null,
+    amount: 30_000,
+    accountId: "bank",
+    toAccountId: "shinkin",
+  });
+
+  const rows = [leftover, realTransfer];
+  const inAccount = (accountId: string) =>
+    rows.filter((r) => touchesAccount(r, accountId)).map((r) => r.id);
+
+  it("残高は振替先を動かさない（ここは前から正しかった）", () => {
+    const one = run([leftover]);
+    expect(one.byAccount.shinkin).toBe(empty.byAccount.shinkin);
+    expect(one.byAccount.bank).toBe(empty.byAccount.bank + 500_000);
+  });
+
+  it("一覧の絞り込み：振替先の口座に出ない。振替の行は出る", () => {
+    expect(inAccount("shinkin")).toEqual(["real"]);
+    /* 自分の口座では両方出る */
+    expect(inAccount("bank")).toEqual(["left", "real"]);
+  });
+
+  it("口座削除：振替先の口座を消しても道連れにならない。振替の行は消える", () => {
+    const data = {
+      ...emptyAppData("2026-10-01"),
+      accounts,
+      actuals: rows,
+    };
+    /* **消す前に2件あることを見る。** 0件なら、消す実装でも残す実装でも
+       同じ結果になる（CLAUDE.md §2.11） */
+    expect(data.actuals).toHaveLength(2);
+
+    const after = removeAccount(data, "shinkin");
+    expect(after.actuals.map((a) => a.id)).toEqual(["left"]);
+  });
+});
+
+describe("AC-58e 口座の欄のラベルが収支で変わる（FR-52）", () => {
+  it("支出は支払元、収入は入金先、振替は振替元", () => {
+    expect(ACCOUNT_LABEL.expense).toBe("支払元");
+    expect(ACCOUNT_LABEL.income).toBe("入金先");
+    expect(ACCOUNT_LABEL.transfer).toBe("振替元");
+  });
+
+  /** **3つとも違う文字であること。** 同じにすると出し分けの意味が無い */
+  it("3つが互いに違う", () => {
+    expect(new Set(Object.values(ACCOUNT_LABEL)).size).toBe(3);
+  });
+
+  /**
+   * **収支の全体と突き合わせる。** 収支が増えたときに落ちる
+   * （CLAUDE.md §2.8）。`Record<EntryType, string>` なので型でも落ちるが、
+   * ここは `EntryType` の値の集合そのものと突き合わせている。
+   */
+  it("収支の全部にラベルがある", () => {
+    const types: EntryType[] = ["income", "expense", "transfer"];
+    expect(Object.keys(ACCOUNT_LABEL).sort()).toEqual([...types].sort());
+  });
+
+  /** 振替のときは「振替元」で、下の欄の「振替先」と対になる */
+  it("振替は「振替元」で、振替先と対になる", () => {
+    expect(ACCOUNT_LABEL.transfer).toBe("振替元");
+    expect(ACCOUNT_LABEL.transfer.endsWith("元")).toBe(true);
   });
 });

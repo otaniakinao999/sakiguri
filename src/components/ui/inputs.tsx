@@ -22,11 +22,7 @@
 
 import { useId, useState } from "react";
 
-import {
-  categoriesInGroup,
-  categoryFitsType,
-  groupsForType,
-} from "@/core/categories";
+import { categoryOptionsFor } from "@/core/categories";
 import type { EntryType } from "@/core/types";
 import { parseMonthsField, parseNumberField } from "@/lib/number-field";
 
@@ -203,28 +199,15 @@ export function Select({
 }
 
 /**
- * その収支で選べる費目（掲載順、自動生成を除く）。
- *
- * **選べるグループの決め方は core にある**（`groupsForType`、適用規則5a）。
- * 画面ごとに書くと、支出で振替の費目が選べる画面と選べない画面ができる
- * （CLAUDE.md §2.8）。
- *
- * 自動生成される費目（カード引落 TRF-04・借入返済の元金 TRF-06）は
- * 選ばせない。**CL-2 と CL-8 がこれらを生成するので、手で同じ費目の行を
- * 作ると二重に乗る。**
- */
-export function categoryOptionsFor(type: EntryType) {
-  return groupsForType(type).flatMap((group) =>
-    categoriesInGroup(group).filter((c) => !c.generated),
-  );
-}
-
-/**
  * 費目の選択。
  *
  * 収支の向きに合うグループだけを出す。v1.0 では利用者が費目を
- * 追加・削除できない（要件定義書 §3.1.2 適用規則4）。
+ * 追加・削除できない（要件定義書 §3.1.2 適用規劇4）。
  * 自動生成される費目（カード引落・借入返済の元金）は選ばせない。
+ *
+ * 選べる費目の一覧と、収支を変えたときの寄せ方（`fitCategory`）は
+ * **core にある**（`core/categories.ts`）。画面ごとに書くと、支出で
+ * 振替の費目が選べる画面と選べない画面ができる（CLAUDE.md §2.8）。
  */
 export function CategorySelect({
   type,
@@ -248,18 +231,4 @@ export function CategorySelect({
       ))}
     </Select>
   );
-}
-
-/**
- * 収支の向きを変えたとき、費目が合わなくなっていれば先頭に寄せる。
- *
- * **資金移動（TRF）の費目は、支出と収入のあいだで持ち越す**（適用規則5a）。
- * 寄せ直すと「振替にしたのに支出に戻る」ことになる。
- */
-export function fitCategory(type: EntryType, current: string): string {
-  const options = categoryOptionsFor(type);
-  if (options.some((c) => c.code === current) && categoryFitsType(current, type)) {
-    return current;
-  }
-  return options[0].code;
 }

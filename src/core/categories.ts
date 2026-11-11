@@ -220,3 +220,78 @@ export function fitCostType(
   if (!costTypeApplies(code)) return null;
   return current ?? fallback;
 }
+
+/**
+ * その収支で選べる費目（適用規則5a）。
+ *
+ * **自動生成される費目は出さない。** カード引落（TRF-04）と
+ * 借入返済の元金（TRF-06）は CL-2 と CL-8 が生成するので、
+ * **手で同じ費目の行を作ると二重に乗る。**
+ *
+ * **2026-11-11 に `components/ui/inputs.tsx` から移した。** 下の
+ * `fitToType` が使うため。`inputs.tsx` は `"use client"` なので、
+ * core から引けない（CLAUDE.md §2.3）。
+ */
+export function categoryOptionsFor(type: EntryType): Category[] {
+  return groupsForType(type).flatMap((group) =>
+    categoriesInGroup(group).filter((c) => !c.generated),
+  );
+}
+
+/**
+ * 収支の向きを変えたとき、費目が合わなくなっていれば先頭に寄せる。
+ *
+ * **資金移動（TRF）の費目は、支出と収入のあいだで持ち越す**（適用規則5a）。
+ * 寄せ直すと「振替にしたのに支出に戻る」ことになる。
+ */
+export function fitCategory(type: EntryType, current: string): string {
+  const options = categoryOptionsFor(type);
+  if (options.some((c) => c.code === current) && categoryFitsType(current, type)) {
+    return current;
+  }
+  return options[0].code;
+}
+
+/** `fitToType` が整える項目。 */
+export interface TypeFitted {
+  type: EntryType;
+  categoryCode: string;
+  costType: CostType | null;
+  toAccountId: string | undefined;
+}
+
+/**
+ * 収支を変えたときに、合わなくなった項目を整える（AC-58c）。
+ *
+ * | 項目 | 整え方 |
+ * |---|---|
+ * | 費目 | グループが合わなければ寄せる。TRF は持ち越す（適用規則5a） |
+ * | 固定／変動 | **費目グループ**から決める。`type` から決めない（適用規則6） |
+ * | 振替先 | **振替でなくなったら落とす** |
+ *
+ * **振替先を落とすのがここにしか書かれていないこと。** 予定の設定
+ * （`EntryFields`）と実績編集（`ActualForm`）の両方がこれを呼ぶ。
+ * 以前は設定の側にだけ書いてあり、実績編集では**振替先の欄が画面から
+ * 消えるのに値が残っていた。** 残った `toAccountId` は
+ * `touchesAccount` に拾われるので、**収入の行が振替先の口座の一覧に
+ * 出た**（2026-11-11・CLAUDE.md §2.8）。
+ *
+ * **読み取りの側（`touchesAccount`）も `type` を見る。** 両方要る ――
+ * ここは新しく入る値を防ぎ、あちらは既に入っている値を無害にする。
+ */
+export function fitToType(
+  current: {
+    categoryCode: string;
+    costType: CostType | null;
+    toAccountId?: string;
+  },
+  type: EntryType,
+): TypeFitted {
+  const categoryCode = fitCategory(type, current.categoryCode);
+  return {
+    type,
+    categoryCode,
+    costType: fitCostType(categoryCode, current.costType),
+    toAccountId: type === "transfer" ? current.toAccountId : undefined,
+  };
+}

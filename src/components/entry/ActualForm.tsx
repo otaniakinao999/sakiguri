@@ -17,12 +17,11 @@
 import { isCard } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
 import { Button } from "@/components/ui/legacy/Button";
-import { costTypeApplies, fitCostType } from "@/core/categories";
+import { costTypeApplies, fitCostType, fitToType } from "@/core/categories";
 import {
   CategorySelect,
   DateInput,
   Field,
-  fitCategory,
   NumberInput,
   Select,
   TextInput,
@@ -31,25 +30,56 @@ import {
 /**
  * 収支や費目を変えたときに、合わなくなった項目を整える。
  *
- * **固定／変動は費目グループから決める**（`fitCostType`、適用規則6）。
- * `type` から決めると、支出の行に資金移動の費目を選んだとき（適用規則5a）
- * 振替の行に固定変動が付く。**費目だけを変えたときも整える** ―― 以前は
- * 収支を変えたときだけ見ていたので、支出のまま費目を TRF にすると
- * 固定変動が残っていた。
+ * **収支を変えたときの規則は core にある**（`fitToType`）。予定の設定
+ * （`EntryFields`）も同じものを呼ぶ。**以前は2箇所に同じ規則があり、
+ * こちらだけ `toAccountId` を落としていなかった。** 振替で入れて振替先を
+ * 選び、そのあと収入に変えると、振替先の欄は画面から消えるのに値が残り、
+ * **その行が振替先の口座の一覧に出た**（AC-58c・CLAUDE.md §2.8）。
+ *
+ * **費目だけを変えたときも整える** ―― 以前は収支を変えたときだけ見ていたので、
+ * 支出のまま費目を TRF にすると固定変動が残っていた（適用規則6）。
  */
 export function applyActualPatch(
   current: Actual,
   patch: Partial<Actual>,
 ): Actual {
   const next = { ...current, ...patch };
-  if (patch.type) {
-    next.categoryCode = fitCategory(patch.type, current.categoryCode);
-  }
-  if (patch.type || patch.categoryCode) {
-    next.costType = fitCostType(next.categoryCode, current.costType);
+  if (patch.type) Object.assign(next, fitToType(current, patch.type));
+  /* 費目を同じ操作で指定されていれば、そちらを優先する */
+  if (patch.categoryCode) {
+    next.categoryCode = patch.categoryCode;
+    next.costType = fitCostType(patch.categoryCode, current.costType);
   }
   return next;
 }
+
+/**
+ * 口座の欄のラベル（FR-52・AC-58e）。
+ *
+ * | 収支 | ラベル |
+ * |---|---|
+ * | 支出 | 支払元 |
+ * | 収入 | 入金先 |
+ * | 振替 | 振替元 |
+ *
+ * **「支払方法」では収入で意味が通らない。** ファクタリングの入金に
+ * 「支払方法」と出ていた。振替のときは下の「振替先」と対になるよう
+ * 「振替元」にする ―― 「支払方法」と「振替先」は対になっていなかった。
+ *
+ * **`Record` で持つ。** 収支が増えたときに、ここの漏れが型で落ちる
+ * （CLAUDE.md §2.8 の「列挙は集合と突き合わせる」）。
+ *
+ * **カードは支出のときだけ候補に出る**（下の `filter`）ので、支出の
+ * ラベルは「支払元」で足りる。
+ *
+ * 予定の設定（`EntryFields`）の同じ欄は「口座」のままである。FR-52 が
+ * 実績編集に限って定めている。
+ */
+export const ACCOUNT_LABEL: Record<EntryType, string> = {
+  expense: "支払元",
+  income: "入金先",
+  transfer: "振替元",
+};
 
 /** 登録・保存できる状態か。 */
 /**
@@ -164,7 +194,7 @@ export function ActualForm({
             />
           )}
         </Field>
-        <Field label="支払方法">
+        <Field label={ACCOUNT_LABEL[value.type]}>
           {(id) => (
             <Select
               id={id}

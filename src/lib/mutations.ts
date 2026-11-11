@@ -16,6 +16,7 @@ import type {
   Account,
   Actual,
   DateStr,
+  EntryType,
   ForecastInstance,
   ImportRule,
   OneoffItem,
@@ -108,7 +109,7 @@ export const ACCOUNT_SCOPED_COLLECTIONS = [
 
 export function removeAccount(data: AppData, id: string): AppData {
   /* 判定は core の1箇所。絞り込み（実績入力）も同じものを使う（§2.8） */
-  const uses = (item: { accountId: string; toAccountId?: string }) =>
+  const uses = (item: { type: EntryType; accountId: string; toAccountId?: string }) =>
     touchesAccount(item, id);
 
   const recurring = data.recurring.filter((r) => !uses(r));

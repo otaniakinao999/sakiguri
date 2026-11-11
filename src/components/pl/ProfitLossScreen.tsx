@@ -22,6 +22,7 @@ import { buildForecast } from "@/core/forecast";
 import { buildPLMatrix, type PLMode } from "@/core/pl";
 import type { Scope } from "@/core/proration";
 import { touchesAccount } from "@/core/types";
+import type { EntryType } from "@/core/types";
 import { Select } from "@/components/ui/inputs";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Callout } from "@/components/sakiguri/Callout";
@@ -104,7 +105,7 @@ export function ProfitLossScreen() {
        入った収入」という意味になる。残高の話ではないので、残高系列の
        範囲（buildBalanceSeries の scope）は使わない。
        判定は core の `touchesAccount` から借りる（§2.8） */
-    const byAccount = <T extends { accountId: string; toAccountId?: string }>(
+    const byAccount = <T extends { type: EntryType; accountId: string; toAccountId?: string }>(
       events: readonly T[],
     ): T[] =>
       accountScope === "all"

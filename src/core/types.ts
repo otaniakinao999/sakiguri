@@ -91,7 +91,6 @@ export interface CardAccount extends AccountBase {
 /** 口座・カード（要件定義書 §3.2 Account） */
 export type Account = DepositAccount | CardAccount;
 
-/** カードかどうか。CL-2 はこの判定で残高を動かすかを分ける。 */
 /**
  * その口座に関わる予定・実績か。
  *
@@ -101,14 +100,26 @@ export type Account = DepositAccount | CardAccount;
  *
  * **2箇所に書かない**（CLAUDE.md §2.8）。片方にだけ条件が増えると、
  * 「一覧には出ないのに、口座を消すと道連れになる」行ができる。
+ *
+ * **`toAccountId` を見るのは振替のときだけ**（AC-58d）。片側の明細から
+ * 記録した振替（適用規則5a）は `type` が expense / income で振替先を
+ * 持たないので、**非振替の行に振替先が入っていれば、それは収支を
+ * 切り替える前の残りかすである。** 残高（`accountDelta`）は同じ理由で
+ * 振替以外の `toAccountId` を見ておらず、こちらが見ていたために
+ * **残高は動かないのに一覧と口座削除だけが拾っていた**（2026-11-11）。
+ *
+ * 読み取りの側で落とすので、**既に入っている行もデータの手直しなしに
+ * 直る。** 新しく入ることは `fitToType` が防ぐ（AC-58c）。
  */
 export function touchesAccount(
-  item: { accountId: string; toAccountId?: string },
+  item: { type: EntryType; accountId: string; toAccountId?: string },
   accountId: string,
 ): boolean {
-  return item.accountId === accountId || item.toAccountId === accountId;
+  if (item.accountId === accountId) return true;
+  return item.type === "transfer" && item.toAccountId === accountId;
 }
 
+/** カードかどうか。CL-2 はこの判定で残高を動かすかを分ける。 */
 export function isCard(account: Account): account is CardAccount {
   return account.kind === "card";
 }

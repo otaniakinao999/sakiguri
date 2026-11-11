@@ -7,10 +7,10 @@
  *   収支・固定変動・費目・金額・事業割合・口座（振替なら振替先）。
  */
 
-import { costTypeApplies, fitCostType } from "@/core/categories";
+import { costTypeApplies, fitCostType, fitToType } from "@/core/categories";
 import { isCard } from "@/core/types";
 import type { Account, CostType, EntryType } from "@/core/types";
-import { CategorySelect, fitCategory, NumberInput, Select } from "@/components/ui/inputs";
+import { CategorySelect, NumberInput, Select } from "@/components/ui/inputs";
 
 export interface EntryFieldsValue {
   type: EntryType;
@@ -23,29 +23,6 @@ export interface EntryFieldsValue {
 }
 
 const CELL = "border-b border-border px-cell py-8 align-top";
-
-/**
- * 収支の向きを変えたときの後始末。
- *
- * 費用でなければ固定／変動は持たない（要件定義書 §3.1.2 適用規則6）。
- * 費目もグループが変わるので合わせる。
- *
- * **固定／変動の判定は費目グループから引く**（`fitCostType`）。`type` から
- * 引くと、支出の行が資金移動の費目を持てるようになった以上（適用規則5a）
- * 振替の行に固定変動が付く。
- */
-export function onTypeChange(
-  current: EntryFieldsValue,
-  type: EntryType,
-): Partial<EntryFieldsValue> {
-  const categoryCode = fitCategory(type, current.categoryCode);
-  return {
-    type,
-    costType: fitCostType(categoryCode, current.costType),
-    categoryCode,
-    toAccountId: type === "transfer" ? current.toAccountId : undefined,
-  };
-}
 
 /**
  * 費目を変えたときの後始末。
@@ -75,7 +52,7 @@ export function EntryFieldCells({
         <Select
           aria-label="収支"
           value={value.type}
-          onChange={(e) => onChange(onTypeChange(value, e.target.value as EntryType))}
+          onChange={(e) => onChange(fitToType(value, e.target.value as EntryType))}
         >
           <option value="expense">支出</option>
           <option value="income">収入</option>
