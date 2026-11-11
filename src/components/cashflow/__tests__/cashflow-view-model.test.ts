@@ -108,15 +108,15 @@ describe("入出金予定表", () => {
     const rows = view.ledger.filter((r) => r.note === "自動で作られる行（編集できません）");
     expect(rows.length).toBe(settle.length);
     expect(rows.every((r) => r.category === "カード引落")).toBe(true);
-    expect(rows.every((r) => r.amountType === "expense")).toBe(true);
+    expect(rows.every((r) => r.display.type === "expense")).toBe(true);
   });
 
   it("収入は income、振替は neutral", () => {
     const income = view.ledger.filter((r) => r.category === "収入");
     expect(income.length).toBeGreaterThan(0);
-    expect(income.every((r) => r.amountType === "income")).toBe(true);
+    expect(income.every((r) => r.display.type === "income")).toBe(true);
     expect(
-      view.ledger.filter((r) => r.category === "振替").every((r) => r.amountType === "neutral"),
+      view.ledger.filter((r) => r.category === "振替").every((r) => r.display.type === "neutral"),
     ).toBe(true);
   });
 

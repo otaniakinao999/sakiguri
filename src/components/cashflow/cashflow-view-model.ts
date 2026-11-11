@@ -11,7 +11,7 @@
 import type { BalanceSeries, OneSidedReason } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import type { DateStr, Yen } from "@/core/types";
-import type { AmountType } from "@/components/sakiguri/Amount";
+import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor, type Category } from "@/components/sakiguri/CategoryTag";
 import type { MonthlyBalancePoint } from "@/components/sakiguri/MonthlyBalanceChart";
 import type { PageHeaderStat } from "@/components/sakiguri/PageHeader";
@@ -76,12 +76,6 @@ export interface CashflowViewModelInput {
 function categoryOfEntry(entry: LedgerEntry): Category | null {
   if (entry.src === "settle") return "カード引落";
   return categoryTagFor(entry.categoryCode, entry.costType);
-}
-
-function amountTypeOf(category: Category | null): AmountType {
-  if (category === "収入") return "income";
-  if (category === "振替") return "neutral";
-  return "expense";
 }
 
 /**
@@ -187,18 +181,21 @@ export function buildCashflowViewModel({
       date: "",
       title: "",
       amount: 0,
-      amountType: "neutral",
+      display: { value: 0, signed: false, type: "neutral" },
       category: null,
       status: "予定",
     });
     group.entries.forEach((entry, i) => {
       const category = categoryOfEntry(entry);
+      /* **符号は残高の動きから、色は費目から**（AC-58b）。判定は
+         `amountView` の1箇所 ―― もとはここに「振替なら符号なし」を
+         書いていて、片側だけ記録した振替で破れていた */
       ledger.push({
         id: `${group.yearMonth}-${i}-${entry.key ?? entry.srcId ?? entry.src}`,
         date: formatMonthDay(entry.date),
         title: entry.name,
         amount: entry.amount,
-        amountType: amountTypeOf(category),
+        display: amountView({ amount: entry.amount, delta: entry.delta, category }),
         category,
         balance: entry.balance,
         status: entry.status === "actual" ? "実績" : "予定",

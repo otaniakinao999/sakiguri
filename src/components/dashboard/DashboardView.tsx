@@ -15,7 +15,7 @@ import { Panel } from "@/components/sakiguri/Panel";
 /** やることパネルのアンカー。「うち未記録の予定」の飛び先（要望8） */
 const TODO_ANCHOR = "todo";
 import { TodoRow } from "@/components/sakiguri/TodoRow";
-import type { AmountType } from "@/components/sakiguri/Amount";
+import type { AmountView } from "@/components/sakiguri/amount-view";
 import type { Category } from "@/components/sakiguri/CategoryTag";
 import { formatMonthDayJa, formatSignedYen, formatYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,8 +44,10 @@ export interface DashboardTodo {
   /** 整形済み。例：9/27 */
   date: string;
   title: string;
+  /** 行の金額（正の額） */
   amount: Yen;
-  amountType: AmountType;
+  /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
+  display: AmountView;
   /** 区分が決まらないものは省く（固定／変動を費目から決めない。§3.1.2 適用規則1） */
   category: Category | null;
 }
@@ -264,8 +266,9 @@ export function DashboardView({
                   key={t.id}
                   date={t.date}
                   title={t.title}
-                  amount={t.amount}
-                  amountType={t.amountType}
+                  amount={t.display.value}
+                  amountType={t.display.type}
+                  signed={t.display.signed}
                   category={t.category}
                   status="予定"
                   last={i === todos.length - 1}

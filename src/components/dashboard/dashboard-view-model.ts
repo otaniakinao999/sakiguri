@@ -11,10 +11,15 @@
  * React を import しない。文言の組み立ては持たず、断片だけ返す。
  */
 
-import type { BalanceSeries } from "@/core/balance";
+import {
+  cardIdsOf,
+  depositIdsOf,
+  viewDelta,
+  type BalanceSeries,
+} from "@/core/balance";
 import { addDays } from "@/core/date";
 import type { DateStr, Yen } from "@/core/types";
-import type { AmountType } from "@/components/sakiguri/Amount";
+import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
 import type { ForecastMarker, ForecastPoint } from "@/components/sakiguri/ForecastChart";
 import { buildForecastPoints, msOf } from "@/lib/forecast-points";
@@ -154,16 +159,27 @@ export function buildDashboardViewModel({
               : "。生活防衛ラインを割る見込みです",
         };
 
+  /* 符号を見る範囲。**カードも入れる** ―― 要対応の行は「その行の口座が
+     どちらに動いたか」を示すので、カードの利用も減ったと出す。現預金だけで
+     足すと、カード払いの予定が符号を失う（残高が動くのは引落日なので0）。
+     `deposits` は振替が閉じるかの判定だけに使う別物（`viewDelta`） */
+  const deposits = new Set(depositIdsOf(series));
+  const viewed = [...depositIdsOf(series), ...cardIdsOf(series)];
+
   const todos: DashboardTodo[] = dashboard.unfilled.slice(0, TODO_LIMIT).map((plan) => {
     const category = categoryTagFor(plan.categoryCode, plan.costType);
-    const amountType: AmountType =
-      category === "収入" ? "income" : category === "振替" ? "neutral" : "expense";
     return {
       id: plan.key,
       date: formatMonthDay(plan.date),
       title: plan.name,
       amount: plan.amount,
-      amountType,
+      /* 符号は残高の動きから、色は費目から（AC-58b・`amountView`） */
+      display: amountView({
+        amount: plan.amount,
+        delta: viewDelta(plan, viewed, deposits),
+        category,
+        type: plan.type,
+      }),
       category,
     };
   });

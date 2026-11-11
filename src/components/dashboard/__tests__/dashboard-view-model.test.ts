@@ -152,13 +152,36 @@ describe("buildDashboardViewModel", () => {
     expect(view.todos.length).toBeLessThanOrEqual(view.todoCount);
   });
 
+  /**
+   * AC-58b。符号は残高の動きで決まる。
+   *
+   * **カード払いの行を含めて測る**（`サブスク` は c1 の支出）。
+   * 現預金だけで足すと**その行の delta は0**になり（合計が動くのは
+   * 引落日）、カード払いの予定が符号を失う。含めないと、範囲から
+   * カードを外した実装でも通る（CLAUDE.md §2.11）。
+   */
+  it("AC-58b 金額の符号は残高の動きと一致する", () => {
+    const byTitle = new Map(view.todos.map((t) => [t.title, t]));
+    const card = byTitle.get("サブスク");
+    const rent = byTitle.get("事務所家賃");
+    const sales = byTitle.get("○○商会 売上入金");
+    /* 前提：3行とも出ている。欠けると測れない */
+    expect([card, rent, sales].every(Boolean)).toBe(true);
+
+    expect(card?.display).toMatchObject({ value: -12_000, signed: true });
+    expect(rent?.display).toMatchObject({ value: -95_000, signed: true });
+    expect(sales?.display).toMatchObject({ value: 330_000, signed: true });
+    /* 金額そのものは正の額で持つ（［実際の金額］の初期値に使う） */
+    expect(card?.amount).toBe(12_000);
+  });
+
   it("区分は costType から決める（§3.1.2 適用規則1）", () => {
     const byTitle = new Map(view.todos.map((t) => [t.title, t]));
     expect(byTitle.get("○○商会 売上入金")?.category).toBe("収入");
-    expect(byTitle.get("○○商会 売上入金")?.amountType).toBe("income");
+    expect(byTitle.get("○○商会 売上入金")?.display.type).toBe("income");
     expect(byTitle.get("事務所家賃")?.category).toBe("固定費");
     expect(byTitle.get("外注費")?.category).toBe("変動費");
-    expect(byTitle.get("事務所家賃")?.amountType).toBe("expense");
+    expect(byTitle.get("事務所家賃")?.display.type).toBe("expense");
   });
 
   /* ---------- 口座・カード ---------- */

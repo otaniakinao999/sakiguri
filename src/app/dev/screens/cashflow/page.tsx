@@ -57,15 +57,15 @@ export default function DevCashflowPage() {
           ]}
           monthsNote="月末がプラスでも、月中に生活防衛ラインを割る月は色が変わります（2026年12月）。"
           ledger={[
-            { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, amountType: "income", category: "収入", status: "予定" },
-            { id: "2", date: "9/27", title: "事務所家賃", amount: 95_000, amountType: "expense", category: "固定費", status: "予定" },
-            { id: "3", date: "9/30", title: "△△信金へ振替", amount: 200_000, amountType: "neutral", category: "振替", status: "実績", note: "合計残高は増減なし" },
-            { id: "4", date: "10/1", title: "通信費", amount: 9_800, amountType: "expense", category: "固定費", status: "実績" },
-            { id: "5", date: "10/5", title: "外注費", amount: 140_000, amountType: "expense", category: "変動費", status: "予定" },
+            { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, display: { value: 330_000, signed: true, type: "income" }, category: "収入", status: "予定" },
+            { id: "2", date: "9/27", title: "事務所家賃", amount: 95_000, display: { value: -95_000, signed: true, type: "expense" }, category: "固定費", status: "予定" },
+            { id: "3", date: "9/30", title: "△△信金へ振替", amount: 200_000, display: { value: 200_000, signed: false, type: "neutral" }, category: "振替", status: "実績", note: "合計残高は増減なし" },
+            { id: "4", date: "10/1", title: "通信費", amount: 9_800, display: { value: -9_800, signed: true, type: "expense" }, category: "固定費", status: "実績" },
+            { id: "5", date: "10/5", title: "外注費", amount: 140_000, display: { value: -140_000, signed: true, type: "expense" }, category: "変動費", status: "予定" },
             /* Figma の区分は「固定費」だが、カード引落の行に固定費を付けると
                「カード引落」フィルターが1件も拾わない。区分を直した（ADR-0023） */
-            { id: "6", date: "10/10", title: "××カード 引落", amount: 186_200, amountType: "expense", category: "カード引落", status: "予定", note: "自動で作られる行（編集できません）" },
-            { id: "7", date: "10/15", title: "水道光熱費", amount: 14_200, amountType: "expense", category: "変動費", status: "予定", note: "繰延（元の日付 10/8）" },
+            { id: "6", date: "10/10", title: "××カード 引落", amount: 186_200, display: { value: -186_200, signed: true, type: "expense" }, category: "カード引落", status: "予定", note: "自動で作られる行（編集できません）" },
+            { id: "7", date: "10/15", title: "水道光熱費", amount: 14_200, display: { value: -14_200, signed: true, type: "expense" }, category: "変動費", status: "予定", note: "繰延（元の日付 10/8）" },
           ]}
           period={{
             defaultValue: "recent",

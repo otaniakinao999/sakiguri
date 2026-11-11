@@ -11,6 +11,12 @@ import {
 import { buildMonthlyCashflow } from "@/core/monthly";
 import { buildPLMatrix, plGroupOf } from "@/core/pl";
 import type { Account, Actual } from "@/core/types";
+import { amountView } from "@/components/sakiguri/amount-view";
+import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
+import {
+  buildEntryActualRows,
+  entryAmountScope,
+} from "@/components/entry/entry-view-model";
 import { categoryOptionsFor, fitCategory } from "@/components/ui/inputs";
 import { buildLedgerView } from "@/lib/ledger";
 
@@ -80,6 +86,8 @@ function run(actuals: Actual[]) {
 
   return {
     total: row.proj,
+    /* 絞り込みなしの明細。AC-58b の符号をここから見る */
+    viewAll: view("all"),
     byAccount: { ...row.byAccount },
     month: monthly.find((m) => m.yearMonth === "2026-10")!,
     names,
@@ -207,5 +215,142 @@ describe("適用規則5a 費目グループと収支の対応", () => {
       }
     }
     expect(categoryOptionsFor("expense").map((c) => c.code)).toContain("TRF-01");
+  });
+});
+
+/* ===================== AC-58b 金額に付く符号 ===================== */
+
+/**
+ * 符号は**その行がいま見ている範囲で残高をどちら向きに動かすか**で決まる
+ * （要件定義書 §3.3 全体に効く原則）。`type` では決めない。
+ *
+ * **退化に注意**（CLAUDE.md §2.11）。
+ *
+ * | 空振りする形 | ここで使う形 |
+ * |---|---|
+ * | 片側だけ置く | **両側記録の2行を同じ表に出す。** 片側だけだと、符号を常に付ける実装でも通る |
+ * | 振替が全部片側記録 | **`type = transfer` の行も同じ表に置く。** 置かないと「全部に符号を付ける実装」と区別できない |
+ * | 符号だけ見る | **色も見る。** 符号を付けたついでに費用の色にしていないか |
+ */
+describe("AC-58b 符号は残高の動きで決まる", () => {
+  /** 合計の中で閉じる振替。両側が現預金なので残高を動かさない */
+  const CLOSED = side({
+    id: "closed",
+    name: "ｼﾝｷﾝﾍ ｲﾄﾞｳ",
+    type: "transfer",
+    toAccountId: "shinkin",
+  });
+  /** 振替でない支出と収入。符号の基準として同じ表に置く */
+  const RENT = side({
+    id: "rent",
+    name: "ﾔﾁﾝ",
+    amount: 95_000,
+    categoryCode: "EXP-01",
+    costType: "fixed",
+    bizRatio: 100,
+  });
+  const SALES = side({
+    id: "sales",
+    name: "ｳﾘｱｹﾞ",
+    amount: 330_000,
+    type: "income",
+    categoryCode: "INC-01",
+    bizRatio: 100,
+  });
+
+  const ROWS = [OUT, IN, CLOSED, RENT, SALES];
+
+  /** 明細の行を `amountView` に通したもの（本番と同じ経路） */
+  const shownInLedger = () => {
+    const entries = run(ROWS)
+      .viewAll.groups.flatMap((g) => g.entries);
+    /* **鍵は実績の id。** 名前で引くと、両側記録の2行は摘要が同じ
+       （`ﾌﾘｶｴ`）なので**1件に畳まれて、割れるところを見られない** */
+    return new Map(
+      entries.map((e) => [
+        e.srcId,
+        amountView({
+          amount: e.amount,
+          delta: e.delta,
+          category: categoryTagFor(e.categoryCode, e.costType),
+          type: e.type,
+        }),
+      ]),
+    );
+  };
+
+  it("入出金予定表：出金に −、入金に +、閉じる振替は符号なし", () => {
+    const shown = shownInLedger();
+    /* 前提：5行とも同じ表に出ている。1行でも欠けると測れない */
+    expect(shown.size).toBe(5);
+
+    /* 両側記録 ―― **同じ表の中で向きが割れる** */
+    expect(shown.get("out")).toMatchObject({ value: -100_000, signed: true });
+    expect(shown.get("in")).toMatchObject({ value: 100_000, signed: true });
+
+    /* 閉じる振替は動かさないので符号を付けない。金額はそのまま出す */
+    expect(shown.get("closed")).toMatchObject({
+      value: 100_000,
+      signed: false,
+    });
+
+    /* 振替でない行も同じ規則で決まる */
+    expect(shown.get("rent")).toMatchObject({ value: -95_000, signed: true });
+    expect(shown.get("sales")).toMatchObject({ value: 330_000, signed: true });
+  });
+
+  it("符号を付けても費用の色にしない（色は費目が決める）", () => {
+    const shown = shownInLedger();
+    expect(shown.get("out")?.type).toBe("neutral");
+    expect(shown.get("closed")?.type).toBe("neutral");
+    expect(shown.get("rent")?.type).toBe("expense");
+    expect(shown.get("sales")?.type).toBe("income");
+  });
+
+  it("実績の一覧で、出金の振替と入金の振替が見分けられる", () => {
+    const rows = buildEntryActualRows(ROWS, entryAmountScope(accounts));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    const out = byId.get("out")!.display;
+    const into = byId.get("in")!.display;
+
+    /* **同じ額・同じ色でも、符号で割れる。** ここが報告された欠陥
+       （どちらも `¥100,000` と出て区別できなかった） */
+    expect(out.type).toBe(into.type);
+    expect(Math.abs(out.value)).toBe(Math.abs(into.value));
+    expect(out.value).toBe(-100_000);
+    expect(into.value).toBe(100_000);
+    expect(out.signed && into.signed).toBe(true);
+
+    /* 閉じる振替は符号なし。**これが無いと「全部に符号」でも通る** */
+    expect(byId.get("closed")!.display).toMatchObject({ signed: false });
+  });
+
+  it("カードの利用は符号を失わない（引落日まで合計は動かない）", () => {
+    /* **現預金だけで足すと0になる行。** 範囲にカードを入れていないと
+       「符号なし」になり、カード払いの予定が向きを失う */
+    const withCard: Account[] = [
+      ...accounts,
+      {
+        id: "card",
+        name: "××カード",
+        kind: "card",
+        balance: 0,
+        closingDay: 15,
+        payMonthOffset: 1,
+        payDay: 10,
+        settleAccountId: "bank",
+      },
+    ];
+    const cardUse = side({
+      id: "card-use",
+      name: "ｻﾌﾞｽｸ",
+      amount: 12_000,
+      categoryCode: "EXP-03",
+      costType: "fixed",
+      accountId: "card",
+    });
+    const rows = buildEntryActualRows([cardUse], entryAmountScope(withCard));
+    expect(rows[0].display).toMatchObject({ value: -12_000, signed: true });
   });
 });

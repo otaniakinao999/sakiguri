@@ -10,8 +10,9 @@
  */
 
 import {
-  accountDelta,
+  depositIdsOf,
   oneSidedReason,
+  viewDelta,
   type BalanceSeries,
   type OneSidedReason,
 } from "@/core/balance";
@@ -67,6 +68,13 @@ export interface LedgerEntry extends CashEvent {
    * 2行の差が、その行の金額と一致しないことがある（間に隠れた行がある）。
    */
   balance: Yen;
+  /**
+   * **いま見ている範囲で、この行が残高を動かす額**（符号付き。AC-58b）。
+   *
+   * 画面に出す金額の符号はここから引く（`amountView`）。0 は動かさない行
+   * ―― 合計の中で閉じる振替と、反映していない振替（`oneSided`）。
+   */
+  delta: Yen;
   /** 繰延された行か。背景色を変え、元の日付を併記する */
   deferred: boolean;
   /** 繰延前の日付。繰延されていなければ undefined */
@@ -209,15 +217,14 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
    * 口座の集合も**系列が合計に使ったものと同じ**ものを使う。別に渡すと、
    * 違う集合で足して終値に着地しなくなる。
    */
-  const depositIds = Object.keys(series.rows[0]?.byAccount ?? {});
+  const depositIds = depositIdsOf(series);
   /* 振替が閉じるかの判定に使う集合。**範囲とは別物。** 範囲で判定すると、
      銀行→現金の振替を銀行だけで見たときに「閉じていない」と誤判定される */
   const deposits = new Set(depositIds);
   /* 残高を積む範囲。系列の proj と必ず同じものを使う。別にすると
      行ごとの残高がその日の終値に着地しない */
   const inScope = scope ? depositIds.filter((id) => scope.has(id)) : depositIds;
-  const totalDelta = (event: CashEvent) =>
-    inScope.reduce((sum, id) => sum + accountDelta(event, id, deposits), 0);
+  const totalDelta = (event: CashEvent) => viewDelta(event, inScope, deposits);
 
   /* 同じ日のイベントを表示順に並べ、その日の始値から積み上げる。
      **絞り込みで隠れる行も積む。** 隠したぶんを飛ばすと、見えている行の
@@ -264,6 +271,9 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
       ...event,
       status: entryStatus,
       balance: runningByEvent.get(event) ?? balanceByDate.get(event.date) ?? 0,
+      /* **残高を積むのに使った額をそのまま持たせる。** 画面側で符号を
+         決め直すと、残高の動きと符号が食い違う（AC-58b） */
+      delta: totalDelta(event),
       deferred: origDate !== undefined,
       origDate,
       /* カード引落は CL-2 の生成物。利用者は動かせない（§4.2 繰延操作） */

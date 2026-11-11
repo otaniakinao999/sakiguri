@@ -65,6 +65,7 @@ import {
   buildEntryActualRows,
   buildEntryMonths,
   buildEntryTodoRows,
+  entryAmountScope,
   formatActualListFooter,
   futureNoteOf,
 } from "./entry-view-model";
@@ -76,6 +77,10 @@ export function EntryScreen() {
   const { data, setData, today, session } = useAppData();
 
   /** 手入力・編集のモーダル。null なら閉じている */
+  /* 金額の符号を見る範囲（AC-58b）。カードも入れる ―― この画面の行は
+     その行の口座の動きを示す（`entryAmountScope`） */
+  const amountScope = useMemo(() => entryAmountScope(data.accounts), [data.accounts]);
+
   const [form, setForm] = useState<Actual | null>(null);
   /** 編集中の実績の id。新規入力なら null */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -308,7 +313,7 @@ export function EntryScreen() {
         </div>
       }
       todoCount={computed.todo.length}
-      todos={buildEntryTodoRows(visibleTodo)}
+      todos={buildEntryTodoRows(visibleTodo, amountScope)}
       openRowId={openRowId}
       onSettleAsIs={(id) => {
         const row = planRow(id);
@@ -339,7 +344,7 @@ export function EntryScreen() {
         setListPage(0);
       }}
       futureNote={futureNoteOf(list, today) ?? undefined}
-      actuals={buildEntryActualRows(list.rows).map((row) => ({
+      actuals={buildEntryActualRows(list.rows, amountScope).map((row) => ({
         ...row,
         /* FR-41。CSV取込で費目を誤って推測された分を、削除せずに直せるようにする */
         actions: (

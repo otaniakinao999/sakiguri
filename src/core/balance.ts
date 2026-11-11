@@ -69,7 +69,10 @@ export interface BalanceSeries {
  * 合計としては相殺されて0になる。
  */
 export function accountDelta(
-  event: CashEvent,
+  /* **予定インスタンスや実績もそのまま渡せる形にしてある。** 読むのは
+     この4つだけで、残高の向き（符号）を知りたい画面は現金イベントを
+     持っていない（実績一覧・ダッシュボードの要対応）。 */
+  event: Pick<CashEvent, "type" | "amount" | "accountId" | "toAccountId">,
   accountId: string,
   deposits: ReadonlySet<string>,
 ): Yen {
@@ -85,6 +88,45 @@ export function accountDelta(
   }
   if (event.accountId !== accountId) return 0;
   return signedAmount(event);
+}
+
+/**
+ * その1件が、**いま見ている範囲**の残高を動かす額（符号付き）。
+ *
+ * `accountDelta` を範囲の口座ぶん足したものである。**残高が減れば負、
+ * 増えれば正、動かさなければ0。**
+ *
+ * **画面に出す金額の符号はここから引く**（要件定義書 §3.3 全体に効く原則・
+ * AC-58b）。`type` で決めると、**両側の明細から記録した振替**
+ * （適用規則5a）で破れる ―― 片側だけ記録した振替は `type = transfer`
+ * ではないのに一方向に残高を動かすので、「振替だから符号なし」にすると
+ * 隣の残高列と食い違う。
+ *
+ * `viewed` と `deposits` は**別物**である。`deposits` は「振替が合計の中で
+ * 閉じるか」の判定に使う現預金の集合で、範囲で判定すると銀行→現金の振替を
+ * 銀行だけで見たときに「閉じていない」と誤判定される。
+ */
+export function viewDelta(
+  event: Pick<CashEvent, "type" | "amount" | "accountId" | "toAccountId">,
+  viewed: readonly string[],
+  deposits: ReadonlySet<string>,
+): Yen {
+  return viewed.reduce((sum, id) => sum + accountDelta(event, id, deposits), 0);
+}
+
+/**
+ * 系列が合計に使った現預金口座。
+ *
+ * **系列から引く。** 別に渡した口座一覧で足すと、違う集合で足して
+ * その日の終値に着地しなくなる（`lib/ledger` の行ごとの残高）。
+ */
+export function depositIdsOf(series: BalanceSeries): string[] {
+  return Object.keys(series.rows[0]?.byAccount ?? {});
+}
+
+/** 系列が持っているカード口座。 */
+export function cardIdsOf(series: BalanceSeries): string[] {
+  return Object.keys(series.rows[0]?.byCard ?? {});
 }
 
 /**

@@ -24,6 +24,7 @@ import {
   buildEntryActualRows,
   buildEntryMonths,
   buildEntryTodoRows,
+  entryAmountScope,
   futureNoteOf,
 } from "@/components/entry/entry-view-model";
 import { Button } from "@/components/ui/button";
@@ -33,12 +34,13 @@ import { buildHeaderStats } from "@/lib/header-stats";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 const fixture = buildEntryFixture();
+const scope = entryAmountScope(FIXTURE_ACCOUNTS);
 const stats = buildHeaderStats(buildEntrySeries(), FIXTURE_ACCOUNTS, FIXTURE_TODAY);
 
 export default function DevEntryWiredPage() {
   const [openRowId, setOpenRowId] = useState<string | null>(
     /* 1行目の予定を開いた状態で出す。Figma 2032:845 と見比べるため */
-    buildEntryTodoRows(fixture.todo).find((r) => r.kind === "plan")?.id ?? null,
+    buildEntryTodoRows(fixture.todo, scope).find((r) => r.kind === "plan")?.id ?? null,
   );
   const [month, setMonth] = useState<string | null>(null);
 
@@ -54,13 +56,13 @@ export default function DevEntryWiredPage() {
             </Button>
           }
           todoCount={fixture.todo.length}
-          todos={buildEntryTodoRows(fixture.todo)}
+          todos={buildEntryTodoRows(fixture.todo, scope)}
           openRowId={openRowId}
           onToggleOther={(id) => setOpenRowId((p) => (p === id ? null : id))}
           months={buildEntryMonths(list, FIXTURE_TODAY)}
           onSelectMonth={setMonth}
           futureNote={futureNoteOf(list, FIXTURE_TODAY) ?? undefined}
-          actuals={buildEntryActualRows(list.rows).map((row) => ({
+          actuals={buildEntryActualRows(list.rows, scope).map((row) => ({
             ...row,
             actions: (
               <>

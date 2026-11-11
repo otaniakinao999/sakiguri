@@ -26,10 +26,10 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 const TODOS: DashboardTodo[] = [
-  { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, amountType: "income", category: "収入" },
-  { id: "2", date: "9/27", title: "事務所家賃", amount: 95_000, amountType: "expense", category: "固定費" },
-  { id: "3", date: "10/1", title: "通信費", amount: 9_800, amountType: "expense", category: "固定費" },
-  { id: "4", date: "10/5", title: "外注費", amount: 140_000, amountType: "expense", category: "変動費" },
+  { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, display: { value: 330_000, signed: true, type: "income" }, category: "収入" },
+  { id: "2", date: "9/27", title: "事務所家賃", amount: 95_000, display: { value: -95_000, signed: true, type: "expense" }, category: "固定費" },
+  { id: "3", date: "10/1", title: "通信費", amount: 9_800, display: { value: -9_800, signed: true, type: "expense" }, category: "固定費" },
+  { id: "4", date: "10/5", title: "外注費", amount: 140_000, display: { value: -140_000, signed: true, type: "expense" }, category: "変動費" },
 ];
 
 export default function DevDashboardPage() {

@@ -12,10 +12,10 @@ import {
   FIXTURE_TODAY,
 } from "../entry-fixture";
 import {
-  amountTypeOf,
   buildEntryActualRows,
   buildEntryMonths,
   buildEntryTodoRows,
+  entryAmountScope,
   futureNoteOf,
 } from "../entry-view-model";
 
@@ -27,7 +27,8 @@ import {
  */
 
 const fixture = buildEntryFixture();
-const todos = buildEntryTodoRows(fixture.todo);
+const SCOPE = entryAmountScope(FIXTURE_ACCOUNTS);
+const todos = buildEntryTodoRows(fixture.todo, SCOPE);
 
 describe("要対応の行", () => {
   it("フィクスチャに2種類の行が揃っている（検査の前提）", () => {
@@ -76,13 +77,13 @@ describe("要対応の行", () => {
   });
 });
 
-describe("金額の向き", () => {
+describe("金額の色（AC-58b）", () => {
   it("振替は neutral。収入は income、費用は expense", () => {
-    expect(amountTypeOf("transfer", "振替")).toBe("neutral");
-    expect(amountTypeOf("income", "収入")).toBe("income");
-    expect(amountTypeOf("expense", "固定費")).toBe("expense");
-    /* 区分が決まらなくても、種別で向きは決まる */
-    expect(amountTypeOf("expense", null)).toBe("expense");
+    const byTitle = new Map(todos.map((r) => [r.title, r]));
+    const income = [...byTitle.values()].find((r) => r.category === "収入");
+    const expense = [...byTitle.values()].find((r) => r.category === "固定費");
+    expect(income?.display.type).toBe("income");
+    expect(expense?.display.type).toBe("expense");
   });
 });
 
@@ -109,7 +110,7 @@ describe("実績一覧", () => {
   });
 
   it("行は実績そのまま。id は実績の id", () => {
-    const rows = buildEntryActualRows(list.rows);
+    const rows = buildEntryActualRows(list.rows, SCOPE);
     expect(rows.map((r) => r.id)).toEqual(list.rows.map((a) => a.id));
   });
 });

@@ -2,7 +2,8 @@ import * as React from "react";
 
 import type { Yen } from "@/core/types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Amount, type AmountType } from "@/components/sakiguri/Amount";
+import { Amount } from "@/components/sakiguri/Amount";
+import type { AmountView } from "@/components/sakiguri/amount-view";
 import { CategoryTag, type Category } from "@/components/sakiguri/CategoryTag";
 import {
   ForecastChart,
@@ -47,7 +48,8 @@ export interface CashflowLedgerEntry {
   date: string;
   title: string;
   amount: Yen;
-  amountType: AmountType;
+  /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
+  display: AmountView;
   category: Category | null;
   status: Status;
   /**
@@ -359,7 +361,12 @@ export function CashflowView({
                         )}
                       </TableCell>
                       <TableCell align="right">
-                        <Amount value={row.amount} type={row.amountType} size="table" />
+                        <Amount
+                          value={row.display.value}
+                          type={row.display.type}
+                          signed={row.display.signed}
+                          size="table"
+                        />
                       </TableCell>
                       {/* 残高は色を付けない。増減ではなく水準なので */}
                       <TableCell align="right" className="num whitespace-nowrap">

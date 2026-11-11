@@ -3,7 +3,8 @@
 import * as React from "react";
 
 import type { Yen } from "@/core/types";
-import { Amount, type AmountType } from "@/components/sakiguri/Amount";
+import { Amount } from "@/components/sakiguri/Amount";
+import type { AmountView } from "@/components/sakiguri/amount-view";
 import { CategoryTag, type Category } from "@/components/sakiguri/CategoryTag";
 import { MonthTab, type MonthTabState } from "@/components/sakiguri/MonthTab";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
@@ -19,8 +20,10 @@ interface RowBase {
   /** 整形済み。例：9/27 */
   date: string;
   title: string;
+  /** 行の金額（正の額）。［実際の金額］の初期値にも使う */
   amount: Yen;
-  amountType: AmountType;
+  /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
+  display: AmountView;
   category: Category | null;
 }
 
@@ -136,7 +139,13 @@ function CandidateBox({
         <div key={c.id} className="flex items-center gap-12">
           <span className="num w-48 shrink-0 t-table text-muted-foreground">{c.date}</span>
           <span className="min-w-0 flex-1 truncate t-body text-foreground">{c.title}</span>
-          <Amount value={c.amount} type={c.amountType} size="body" className="shrink-0" />
+          <Amount
+            value={c.display.value}
+            type={c.display.type}
+            signed={c.display.signed}
+            size="body"
+            className="shrink-0"
+          />
           {c.category ? <CategoryTag category={c.category} /> : null}
           <Button size="sm" onClick={() => onLink?.(c.id)}>
             この予定と照合
@@ -212,8 +221,9 @@ export function EntryView({
                   key={row.id}
                   date={row.date}
                   title={row.title}
-                  amount={row.amount}
-                  amountType={row.amountType}
+                  amount={row.display.value}
+                  amountType={row.display.type}
+                  signed={row.display.signed}
                   category={row.category}
                   status={row.kind === "plan" ? "予定" : "実績"}
                   last={i === todos.length - 1}
@@ -304,8 +314,9 @@ export function EntryView({
                   key={row.id}
                   date={row.date}
                   title={row.title}
-                  amount={row.amount}
-                  amountType={row.amountType}
+                  amount={row.display.value}
+                  amountType={row.display.type}
+                  signed={row.display.signed}
                   category={row.category}
                   status="実績"
                   last={i === actuals.length - 1}
