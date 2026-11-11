@@ -17,22 +17,49 @@
  */
 
 import { fail, signInAsLoadtest } from "./client.ts";
+import { SELECT_COLUMNS } from "../../src/lib/supabase/rows.ts";
 
 /**
- * 消す対象。
+ * 削除の鍵。テーブルごとに主キーが違う。
  *
- * **`ACCOUNT_SCOPED_COLLECTIONS`（src/lib/mutations.ts）と同じ集合。**
- * 片方に足してもう片方に足し忘れると、消し残りが出る（CLAUDE.md §2.8）。
- * `usage_events` は指標の記録なので消さない。
+ * **対象のテーブルは手で並べない。** `SELECT_COLUMNS`（本番が読む全テーブル）
+ * から作り、ここに鍵が無いテーブルがあれば**止まる。** 列挙を手で持つと、
+ * テーブルが増えたときに消し残りが出る ―― 実際に `import_rules` を足した
+ * ときに漏れていた（CLAUDE.md §2.8）。
+ *
+ * `usage_events` は指標の記録なので消さない（`SELECT_COLUMNS` にも無い）。
  */
+const KEYS: Record<string, string> = {
+  accounts: "id",
+  recurring_items: "id",
+  oneoff_items: "id",
+  actuals: "id",
+  overrides: "plan_key",
+  import_rules: "id",
+};
+
+const unkeyed = Object.keys(SELECT_COLUMNS).filter((name) => !(name in KEYS));
+if (unkeyed.length > 0) {
+  fail(
+    `消す鍵が決まっていないテーブルがあります: ${unkeyed.join(", ")}\n` +
+      `  scripts/loadtest/teardown.ts の KEYS に足してください`,
+  );
+}
+
+/** 消す順。**参照の末端から消す**（settings は最後） */
+const ORDER = ["actuals", "oneoff_items", "recurring_items", "overrides", "import_rules", "accounts"];
+
 const TABLES = [
-  { name: "actuals", key: "id" },
-  { name: "oneoff_items", key: "id" },
-  { name: "recurring_items", key: "id" },
-  { name: "overrides", key: "plan_key" },
-  { name: "accounts", key: "id" },
+  ...ORDER.map((name) => ({ name, key: KEYS[name] })),
   { name: "settings", key: "user_id" },
 ] as const;
+
+/* 順序の列挙も突き合わせる。足し忘れると、そのテーブルだけ消えない */
+const ordered = [...ORDER].sort().join(",");
+const keyed = Object.keys(KEYS).sort().join(",");
+if (ordered !== keyed) {
+  fail(`KEYS と ORDER が食い違っています\n  ORDER: ${ordered}\n  KEYS:  ${keyed}`);
+}
 
 async function main(): Promise<void> {
   const { supabase, userId, email } = await signInAsLoadtest();
