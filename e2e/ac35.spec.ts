@@ -81,7 +81,10 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
 
   /* **部分的なデータで計算した残高を出していない** */
   await expect(page.getByText("現預金 見込み")).toHaveCount(0);
-  await expect(page.getByText("今後90日の資金繰り")).toHaveCount(0);
+  /* **画面に出ている文言で見ること。** ここは「今後90日の資金繰り」を
+     見ていたが、**その文言は画面に無い**ので、この行は何をしても通る
+     （§2.11 の4つ目の形）。`口座・カード` は読み込めたときだけ出る */
+  await expect(page.getByText("口座・カード")).toHaveCount(0);
 
   /* 再試行の導線 */
   await expect(page.getByRole("button", { name: "もう一度読み込む" })).toBeVisible();

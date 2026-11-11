@@ -1,7 +1,7 @@
 /**
  * e2e の共通部分
  *
- * **spec は2本だけ**（AC-28a / AC-28b）。ここは両方が使う下ごしらえ。
+ * spec は AC 番号と1対1（CLAUDE.md §2.7）。ここは全部が使う下ごしらえ。
  */
 
 import { expect, type Page, type CDPSession } from "@playwright/test";
@@ -34,8 +34,17 @@ export async function signIn(page: Page): Promise<void> {
   await page.getByLabel("パスワード").fill(env("LOADTEST_PASSWORD"));
   await page.getByRole("button", { name: "サインイン" }).click();
 
-  /* ダッシュボードが出るまで待つ。3,000件の読み込みを含むので長めに */
-  await expect(page.getByText("今後90日の資金繰り")).toBeVisible({
+  /**
+   * ダッシュボードが出るまで待つ。3,000件の読み込みを含むので長めに。
+   *
+   * **画面に実際に出ている文言で待つこと。** ここは長いあいだ
+   * 「今後90日の資金繰り」を待っていたが、**その文言は画面に無かった**
+   * （`DashboardScreen.tsx` のコメントにしか無い。v0.6.0 の作り直しで
+   * 消えたまま）。出ない文言を待つので、**`pnpm e2e` は全部 60 秒待って
+   * 落ちる状態だった。** `口座・カード` は口座を読み終えてから出る
+   * （CLAUDE.md §2.11 の留め具の話と同じ形 ―― 見張る先が死んでいた）。
+   */
+  await expect(page.getByText("口座・カード")).toBeVisible({
     timeout: 60_000,
   });
 }
