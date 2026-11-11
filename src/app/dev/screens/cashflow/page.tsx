@@ -82,7 +82,7 @@ export default function DevCashflowPage() {
             defaultValue: "all",
             options: [
               { value: "all", label: "すべて" },
-              { value: "income", label: "入金" },
+              { value: "income", label: "収入" },
               { value: "fixed", label: "固定費" },
               { value: "variable", label: "変動費" },
               { value: "card", label: "カード引落" },

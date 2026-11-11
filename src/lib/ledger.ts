@@ -37,9 +37,25 @@ export type LedgerKind =
 /** 状態フィルタ（要件定義書 §4.2）。予定+実績／予定のみ／実績のみ。 */
 export type LedgerStatus = "all" | "plan" | "actual";
 
+/**
+ * 種別の絞り込み（要件定義書 §4.2・FR-53）。
+ *
+ * **1本の軸である** ―― 費目グループと費用区分。「出金」の選択肢が無いのが
+ * その証拠で、出ていくものは固定費・変動費・カード引落に分かれている。
+ *
+ * **`all` を除く5つは分割である。** どの行もちょうど1つに入る（AC-58f）。
+ * 保っているのは `matchesKind` の早期 return の連なりで、読んで分かる形
+ * ではない。**1行足すと静かに壊れるので、`ledger.test.ts` が
+ * この一覧から区分を引いて、費目マスタ全体の行を回している。**
+ *
+ * **label は「入金」ではなく「収入」。** 向きの軸ではないため
+ * （2026-11-11・FR-53）。資金移動には入ってくる行（借入実行・短期資金の
+ * 受入）と出ていく行（借入返済・短期資金の返済）が同居していて、
+ * **向きは符号で読む**（AC-58b）。`value` は内部の値なので替えない。
+ */
 export const LEDGER_KINDS: readonly { value: LedgerKind; label: string }[] = [
   { value: "all", label: "すべて" },
-  { value: "income", label: "入金" },
+  { value: "income", label: "収入" },
   { value: "fixed", label: "固定費" },
   { value: "variable", label: "変動費" },
   { value: "settle", label: "カード引落" },

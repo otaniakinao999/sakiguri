@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { buildBalanceSeries } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import { buildMonthlyCashflow } from "@/core/monthly";
+import { CATEGORIES } from "@/core/categories";
 import type {
   CardAccount,
+  CashEvent,
   DepositAccount,
   OneoffItem,
   RecurringItem,
@@ -12,10 +14,16 @@ import type {
 
 import {
   buildLedgerView,
+  LEDGER_KINDS,
   matchesKind,
   type LedgerKind,
   type LedgerStatus,
 } from "../ledger";
+
+/** `all` を除いた区分。**ここが分割である**（AC-58f） */
+const SPLIT_KINDS: LedgerKind[] = LEDGER_KINDS.map((k) => k.value).filter(
+  (v) => v !== "all",
+);
 import {
   customRange,
   DEFAULT_PRESET,
@@ -237,7 +245,7 @@ describe("種別フィルタ（§4.2）", () => {
     );
   });
 
-  it("入金", () => {
+  it("収入", () => {
     expect(new Set(names(build("income", "all", from, to)))).toEqual(
       new Set(["A社 業務委託料"]),
     );
@@ -262,13 +270,13 @@ describe("種別フィルタ（§4.2）", () => {
     );
   });
 
-  it("振替", () => {
+  it("資金移動", () => {
     expect(new Set(names(build("transfer", "all", from, to)))).toEqual(
       new Set(["生活費振替"]),
     );
   });
 
-  it("借入返済の元金（TRF-06）は振替に入る", () => {
+  it("借入返済の元金（TRF-06）は資金移動に入る", () => {
     // type = expense だが資金移動なので、振替フィルタで拾う
     const principal = {
       key: "l:1",
@@ -293,7 +301,9 @@ describe("種別フィルタ（§4.2）", () => {
   it("すべての行がいずれかのフィルタに掛かる", () => {
     const all = build("all", "all", "2026-04", "2026-09");
     const covered = new Set<string>();
-    for (const kind of ["income", "fixed", "variable", "settle", "transfer"] as const) {
+    /* **区分は `LEDGER_KINDS` から引く。** ここに並べると、区分を
+       足したときに測る側が増えない（CLAUDE.md §2.8） */
+    for (const kind of SPLIT_KINDS) {
       for (const e of build(kind, "all", "2026-04", "2026-09").groups.flatMap(
         (g) => g.entries,
       )) {
@@ -735,5 +745,167 @@ describe("行ごとの残高（§4.2 明細列）", () => {
       const i = sameDay.indexOf(t);
       if (i > 0) expect(t.balance).toBe(sameDay[i - 1].balance);
     }
+  });
+});
+
+/* ================== AC-58f 種別の絞り込みは分割 ================== */
+
+/**
+ * AC-58f 種別の絞り込みは分割である（FR-53・§4.2）
+ *
+ * **どの行もちょうど1つの区分に入る。** `all` を除く5つで、入らない行も
+ * 2つに入る行も無い。
+ *
+ * **これを保っているのは `matchesKind` の早期 return の連なりである。**
+ *
+ * ```ts
+ * if (kind === "transfer") return isTransfer;
+ * if (isTransfer) return false;        // ← この1行が分割を作っている
+ * ```
+ *
+ * 読んで分かる形ではないので、**区分を1つ足すと静かに壊れる。** 壊れると、
+ * 区分ごとの件数や金額を並べたときに合計と合わなくなる。
+ *
+ * **区分は `LEDGER_KINDS` から引き、行は費目マスタから作る。** どちらも
+ * 手で並べると、増えたときに測る側が増えない（CLAUDE.md §2.8）。TRF は
+ * この3ヶ月で7件→10件に増えている。
+ *
+ * **「入金」ではなく「収入」である。** 「出金」の選択肢が無いので向きの
+ * 軸ではない。資金移動には**入ってくる行と出ていく行が同居していて**、
+ * 向きは符号で読む（AC-58b）。下でその両方を回している ―― 片方だけだと、
+ * 向きで分ける実装に替えても通る。
+ */
+describe("AC-58f 種別の絞り込みは分割（FR-53）", () => {
+  const base = {
+    key: null,
+    date: "2026-04-10",
+    name: "x",
+    amount: 10_000,
+    bizRatio: 0,
+    accountId: "a1",
+    src: "oneoff" as const,
+  };
+
+  /**
+   * 費目マスタ全体から代表の行を作る。
+   *
+   * | グループ | 作る行 |
+   * |---|---|
+   * | INC | 収入1件 |
+   * | EXP | 固定費と変動費の2件 |
+   * | TRF | 振替・**片側の入金**・**片側の出金**の3件（適用規則5a） |
+   *
+   * これに CL-2 が作るカード引落（`src: "settle"`）を足す。引落は費目では
+   * なく `src` で決まるので、マスタからは作れない。
+   */
+  type Row = { label: string; event: CashEvent };
+
+  const rows: Row[] = [
+    ...CATEGORIES.flatMap((c): Row[] => {
+      const tag = `${c.code} ${c.name}`;
+      if (c.group === "INC") {
+        return [
+          {
+            label: tag,
+            event: { ...base, type: "income" as const, costType: null, categoryCode: c.code },
+          },
+        ];
+      }
+      if (c.group === "EXP") {
+        return (["fixed", "variable"] as const).map((costType): Row => ({
+          label: `${tag}（${costType}）`,
+          event: { ...base, type: "expense" as const, costType, categoryCode: c.code },
+        }));
+      }
+      return [
+        {
+          label: `${tag}（振替）`,
+          event: {
+            ...base,
+            type: "transfer" as const,
+            costType: null,
+            categoryCode: c.code,
+            toAccountId: "a2",
+          },
+        },
+        {
+          label: `${tag}（片側・入ってくる）`,
+          event: { ...base, type: "income" as const, costType: null, categoryCode: c.code },
+        },
+        {
+          label: `${tag}（片側・出ていく）`,
+          event: { ...base, type: "expense" as const, costType: null, categoryCode: c.code },
+        },
+      ];
+    }),
+    {
+      label: "カード引落（CL-2 が作る）",
+      event: {
+        ...base,
+        type: "expense" as const,
+        costType: null,
+        categoryCode: "TRF-04",
+        src: "settle" as const,
+        cardId: "c1",
+      },
+    },
+  ];
+
+  /**
+   * **回した行数の下限を先に見る。**
+   *
+   * 下の `toHaveLength(1)` は、`rows` が0件なら**一度も走らない。**
+   * 費目マスタの取り方を間違えて空になっても「分割である」が通る
+   * （CLAUDE.md §2.11 の3つ目の形）。
+   */
+  it("費目マスタ全体から行が作れている", () => {
+    expect(CATEGORIES.length).toBeGreaterThan(30);
+    expect(rows.length).toBeGreaterThan(CATEGORIES.length);
+    /* 区分のほうも、1つしか無ければ分割を測れない */
+    expect(SPLIT_KINDS.length).toBe(5);
+  });
+
+  it("どの行もちょうど1つの区分に入る", () => {
+    for (const { label, event } of rows) {
+      const hit = SPLIT_KINDS.filter((k) => matchesKind(event, k));
+      expect(hit, `${label} が入った区分: ${hit.join(",") || "どこにも入らない"}`).toHaveLength(1);
+    }
+  });
+
+  /**
+   * **どの区分にも行が1つ以上ある。** 行が来ない区分があると、上の
+   * 「ちょうど1つ」は通ったまま、その選択肢が死んでいる。
+   */
+  it("どの区分にも行がある", () => {
+    for (const kind of SPLIT_KINDS) {
+      const hit = rows.filter((r) => matchesKind(r.event, kind));
+      expect(hit.length, `${kind} に入る行が無い`).toBeGreaterThan(0);
+    }
+  });
+
+  it("資金移動に、入ってくる行と出ていく行が両方ある", () => {
+    const inflow = rows.filter(
+      (r) => matchesKind(r.event, "transfer") && r.event.type === "income",
+    );
+    const outflow = rows.filter(
+      (r) => matchesKind(r.event, "transfer") && r.event.type === "expense",
+    );
+    expect(inflow.length, "資金移動に入ってくる行が無い").toBeGreaterThan(0);
+    expect(outflow.length, "資金移動に出ていく行が無い").toBeGreaterThan(0);
+    /* 向きが違うのに同じ区分に入る ―― だから「入金」ではない */
+    expect(inflow.map((r) => r.label)).toContain("TRF-08 短期資金の受入（片側・入ってくる）");
+    expect(outflow.map((r) => r.label)).toContain("TRF-09 短期資金の返済（片側・出ていく）");
+  });
+
+  it("「すべて」はどの行にも掛かる", () => {
+    for (const { label, event } of rows) {
+      expect(matchesKind(event, "all"), label).toBe(true);
+    }
+  });
+
+  it("選択肢の label が「入金」ではなく「収入」", () => {
+    const income = LEDGER_KINDS.find((k) => k.value === "income");
+    expect(income?.label).toBe("収入");
+    expect(LEDGER_KINDS.map((k) => k.label)).not.toContain("入金");
   });
 });
