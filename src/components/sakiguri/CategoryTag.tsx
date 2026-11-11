@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /** 区分。カード引落は CSV取込 の画面にだけ出てくる（screens.md §1）。 */
-export type Category = "収入" | "固定費" | "変動費" | "振替" | "カード引落";
+export type Category = "収入" | "固定費" | "変動費" | "資金移動" | "カード引落";
 
 /**
  * docs/design/components.md の対応表。独自の割り当てを作らない。
@@ -19,7 +19,7 @@ const VARIANT: Record<Category, React.ComponentProps<typeof Badge>["variant"]> =
   収入: "success",
   固定費: "info",
   変動費: "secondary",
-  振替: "outline",
+  資金移動: "outline",
   カード引落: "outline",
 };
 
@@ -41,7 +41,7 @@ export function categoryTagFor(
 ): Category | null {
   const group = categoryOf(categoryCode).group;
   if (group === "INC") return "収入";
-  if (group === "TRF") return "振替";
+  if (group === "TRF") return "資金移動";
   if (costType === "fixed") return "固定費";
   if (costType === "variable") return "変動費";
   return null;

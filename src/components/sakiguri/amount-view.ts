@@ -48,11 +48,11 @@ export interface AmountViewInput {
 /**
  * 色。**費目が決める。** 符号を付けても費用の色にはしない。
  *
- * `type === "transfer"` も振替に寄せる ―― 費目が TRF でない振替の行
+ * `type === "transfer"` も資金移動に寄せる ―― 費目が TRF でない振替の行
  * （古いデータ）を赤くしないため。
  */
 function toneOf(input: { category: Category | null; type?: string }): AmountType {
-  if (input.category === "振替" || input.type === "transfer") return "neutral";
+  if (input.category === "資金移動" || input.type === "transfer") return "neutral";
   if (input.category === "収入") return "income";
   return "expense";
 }

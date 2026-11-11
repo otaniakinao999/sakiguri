@@ -43,7 +43,7 @@ export const LEDGER_KINDS: readonly { value: LedgerKind; label: string }[] = [
   { value: "fixed", label: "固定費" },
   { value: "variable", label: "変動費" },
   { value: "settle", label: "カード引落" },
-  { value: "transfer", label: "振替" },
+  { value: "transfer", label: "資金移動" },
 ];
 
 export const LEDGER_STATUSES: readonly { value: LedgerStatus; label: string }[] =

@@ -111,13 +111,18 @@ describe("入出金予定表", () => {
     expect(rows.every((r) => r.display.type === "expense")).toBe(true);
   });
 
-  it("収入は income、振替は neutral", () => {
+  it("収入は income、資金移動は neutral", () => {
     const income = view.ledger.filter((r) => r.category === "収入");
     expect(income.length).toBeGreaterThan(0);
     expect(income.every((r) => r.display.type === "income")).toBe(true);
-    expect(
-      view.ledger.filter((r) => r.category === "振替").every((r) => r.display.type === "neutral"),
-    ).toBe(true);
+
+    /* **0件でないことを先に見る。** `every` は空配列に true を返すので、
+       1件も無いと「資金移動は neutral」が必ず通る（CLAUDE.md §2.11 の
+       3つ目の形）。呼び名を「振替」から替えたとき、ここは**文字列が
+       古いまま 0件になって通る**形だった */
+    const transfers = view.ledger.filter((r) => r.category === "資金移動");
+    expect(transfers.length).toBeGreaterThan(0);
+    expect(transfers.every((r) => r.display.type === "neutral")).toBe(true);
   });
 
   it("**備考は1行に1つ。直せない行であることを最優先する**", () => {

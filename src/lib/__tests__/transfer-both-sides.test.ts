@@ -22,7 +22,7 @@ import {
   buildEntryActualRows,
   entryAmountScope,
 } from "@/components/entry/entry-view-model";
-import { buildLedgerView } from "@/lib/ledger";
+import { buildLedgerView, LEDGER_KINDS } from "@/lib/ledger";
 import { emptyAppData } from "@/lib/app-data";
 import { removeAccount } from "@/lib/mutations";
 
@@ -526,5 +526,52 @@ describe("AC-58e 口座の欄のラベルが収支で変わる（FR-52）", () =
   it("振替は「振替元」で、振替先と対になる", () => {
     expect(ACCOUNT_LABEL.transfer).toBe("振替元");
     expect(ACCOUNT_LABEL.transfer.endsWith("元")).toBe(true);
+  });
+});
+
+/* ===================== 区分の呼び名 ===================== */
+
+/**
+ * 資金移動（TRF）の区分名
+ *
+ * **実機で、収入の行（TRF-08 短期資金の受入）に「振替」と出ていた。**
+ * TRF は10件あって、口座間の移動なのは `TRF-01` の1つだけである。
+ * 借入の入金や事業主貸まで「振替」と出ると、別の操作に見える。
+ *
+ * 要件定義書 §3.1.2 はこのグループを**「資金移動」**と呼んでいる。
+ * 画面だけが別の名前を使っていた（CLAUDE.md §2.8）。
+ *
+ * **マスタ全体と突き合わせる。** 費目が増えたときに漏れないように
+ * （TRF はこの3ヶ月で7件→10件に増えている）。
+ */
+describe("資金移動の区分名", () => {
+  const trf = CATEGORIES.filter((c) => c.group === "TRF");
+
+  it("TRF の費目がすべて「資金移動」になる", () => {
+    /* **0件でないことを先に見る。** 空なら `every` は必ず通る（§2.11） */
+    expect(trf.length).toBeGreaterThan(1);
+    for (const c of trf) {
+      expect(categoryTagFor(c.code, null), `${c.code} ${c.name}`).toBe("資金移動");
+    }
+  });
+
+  it("「振替」と出る費目が1つも無い", () => {
+    const all = CATEGORIES.map((c) => categoryTagFor(c.code, "variable"));
+    expect(all).not.toContain("振替");
+  });
+
+  /* **他のグループが巻き込まれていないこと。** 全部「資金移動」を返す
+     実装でも、上の2件は通る（§2.11） */
+  it("収入と費用は呼び名が変わっていない", () => {
+    expect(categoryTagFor("INC-01", null)).toBe("収入");
+    expect(categoryTagFor("EXP-01", "fixed")).toBe("固定費");
+    expect(categoryTagFor("EXP-01", "variable")).toBe("変動費");
+  });
+
+  /* 絞り込みの選択肢も同じ呼び名であること（§2.8。2箇所にある） */
+  it("入出金予定表の絞り込みも「資金移動」", () => {
+    const kind = LEDGER_KINDS.find((k) => k.value === "transfer");
+    expect(kind?.label).toBe("資金移動");
+    expect(LEDGER_KINDS.map((k) => k.label)).not.toContain("振替");
   });
 });

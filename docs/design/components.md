@@ -202,7 +202,9 @@ Figma fileKey: `diqeunxgHCLNIPKVXL4evB`
 | 収入 | Success | `bg-success-subtle`、`text-fg-success`（green） |
 | 固定費 | Info | `bg-primary-subtle`、`text-fg-primary`（teal） |
 | 変動費 | Secondary | `bg-secondary`、`text-secondary-foreground` |
-| 振替・カード引落 | Outline | 枠線のみ |
+| 資金移動・カード引落 | Outline | 枠線のみ |
+
+**区分の名は「資金移動」。** 費目グループ TRF には口座間振替のほかに事業主貸・借入実行・短期資金の受入なども入る。「振替」と出すと、借入の入金が口座間の移動に見える（2026-11-11）。
 
 **区分に Warning を使わない。** warning は残高警告の専用色（v0.6.1）。変動費に当てると、生活防衛ラインを割る月の行と同じ色になる。
 

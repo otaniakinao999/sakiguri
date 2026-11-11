@@ -31,7 +31,7 @@ const BADGE_VARIANTS = [
   "success",
   "warning",
 ] as const;
-const CATEGORIES: Category[] = ["収入", "固定費", "変動費", "振替", "カード引落"];
+const CATEGORIES: Category[] = ["収入", "固定費", "変動費", "資金移動", "カード引落"];
 
 function Row({ title, children }: { title: string; children: React.ReactNode }) {
   return (

@@ -59,7 +59,7 @@ export default function DevCashflowPage() {
           ledger={[
             { id: "1", date: "9/25", title: "○○商会 売上入金", amount: 330_000, display: { value: 330_000, signed: true, type: "income" }, category: "収入", status: "予定" },
             { id: "2", date: "9/27", title: "事務所家賃", amount: 95_000, display: { value: -95_000, signed: true, type: "expense" }, category: "固定費", status: "予定" },
-            { id: "3", date: "9/30", title: "△△信金へ振替", amount: 200_000, display: { value: 200_000, signed: false, type: "neutral" }, category: "振替", status: "実績", note: "合計残高は増減なし" },
+            { id: "3", date: "9/30", title: "△△信金へ振替", amount: 200_000, display: { value: 200_000, signed: false, type: "neutral" }, category: "資金移動", status: "実績", note: "合計残高は増減なし" },
             { id: "4", date: "10/1", title: "通信費", amount: 9_800, display: { value: -9_800, signed: true, type: "expense" }, category: "固定費", status: "実績" },
             { id: "5", date: "10/5", title: "外注費", amount: 140_000, display: { value: -140_000, signed: true, type: "expense" }, category: "変動費", status: "予定" },
             /* Figma の区分は「固定費」だが、カード引落の行に固定費を付けると
@@ -86,7 +86,7 @@ export default function DevCashflowPage() {
               { value: "fixed", label: "固定費" },
               { value: "variable", label: "変動費" },
               { value: "card", label: "カード引落" },
-              { value: "transfer", label: "振替" },
+              { value: "transfer", label: "資金移動" },
             ],
           }}
           kindFilter={{
