@@ -22,7 +22,7 @@
 
 import { expect, test } from "@playwright/test";
 
-import { report, setAsOf, signIn, ymd } from "./support.ts";
+import { expectBalanceShown, report, setAsOf, signIn, ymd } from "./support.ts";
 
 /** FR-43。`STALLED_DAYS` と同じ値 */
 const STALLED_DAYS = 45;
@@ -35,21 +35,21 @@ test("基準日が今日なら警告を出さない。45日を超えたら出す
   /* ---------- 1. 新規利用者の初日。基準日＝今日 ---------- */
   await setAsOf(ymd(0));
   await page.goto("/");
-  await expect(page.getByText("現預金 見込み")).toBeVisible({ timeout: 60_000 });
+  await expectBalanceShown(page);
 
   const onDayOne = await page.getByText(WARNING).count();
 
   /* ---------- 2. 44日前。閾値のすぐ手前 ---------- */
   await setAsOf(ymd(-(STALLED_DAYS - 1)));
   await page.reload();
-  await expect(page.getByText("現預金 見込み")).toBeVisible({ timeout: 60_000 });
+  await expectBalanceShown(page);
 
   const justBefore = await page.getByText(WARNING).count();
 
   /* ---------- 3. 46日前。閾値を超えている ---------- */
   await setAsOf(ymd(-(STALLED_DAYS + 1)));
   await page.reload();
-  await expect(page.getByText("現預金 見込み")).toBeVisible({ timeout: 60_000 });
+  await expectBalanceShown(page);
 
   const afterThreshold = await page.getByText(WARNING).count();
   const text = afterThreshold

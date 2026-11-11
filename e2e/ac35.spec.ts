@@ -32,7 +32,13 @@
 
 import { expect, test } from "@playwright/test";
 
-import { report, signIn } from "./support.ts";
+import {
+  countAllActuals,
+  dashboardBalance,
+  expectBalanceShown,
+  report,
+  signIn,
+} from "./support.ts";
 
 test("件数が合わないときは残高を出さず、失敗を画面に示す", async ({ page }) => {
   await signIn(page);
@@ -50,8 +56,7 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
    * 言える。
    */
   await page.goto("/");
-  const balance = page.getByText("現預金 見込み");
-  await expect(balance).toBeVisible({ timeout: 60_000 });
+  const shown = await expectBalanceShown(page);
   await expect(page.getByText("データを読み込めませんでした")).toHaveCount(0);
 
   /* ---------- 2. 行だけを1つ落とす。通信は成功させる ---------- */
@@ -79,8 +84,17 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
   const failure = page.getByText("データを読み込めませんでした");
   await expect(failure).toBeVisible({ timeout: 60_000 });
 
-  /* **部分的なデータで計算した残高を出していない** */
-  await expect(page.getByText("現預金 見込み")).toHaveCount(0);
+  /**
+   * **部分的なデータで計算した残高を出していない**
+   *
+   * 見る先は Hero の金額である（`support.ts` の `dashboardBalance`）。
+   * **ここは長らく `現預金 見込み` を数えていたが、その帯は
+   * 1280 では `wide:hidden` で常に不可視で、何をしても 0 件だった。**
+   * 残高を出していても通る行である（CLAUDE.md §2.11）。
+   * 上の 1. で `在ること` を先に見ているので、この 0 件は
+   * 横取りのせいだと言える。
+   */
+  await expect(dashboardBalance(page)).toHaveCount(0);
   /* **画面に出ている文言で見ること。** ここは「今後90日の資金繰り」を
      見ていたが、**その文言は画面に無い**ので、この行は何をしても通る
      （§2.11 の4つ目の形）。`口座・カード` は読み込めたときだけ出る */
@@ -94,6 +108,7 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
   const numbers = detail.match(/(\d[\d,]*)件のうち(\d[\d,]*)件/);
 
   report([
+    ["残高（横取りなし）", shown],
     ["横取りしたページ数", droppedFrom],
     ["HTTP ステータス", statuses.join(", ") || "(無し)"],
     ["画面に出た文言", detail.trim()],
@@ -134,7 +149,22 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
    * なので「落とした数ぶん少ない」とは書けない。**書けることは
    * 「足りない」ことと、「落とした数より多くは失っていない」こと。**
    */
-  expect(expected).toBe(3_000);
+  /**
+   * **総件数を写し取らない**（CLAUDE.md §2.8）。
+   *
+   * ここは `3,000` と書いてあったが、`seed.ts` は `--rows` に加えて
+   * `--settled` の分（既定7件）も入れるので実際は 3,007 件あり、
+   * **画面も正しく 3,007 と出しているのにここだけが落ちた。**
+   * DB を数えて突き合わせる。
+   */
+  const dbTotal = await countAllActuals();
+  expect(expected, "画面に出た総件数が DB の行数と合わない").toBe(dbTotal);
+  /* 測りたい負荷になっていること。§5.1 の v1.0 の条件は「3,000件ある
+     状態で」なので、下限として見る */
+  expect(
+    dbTotal,
+    "3,000件に届いていない。pnpm loadtest:seed を流してください",
+  ).toBeGreaterThanOrEqual(3_000);
   expect(received, "件数が一致してしまっている。不一致を作れていない").toBeLessThan(expected);
   expect(received, "落とした数より多く失っている。横取りが壊している").toBeGreaterThanOrEqual(
     expected - droppedFrom,
@@ -153,6 +183,9 @@ test("件数が合わないときは残高を出さず、失敗を画面に示�
   await page.unroute(/\/rest\/v1\/actuals\?/);
   await page.getByRole("button", { name: "もう一度読み込む" }).click();
 
-  await expect(page.getByText("現預金 見込み")).toBeVisible({ timeout: 60_000 });
+  const again = await expectBalanceShown(page);
   await expect(page.getByText("データを読み込めませんでした")).toHaveCount(0);
+  /* **横取りの前と同じ残高に戻っていること。** 全件読めたのに
+     欠けた行の分だけずれていたら、戻していない */
+  expect(again, `横取りをやめたあとの残高が違う: ${shown} → ${again}`).toBe(shown);
 });

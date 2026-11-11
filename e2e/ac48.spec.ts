@@ -22,13 +22,28 @@
  * 3,000 × 1,241 の総当たりになる。これはメインスレッドで動くので、
  * 長ければ**その間クリックが効かない。** 平均の応答では見えない。
  *
- * 前提：`pnpm loadtest:seed`（既定）。未消込が1,200件を超えていることは
+ * 前提：`pnpm loadtest:seed -- --settled=0`。未消込が1,200件を超えていることは
  * seed の出力で確かめる（§9.1 の3つ目）。
+ *
+ * **`--settled=0` が要る。** 既定は 7 件を消し込み済みにする（AC-55 の
+ * ためにあとから入った）。消し込み済みがあると、下の「未消込」を
+ * 引き算で出すことになる ―― すなわち**照合の規則をこちらに写し取る**
+ * （CLAUDE.md §2.8）。それを避けるために、消し込み済みが0件であることを
+ * 先に確かめて止めている。
  */
 
 import { expect, test } from "@playwright/test";
 
-import { countUnmatchedForecast, report, signIn } from "./support.ts";
+import {
+  actualRowDates,
+  actualTotalNote,
+  countAllActuals,
+  countUnmatchedForecast,
+  monthTabs,
+  readActualTotal,
+  report,
+  signIn,
+} from "./support.ts";
 
 /** §5.1「残高再計算 データ変更から画面反映まで 300ms 以内」 */
 const INTERACTION_BUDGET_MS = 300;
@@ -58,15 +73,17 @@ test("3,000件×1,200件で実績入力画面が操作可能", async ({ page }) 
   const started = Date.now();
   await page.goto("/entry");
 
-  const listTitle = page.getByText(/^実績（[\d,]+件）$/);
-  await expect(listTitle).toBeVisible({ timeout: 60_000 });
-  await expect(page.locator("table tbody tr").first()).toBeVisible({
-    timeout: 60_000,
-  });
+  /**
+   * **見る先が v0.6.0 で変わっている**（`support.ts` にまとめてある）。
+   * 見出しの `実績（N件）` は「実績一覧」になり、件数は下の注記へ移った。
+   * 行も `table tbody tr` でなく `div`（`TodoRow`）である。
+   */
+  await expect(actualTotalNote(page)).toBeVisible({ timeout: 60_000 });
+  await expect(actualRowDates(page).first()).toBeVisible({ timeout: 60_000 });
   const firstPaint = Date.now() - started;
 
   /* ---------- 測りたい状態になっているか（§9.1） ---------- */
-  const rows = Number(((await listTitle.textContent()) ?? "").replace(/[^\d]/g, ""));
+  const rows = await readActualTotal(page);
 
   /**
    * **要対応の件数では代用できない。**
@@ -78,9 +95,14 @@ test("3,000件×1,200件で実績入力画面が操作可能", async ({ page }) 
    * **別経路で数える。** 本番の `buildForecast` を DB の行に対して
    * そのまま走らせる（`countUnmatchedForecast`）。
    */
-  const todoTitle = page.getByText(/^要対応（[\d,]+件）$/);
-  await expect(todoTitle).toBeVisible({ timeout: 60_000 });
-  const todo = Number(((await todoTitle.textContent()) ?? "").replace(/[^\d]/g, ""));
+  /* v0.6.0 で「要対応（N件）」は「やること」＋横に `N件`（`Panel` の
+     `count`）になった。見出しからそのパネルに限って引く */
+  const todoPanel = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "やること" }) });
+  const todoCount = todoPanel.locator("header span").filter({ hasText: /^[\d,]+件$/ });
+  await expect(todoCount).toBeVisible({ timeout: 60_000 });
+  const todo = Number(((await todoCount.textContent()) ?? "").replace(/[^\d]/g, ""));
 
   const set = await countUnmatchedForecast();
   /* 消し込み済みが0なら、展開した総数がそのまま未消込である */
@@ -91,19 +113,25 @@ test("3,000件×1,200件で実績入力画面が操作可能", async ({ page }) 
   const unmatched = set.forecast;
 
   /* ---------- 操作してから画面が変わるまで ---------- */
-  const card = page.locator("section").filter({ has: listTitle });
-  const monthSelect = card.locator("#actual-month");
-  const options = await monthSelect.locator("option").count();
+  /**
+   * **月の切替えは `<select>` から MonthTab のボタンになった**（v0.6.0）。
+   * 操作は同じ（見る月を変える）なので、タブを押す形に移す。
+   *
+   * **画面が変わった印は「行の日付が入れ替わること」。**
+   * タブの `aria-current` で見ると、表が再描画される前に先に切り替わるので
+   * **重い計算をまたいで通ってしまう。**
+   */
+  const tabs = monthTabs(page);
+  const tabCount = await tabs.count();
+  expect(tabCount, "月のタブが1つしかない。切り替えを測れない").toBeGreaterThan(1);
 
-  const firstRowText = async () =>
-    (await card.locator("tbody tr").first().textContent()) ?? "";
+  const rowDates = async () =>
+    (await actualRowDates(page).allTextContents()).join(",");
 
-  const before = await firstRowText();
+  const before = await rowDates();
   const clickStarted = Date.now();
-  await monthSelect.selectOption({ index: Math.min(1, options - 1) });
-  await expect
-    .poll(firstRowText, { timeout: 30_000, intervals: [10] })
-    .not.toBe(before);
+  await tabs.nth(1).click();
+  await expect.poll(rowDates, { timeout: 30_000, intervals: [10] }).not.toBe(before);
   const clickResponse = Date.now() - clickStarted;
 
   /* ---------- ロングタスク ---------- */
@@ -132,8 +160,11 @@ test("3,000件×1,200件で実績入力画面が操作可能", async ({ page }) 
 
   /* **測りたい負荷になっているかを先に見る。** 件数が足りないまま
      通しても、確かめたい総当たりが軽いだけ（§9.1 の3つ目） */
-  expect(rows).toBe(EXPECTED_ROWS);
-  expect(set.actuals, "画面と DB の実績件数が合わない").toBe(rows);
+  /* **`toBe` にしない。** §5.1 の条件は「3,000件」を下限として読む。
+     `seed.ts` は `--settled` の分を上乗せするので、等しいと書くと
+     **正しい実装のまま落ちる**（CLAUDE.md §2.8） */
+  expect(rows, "3,000件に届いていない").toBeGreaterThanOrEqual(EXPECTED_ROWS);
+  expect(await countAllActuals(), "画面と DB の実績件数が合わない").toBe(rows);
   expect(
     unmatched,
     "未消込の予定インスタンスが1,200件に届いていない。総当たりが軽く、測りたい負荷になっていない",

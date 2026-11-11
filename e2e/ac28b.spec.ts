@@ -11,7 +11,15 @@
 
 import { expect, test } from "@playwright/test";
 
-import { report, signIn, throttleTo4G } from "./support.ts";
+import {
+  actualRowDates,
+  actualTotalNote,
+  countAllActuals,
+  readActualTotal,
+  report,
+  signIn,
+  throttleTo4G,
+} from "./support.ts";
 
 /** §5.1「初回表示 3秒以内」 */
 const BUDGET_MS = 3_000;
@@ -30,19 +38,27 @@ test("3,000件で実績一覧の初期表示が3秒以内（4G）", async ({ pag
   const started = Date.now();
   await page.goto("/entry");
 
-  const title = page.getByText(/^実績（[\d,]+件）$/);
-  await expect(title).toBeVisible({ timeout: 60_000 });
+  /**
+   * **見る先が v0.6.0 で変わっている。**
+   *
+   * | | |
+   * |---|---|
+   * | 見出し `実績（N件）` | 「実績一覧」になり、件数は下の注記へ移った |
+   * | `table tbody tr` | `TodoRow` は `div` で組まれていて表ではない |
+   *
+   * どちらも `toBeVisible` で待っていたので、**画面は出ているのに
+   * 60 秒待って落ちていた**（測定に入れない形）。
+   */
+  await expect(actualTotalNote(page)).toBeVisible({ timeout: 60_000 });
 
-  /* 見出しだけでなく、行が描かれるまでを含める。見出しは件数が分かった
-     時点で出るので、そこで止めると描画の時間が落ちる */
-  await expect(page.locator("table tbody tr").first()).toBeVisible({
-    timeout: 60_000,
-  });
+  /* 注記だけでなく、行が描かれるまでを含める。件数は分かった時点で
+     出るので、そこで止めると描画の時間が落ちる */
+  await expect(actualRowDates(page).first()).toBeVisible({ timeout: 60_000 });
   const elapsed = Date.now() - started;
 
   /* 画面に出ている総件数。**投入したデータで測れているかの確認** */
-  const heading = (await title.textContent()) ?? "";
-  const shown = Number(heading.replace(/[^\d]/g, ""));
+  const shown = await readActualTotal(page);
+  const rowsDrawn = await actualRowDates(page).count();
 
   /* ブラウザ側の時刻でも取る。Date.now() との食い違いを見るため */
   const nav = await page.evaluate(() => {
@@ -74,6 +90,7 @@ test("3,000件で実績一覧の初期表示が3秒以内（4G）", async ({ pag
   console.log("\n===== AC-28b 実績一覧の初期表示（4G） =====");
   report([
     ["画面に出た総件数", shown.toLocaleString()],
+    ["描いた行数（この月の1ページ）", rowsDrawn],
     ["開いてから行が出るまで", `${elapsed.toLocaleString()} ms`],
     ["目標値（§5.1）", `${BUDGET_MS.toLocaleString()} ms`],
     ["navigation DOMContentLoaded", nav ? `${nav.domContentLoaded} ms` : "-"],
@@ -88,7 +105,16 @@ test("3,000件で実績一覧の初期表示が3秒以内（4G）", async ({ pag
 
   /* **件数を先に確かめる。** 0件や少ない件数で3秒を切っても、
      測りたいものを測っていない（§9.1・CLAUDE.md §2.11） */
-  expect(shown).toBe(EXPECTED_ROWS);
+  expect(await countAllActuals(), "画面と DB の実績件数が合わない").toBe(shown);
+  /* **`toBe` にしない。** §5.1 の条件は「3,000件ある状態で」なので下限である。
+     `seed.ts` は `--settled` の分を上乗せするので、等しいと書くと
+     **正しい実装のまま落ちる**（CLAUDE.md §2.8） */
+  expect(
+    shown,
+    "3,000件に届いていない。測りたい負荷になっていない",
+  ).toBeGreaterThanOrEqual(EXPECTED_ROWS);
+  /* 行が実際に描かれていること。**0行なら速いのは当たり前** */
+  expect(rowsDrawn, "行が1つも描かれていない").toBeGreaterThan(0);
 
   expect(elapsed).toBeLessThanOrEqual(BUDGET_MS);
 });

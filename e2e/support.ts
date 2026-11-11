@@ -4,7 +4,7 @@
  * spec は AC 番号と1対1（CLAUDE.md §2.7）。ここは全部が使う下ごしらえ。
  */
 
-import { expect, type Page, type CDPSession } from "@playwright/test";
+import { expect, type Locator, type Page, type CDPSession } from "@playwright/test";
 
 export function env(name: string): string {
   const value = process.env[name];
@@ -47,6 +47,120 @@ export async function signIn(page: Page): Promise<void> {
   await expect(page.getByText("口座・カード")).toBeVisible({
     timeout: 60_000,
   });
+}
+
+/**
+ * ダッシュボードに出ている残高の**金額そのもの**。
+ *
+ * **`現預金 見込み` を見張らない。** あの帯（`BalanceHeader`）は v0.6.0 の
+ * `src/app/(app)/layout.tsx` で `<div className="wide:hidden">` に入っていて、
+ * **Playwright の 1280 幅では常に不可視**である（狭いときだけ出る。広い
+ * ときは Hero と PageHeader が同じ値を出すので二重になるため）。
+ *
+ * | | |
+ * |---|---|
+ * | `toBeVisible()` で待つ | `unexpected value "hidden"` で必ず落ちる |
+ * | `toHaveCount(0)` で「出ていない」を測る | **何をしても通る** |
+ *
+ * 後者が CLAUDE.md §2.11 の「無いことを測る条項は、見る先が間違っていても
+ * 通る」そのものである。1280 で実際に残高を出しているのは Hero の
+ * 「今日の残高（M月D日）」の下に並ぶ金額（`DashboardView.tsx`、`t-balance`）
+ * なので、そこを見る。
+ *
+ * **ラベルではなく金額を返す。** ラベルは残高の値が無くても出せるので、
+ * ラベルだけを見ると「残高が出ている」の証拠にならない。
+ */
+export function dashboardBalance(page: Page): Locator {
+  return page.locator("span.t-balance");
+}
+
+/**
+ * ダッシュボードの残高が**金額として**出ていることを確かめ、その文字列を返す。
+ *
+ * **「無いこと」を測る条項は、同じ実行の中で「在ること」も測る**
+ * （CLAUDE.md §2.11）。良いデータで出ることを先に見ておかないと、
+ * 「出ない」のが仕様どおりなのか、こちらが違う場所を見ているのかを
+ * 区別できない。
+ *
+ * 金額の形まで見る。`—`（読み込み前のプレースホルダ）や空文字で通さない。
+ */
+export async function expectBalanceShown(page: Page): Promise<string> {
+  const amount = dashboardBalance(page);
+  await expect(amount).toBeVisible({ timeout: 60_000 });
+  const text = ((await amount.textContent()) ?? "").trim();
+  expect(text, `残高が金額になっていない: ${text}`).toMatch(/^[−-]?¥[\d,]+$/);
+  return text;
+}
+
+/**
+ * 実績一覧のパネル（`/entry`）。
+ *
+ * **`実績（N件）` を見張らない。** v0.6.0 で見出しは「実績一覧」になり、
+ * 件数は下の注記に移った（`EntryScreen.tsx` の `listFooter`）。
+ * 古い形を待つと、**画面は正しく出ているのに 60 秒待って落ちる。**
+ */
+export function actualListPanel(page: Page): Locator {
+  return page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "実績一覧" }) });
+}
+
+/** 一覧の下の「全N件を出しています」。見出しから移った総件数（AC-28） */
+export function actualTotalNote(page: Page): Locator {
+  return actualListPanel(page)
+    .locator("p")
+    .filter({ hasText: /全[\d,]+件を出しています/ });
+}
+
+/** 上の注記から読んだ総件数 */
+export async function readActualTotal(page: Page): Promise<number> {
+  const text = (await actualTotalNote(page).textContent()) ?? "";
+  const hit = text.match(/全([\d,]+)件/);
+  expect(hit, `総件数が読めない: ${text}`).not.toBeNull();
+  return Number(hit![1].replace(/,/g, ""));
+}
+
+/**
+ * 実績の行の日付の列。
+ *
+ * **`table tbody tr` では引けない。** v0.6.0 の `TodoRow` は `div` で
+ * 組んであり、表ではない。日付の列（`num w-48`）を行の数として使う。
+ */
+export function actualRowDates(page: Page): Locator {
+  return actualListPanel(page).locator("span.num.w-48");
+}
+
+/** 月のタブ（MonthTab）。「2026年1月」の形 */
+export function monthTabs(page: Page): Locator {
+  return actualListPanel(page).getByRole("button", {
+    name: /^\d{4}年\d{1,2}月$/,
+  });
+}
+
+/**
+ * `actuals` の全行数を DB から数える。
+ *
+ * **投入した件数を写し取らない**（CLAUDE.md §2.8）。`seed.ts` は
+ * `--rows` に加えて `--settled` の分も入れるので、`3,000` と書き込むと
+ * **正しい実装のまま落ちる**（実際に 3,007 で落ちた）。
+ */
+export async function countAllActuals(): Promise<number> {
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(
+    env("NEXT_PUBLIC_SUPABASE_URL"),
+    env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const auth = await supabase.auth.signInWithPassword({
+    email: env("LOADTEST_EMAIL"),
+    password: env("LOADTEST_PASSWORD"),
+  });
+  if (auth.error) throw new Error(`サインイン: ${auth.error.message}`);
+  const { count, error } = await supabase
+    .from("actuals")
+    .select("*", { count: "exact", head: true });
+  if (error) throw new Error(`actuals の件数: ${error.message}`);
+  return count ?? 0;
 }
 
 /**

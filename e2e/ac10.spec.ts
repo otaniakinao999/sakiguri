@@ -29,7 +29,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { env, report } from "./support.ts";
+import { env, expectBalanceShown, report } from "./support.ts";
 
 /** 保存のデバウンス（FR-17）。余裕を持って待つ */
 const SAVE_DEBOUNCE_MS = 400;
@@ -41,6 +41,7 @@ test("ブラウザを閉じて開き直しても、サインインと入力が�
 
   let signedInAfterReopen = false;
   let valueAfterReopen = "";
+  let before = "";
 
   try {
     /* ---------- 1回目。サインインして値を変える ---------- */
@@ -53,10 +54,33 @@ test("ブラウザを閉じて開き直しても、サインインと入力が�
     await page.getByLabel("メールアドレス").fill(env("LOADTEST_EMAIL"));
     await page.getByLabel("パスワード").fill(env("LOADTEST_PASSWORD"));
     await page.getByRole("button", { name: "サインイン" }).click();
-    await expect(page.getByText("現預金 見込み")).toBeVisible({ timeout: 60_000 });
+    /* **残高が出るまで待つ。** 1280 では Hero の金額が残高の出しどころ
+       （`support.ts` の `dashboardBalance`） */
+    await expectBalanceShown(page);
 
     await page.goto(`${baseURL}/settings`);
-    const field = page.getByLabel("生活防衛ライン");
+
+    /**
+     * 生活防衛ラインの欄。
+     *
+     * **v0.6.0 で「変更」を押すまで入力欄が出なくなった**（普段は
+     * 金額が文字で出ているだけ。`SettingsScreen.tsx` の `editReserve`）。
+     * それまでは `getByLabel` で直に引けていた。
+     *
+     * **パネルの見出しと区別するため `exact` にする**
+     * （見出しは「基準日と生活防衛ライン」）。「変更」は基準日にも
+     * あるので、**ラベルから親に上がってその欄の中だけを見る。**
+     */
+    const block = page
+      .getByText("生活防衛ライン", { exact: true })
+      .locator("xpath=..");
+    await expect(block).toBeVisible({ timeout: 30_000 });
+    /* 入れる前の表示を控えておく。**変わらない値を「残った」と
+       読み違えないため**（marker は毎回違うが、側からも見ておく） */
+    before = ((await block.locator("span.num").textContent()) ?? "").trim();
+
+    await block.getByRole("button", { name: "変更" }).click();
+    const field = block.getByLabel("生活防衛ライン");
     await expect(field).toBeVisible({ timeout: 30_000 });
     await field.fill(String(marker));
     await field.blur();
@@ -80,9 +104,14 @@ test("ブラウザを閉じて開き直しても、サインインと入力が�
       (await reopened.getByLabel("パスワード").count()) === 0;
 
     if (signedInAfterReopen) {
-      const again = reopened.getByLabel("生活防衛ライン");
+      /* **表示されている金額を読む。** 入力欄の値でなく画面に出ている
+         数字で見る ―― 利用者が「残っている」と判断するのはこちらである */
+      const again = reopened
+        .getByText("生活防衛ライン", { exact: true })
+        .locator("xpath=..")
+        .locator("span.num");
       await expect(again).toBeVisible({ timeout: 60_000 });
-      valueAfterReopen = (await again.inputValue()).replace(/[^\d]/g, "");
+      valueAfterReopen = ((await again.textContent()) ?? "").replace(/[^\d]/g, "");
     }
 
     await second.close();
@@ -91,10 +120,18 @@ test("ブラウザを閉じて開き直しても、サインインと入力が�
   }
 
   report([
+    ["入れる前の表示", before || "(読めない)"],
     ["入れた値", marker.toLocaleString()],
     ["開き直したあとサインイン済み", signedInAfterReopen ? "はい" : "**いいえ**"],
     ["開き直したあとの値", valueAfterReopen || "(読めない)"],
   ]);
+
+  /* **入れる前と違う値を入れていること。** 元から同じ値だったら
+     「残った」が何も測らない（CLAUDE.md §2.11） */
+  expect(
+    before.replace(/[^\d]/g, ""),
+    "入れる前から同じ値だった。何も変えていない",
+  ).not.toBe(String(marker));
 
   expect(
     signedInAfterReopen,
