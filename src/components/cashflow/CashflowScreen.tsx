@@ -168,6 +168,8 @@ export function CashflowScreen() {
       series: computed.series,
       monthly,
       accounts: data.accounts,
+      /* 日別は1口座ぶん（FR-64）。合計を見ているときは出さない */
+      accountId: accountScope === "all" ? null : accountScope,
       view,
       from: rows[0]?.date ?? today,
       to: rows[rows.length - 1]?.date ?? today,
@@ -175,7 +177,17 @@ export function CashflowScreen() {
       reserveLine,
       stats: buildHeaderStats(computed.series, data.accounts, today),
     });
-  }, [computed, range, kind, status, today, reserveLine, data.accounts, scope]);
+  }, [
+    computed,
+    range,
+    kind,
+    status,
+    today,
+    reserveLine,
+    data.accounts,
+    accountScope,
+    scope,
+  ]);
 
   /* ---------- 指標（PoC開発計画 §4） ----------
      予定がどこまで先にあるかを記録する。金額も日付も送らない
@@ -244,6 +256,7 @@ export function CashflowScreen() {
       monthlyChart={model.monthlyChart}
       months={model.months}
       monthsNote={model.monthsNote}
+      accountDaily={model.accountDaily}
       ledger={model.ledger}
       ledgerMonths={model.ledgerMonths}
       ledgerTotal={formatLedgerTotal(model.total)}

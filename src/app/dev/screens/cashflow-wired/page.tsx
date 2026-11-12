@@ -40,6 +40,7 @@ export default function DevCashflowWiredPage() {
     series: fixture.series,
     monthly: fixture.monthly,
     accounts: FIXTURE_ACCOUNTS,
+    accountId: accountScope === "all" ? null : accountScope,
     view: fixture.view,
     from: fixture.from,
     to: fixture.to,
@@ -81,6 +82,7 @@ export default function DevCashflowWiredPage() {
           monthlyChart={view.monthlyChart}
           months={view.months}
           monthsNote={view.monthsNote}
+          accountDaily={view.accountDaily}
           ledger={view.ledger}
           ledgerMonths={view.ledgerMonths}
           ledgerTotal={formatLedgerTotal(view.total)}

@@ -67,6 +67,7 @@ function ledgerRows(scope?: ReadonlySet<string>) {
     series: fixture.series,
     monthly: fixture.monthly,
     accounts: FIXTURE_ACCOUNTS,
+    accountId: null,
     view: fixture.view,
     from: fixture.from,
     to: fixture.to,
@@ -288,6 +289,7 @@ describe("AC-70 口座が見つからない行", () => {
       series,
       monthly,
       accounts,
+      accountId: null,
       view: buildLedgerView({
         series,
         monthly,

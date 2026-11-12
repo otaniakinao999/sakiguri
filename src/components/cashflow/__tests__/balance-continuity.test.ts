@@ -20,6 +20,7 @@ const view = buildCashflowViewModel({
   series: fixture.series,
   monthly: fixture.monthly,
   accounts: FIXTURE_ACCOUNTS,
+  accountId: null,
   view: fixture.view,
   from: fixture.from,
   to: fixture.to,

@@ -19,6 +19,7 @@ import { MonthJumpNav } from "@/components/sakiguri/MonthJumpNav";
 import { Panel } from "@/components/sakiguri/Panel";
 import { StickyBar } from "@/components/sakiguri/StickyBar";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
+import { Callout } from "@/components/sakiguri/Callout";
 import { StatusChip, type Status } from "@/components/sakiguri/StatusChip";
 import {
   Table,
@@ -27,7 +28,7 @@ import {
   TableHeaderRow,
   TableRow,
 } from "@/components/sakiguri/Table";
-import { formatYen } from "@/lib/format";
+import { formatSignedYen, formatYen } from "@/lib/format";
 
 /* ---------------------------------------------------------------- 型 */
 
@@ -99,6 +100,33 @@ export interface CashflowLedgerEntry {
   planHref?: string;
 }
 
+/**
+ * 口座の日ごとの増減と残高（FR-64・AC-71）。
+ *
+ * **出納帳と1日ずつ突き合わせるための表である。** 月次資金繰り表は
+ * 月単位、残高推移のグラフは合計なので、どちらも「どの日でずれたか」を
+ * 答えない（制約11）。
+ */
+export interface CashflowDailyRow {
+  /** 整形済み。例：10/14 */
+  date: string;
+  delta: Yen;
+  balance: Yen;
+  /** 件数。「2件」「1件（予定1件）」 */
+  note: string;
+}
+
+export interface CashflowDaily {
+  accountName: string;
+  opening: Yen;
+  closing: Yen;
+  /** 増減の合計。**行から足したもの**（残高の差ではない。AC-71） */
+  total: Yen;
+  /** 合計と「期末 − 期首」の差。**0 でなければ画面に出す** */
+  gap: Yen;
+  rows: CashflowDailyRow[];
+}
+
 export interface TabGroup<T extends string> {
   value?: T;
   onChange?: (value: string) => void;
@@ -133,6 +161,14 @@ export interface CashflowViewProps {
   months: CashflowMonthRow[];
   /** 表の下の注記。ハイライトした月の名を含む */
   monthsNote: React.ReactNode;
+
+  /**
+   * 口座を選んでいるときの日別（FR-64）。合計を見ているときは null。
+   *
+   * **明細の絞り込みには従わない。** 種別や状態で絞ると増減の合計が
+   * 「期末 − 期首」と合わなくなり、AC-71 の留め具が意味を失う。
+   */
+  accountDaily?: CashflowDaily | null;
 
   ledger: CashflowLedgerEntry[];
   /** 明細の月へ飛ぶ見出し。view-model が ledger と同じループで作る（要望9） */
@@ -207,6 +243,7 @@ export function CashflowView({
   monthlyChart,
   months,
   monthsNote,
+  accountDaily,
   ledger,
   ledgerMonths,
   period,
@@ -311,6 +348,105 @@ export function CashflowView({
             </tbody>
           </Table>
           <p className="t-body-sm text-muted-foreground">{monthsNote}</p>
+        </Panel>
+
+        {/* 口座の日ごとの増減と残高（FR-64・AC-71）。
+            **出納帳と1日ずつ突き合わせるための表。** 月次資金繰り表は
+            月単位、グラフは合計なので、どちらも「どの日でずれたか」を
+            答えない（制約11） */}
+        <Panel title="口座の日ごとの増減と残高">
+          {accountDaily === null || accountDaily === undefined ? (
+            <p className="t-body-sm text-muted-foreground">
+              口座を選ぶと、その口座の日ごとの増減と残高が出ます。出納帳や
+              通帳と1日ずつ突き合わせるための表です。
+            </p>
+          ) : (
+            <>
+              <p className="t-body-sm text-muted-foreground">
+                {accountDaily.accountName}。この表は上の絞り込みに従いません
+                ―― 絞ると増減の合計が残高の動きと合わなくなります。
+              </p>
+
+              <Table density="compact">
+                <colgroup>
+                  <col className="w-[14%]" />
+                  <col className="w-[26%]" />
+                  <col className="w-[26%]" />
+                  <col className="w-[34%]" />
+                </colgroup>
+                <TableHeaderRow>
+                  <TableHead>日付</TableHead>
+                  <TableHead align="right">増減</TableHead>
+                  <TableHead align="right">残高</TableHead>
+                  <TableHead>件数</TableHead>
+                </TableHeaderRow>
+                <tbody>
+                  <TableRow fixedHeight>
+                    <TableCell kind="group" colSpan={2}>
+                      期首残高
+                    </TableCell>
+                    <TableCell kind="group" align="right">
+                      <span className="num">{formatYen(accountDaily.opening)}</span>
+                    </TableCell>
+                    <TableCell kind="group" />
+                  </TableRow>
+
+                  {accountDaily.rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-24 text-center text-muted-foreground">
+                        この期間に、この口座を動かした行はありません。
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    accountDaily.rows.map((row) => (
+                      <TableRow key={row.date} fixedHeight>
+                        <TableCell className="num whitespace-nowrap">{row.date}</TableCell>
+                        <TableCell align="right">
+                          {/* **増減は符号を必ず付ける。** 0 の行は残高に
+                              反映していない振替（`oneSidedReason`） */}
+                          <Amount value={row.delta} signed size="table" />
+                        </TableCell>
+                        <TableCell align="right" className="num whitespace-nowrap">
+                          {formatYen(row.balance)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{row.note}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+
+                  <TableRow fixedHeight last>
+                    {/* **「合計」。** 増減の列には合計を、残高の列には
+                        期末残高を置く ―― 行の見出しを「期末残高」に
+                        すると、隣の +¥27,000 が残高に読める */}
+                    <TableCell kind="group">合計</TableCell>
+                    <TableCell kind="group" align="right">
+                      <Amount value={accountDaily.total} signed size="table" />
+                    </TableCell>
+                    <TableCell kind="group" align="right">
+                      <span className="num">{formatYen(accountDaily.closing)}</span>
+                    </TableCell>
+                    <TableCell kind="group" />
+                  </TableRow>
+                </tbody>
+              </Table>
+
+              {/* AC-71 の留め具を画面にも出す。**合うときも出す** ――
+                  出ないものだけを見ると、こちらが違う場所を見ている
+                  場合と区別が付かない（CLAUDE.md §2.11） */}
+              {accountDaily.gap === 0 ? (
+                <p className="t-body-sm text-muted-foreground">
+                  期首残高 {formatYen(accountDaily.opening)} ＋ 増減の合計{" "}
+                  {formatSignedYen(accountDaily.total)} ＝ 期末残高{" "}
+                  {formatYen(accountDaily.closing)}。
+                </p>
+              ) : (
+                <Callout tone="error">
+                  増減の合計が残高の動きと {formatYen(Math.abs(accountDaily.gap))}{" "}
+                  ずれています。どこかの行を二重に数えているか、落としています。
+                </Callout>
+              )}
+            </>
+          )}
         </Panel>
 
         {/* 入出金予定表 — 2030:310 */}

@@ -72,6 +72,7 @@ function run(actuals: Actual[]) {
     series,
     monthly,
     accounts,
+    accountId: null,
     view,
     from: "2026-10-01",
     to: "2026-10-31",

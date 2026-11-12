@@ -8,6 +8,7 @@
  * 同じ形（dashboard-view-model.ts）。React を import しない。
  */
 
+import { buildAccountDaily } from "@/core/account-daily";
 import type { BalanceSeries, OneSidedReason } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import {
@@ -28,7 +29,11 @@ import {
 import type { LedgerEntry, LedgerView } from "@/lib/ledger";
 import { planSettingsHref } from "@/lib/plan-anchor";
 
-import type { CashflowLedgerEntry, CashflowMonthRow } from "./CashflowView";
+import type {
+  CashflowDaily,
+  CashflowLedgerEntry,
+  CashflowMonthRow,
+} from "./CashflowView";
 
 export interface CashflowViewModel {
   stats: PageHeaderStat[];
@@ -42,6 +47,8 @@ export interface CashflowViewModel {
   monthsNote: string;
   /** 残高推移の「月次」。日次とは出すものが違う（棒と月中の最低を重ねる） */
   monthlyChart: MonthlyBalancePoint[];
+  /** 口座を選んでいるときの日別（FR-64・AC-71）。合計のときは null */
+  accountDaily: CashflowDaily | null;
   ledger: CashflowLedgerEntry[];
   /**
    * 明細の月へ飛ぶための見出し（要望9）。
@@ -58,8 +65,15 @@ export interface CashflowViewModel {
 export interface CashflowViewModelInput {
   series: BalanceSeries;
   monthly: readonly MonthlyCashflowRow[];
-  /** 資金移動の向きに出す口座名（FR-63・AC-70） */
+  /** 資金移動の向きに出す口座名（FR-63・AC-70）。日別の期首残高にも使う */
   accounts: readonly Account[];
+  /**
+   * 見ている口座（FR-64）。合計を見ているときは null。
+   *
+   * **`scope` とは別に受け取る。** あちらは集合で、日別は1口座ぶんしか
+   * 出さない（2口座を足した「日ごとの残高」は出納帳と突き合わない）。
+   */
+  accountId: string | null;
   /** 期間で絞ったあとの明細（lib/ledger の出力） */
   view: LedgerView;
   /** 表示する期間。グラフの横幅もこれに従う */
@@ -132,6 +146,7 @@ export function buildCashflowViewModel({
   series,
   monthly,
   accounts,
+  accountId,
   view,
   from,
   to,
@@ -235,8 +250,18 @@ export function buildCashflowViewModel({
     });
   }
 
+  /**
+   * 口座の日ごとの増減と残高（FR-64・AC-71）。
+   *
+   * **明細の絞り込み（`view`）を通さない。** 種別や状態で絞ると増減の
+   * 合計が「期末 − 期首」と合わなくなり、留め具が意味を失う。
+   * 期間はグラフと同じ `from` / `to` に揃える。
+   */
+  const accountDaily = buildDaily(series, accounts, accountId, from, to);
+
   return {
     stats,
+    accountDaily,
     chart: {
       points: buildForecastPoints(series.rows, series.actualEnd, from, to),
       todayT: msOf(today),
@@ -248,6 +273,47 @@ export function buildCashflowViewModel({
     ledger,
     ledgerMonths,
     total: view.total,
+  };
+}
+
+/**
+ * 日別の表（FR-64）。口座を選んでいなければ null。
+ *
+ * **件数を出す。** 増減が0の日があるため ―― 残高に反映していない振替
+ * （振替先が未設定・カード）は明細に在るのに残高を動かさない。件数が
+ * 無いと「この日は何も無い」と読まれる。
+ *
+ * **予定の件数を併記する。** 残高は予測系列から取る（AC-49a）ので、
+ * 未記録の予定がある日から先は出納帳と食い違う。その理由が読めるように
+ * しておく。
+ */
+function buildDaily(
+  series: BalanceSeries,
+  accounts: readonly Account[],
+  accountId: string | null,
+  from: DateStr,
+  to: DateStr,
+): CashflowDaily | null {
+  if (accountId === null) return null;
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) return null;
+
+  const daily = buildAccountDaily({ series, accounts, accountId, from, to });
+  return {
+    accountName: account.name,
+    opening: daily.opening,
+    closing: daily.closing,
+    total: daily.total,
+    gap: daily.gap,
+    rows: daily.rows.map((row) => ({
+      date: formatMonthDay(row.date),
+      delta: row.delta,
+      balance: row.balance,
+      note:
+        row.planCount === 0
+          ? `${row.count}件`
+          : `${row.count}件（予定${row.planCount}件）`,
+    })),
   };
 }
 
