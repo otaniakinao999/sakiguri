@@ -13,6 +13,7 @@ import { useState } from "react";
 import { buildBalanceSeries, depositIdsOf } from "@/core/balance";
 import { buildForecast, recurringKey } from "@/core/forecast";
 import { checkImportBalance } from "@/core/balance-check";
+import { applyNameSource, type NameSourceEntry } from "@/core/name-source";
 import {
   buildImportRows,
   detectColumns,
@@ -133,6 +134,20 @@ const DEV_RULES: ImportRule[] = [
   { id: "d2", pattern: "ﾂｳｼﾝﾋ", accountId: null, direction: null, categoryCode: "EXP-03", costType: "fixed", bizRatio: 50 },
 ];
 
+/**
+ * 摘要の出どころ（FR-62・AC-69）。デビット明細の代わり。
+ *
+ * **1件だけ当てている。** 全行に当てると「触らなかった行」が1行も出ず、
+ * **全部差し替える実装と区別が付かない**（CLAUDE.md §2.11）。
+ * 3行目（ﾂｳｼﾝﾋ 10,230）が「ＮＴＴ東日本」に差し替わり、元の摘要が
+ * 併記される。残りの行は触られていない。
+ *
+ * **行は増えない**（AC-69）。確認画面の件数は差し替えの前後で同じである。
+ */
+const DEV_NAME_SOURCE: NameSourceEntry[] = [
+  { date: "2026-10-01", amount: 10_230, name: "ＮＴＴ東日本" },
+];
+
 /** `historyKeyOf` は先頭4文字。`ﾌﾘｺﾐ` が4行目の摘要に当たる */
 const DEV_HISTORY: HistoryEntry[] = [
   { name: "ﾌﾘｺﾐ ﾀﾅｶｻﾝ", categoryCode: "INC-01", costType: null, bizRatio: 100 },
@@ -162,15 +177,19 @@ export default function DevImportWiredPage() {
   const [rules, setRules] = useState<ImportRule[]>(DEV_RULES);
   const [disabled, setDisabled] = useState<string[]>([]);
   const [preview, setPreview] = useState<ImportRow[]>(() =>
-    buildImportRows({
-      rows,
-      mapping: detectColumns(rows),
-      accountId: "a1",
-      candidates: series.unmatchedForecast,
-      history: DEV_HISTORY,
-      existing: ALREADY_IMPORTED,
-      rules: DEV_RULES,
-    }),
+    /* **本番と同じ順序。** 行を組み立ててから摘要を差し替える（FR-62） */
+    applyNameSource(
+      buildImportRows({
+        rows,
+        mapping: detectColumns(rows),
+        accountId: "a1",
+        candidates: series.unmatchedForecast,
+        history: DEV_HISTORY,
+        existing: ALREADY_IMPORTED,
+        rules: DEV_RULES,
+      }),
+      DEV_NAME_SOURCE,
+    ),
   );
 
   return (
@@ -189,6 +208,8 @@ export default function DevImportWiredPage() {
           }))}
           accountId="a1"
           fileName="○○銀行_2026-09.csv"
+          nameSourceFile="デビット明細_2026-10.csv"
+          nameSourceCount={DEV_NAME_SOURCE.length}
           mapping={mapping}
           columns={rows[0].map((cell, i) => ({
             value: i,

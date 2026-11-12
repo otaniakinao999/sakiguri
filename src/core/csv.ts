@@ -400,9 +400,30 @@ export function effectiveDirection(
 
 /** CL-10 の当たり判定の対象になる行の情報。 */
 export interface RuleTarget {
+  /** **摘要の原文**（`ruleTargetOf`） */
   name: string;
   type: EntryType;
   accountId: string;
+}
+
+/**
+ * 取込行から、ルールの当たり判定の対象を作る（CL-10・FR-62）。
+ *
+ * **ルールが見るのは摘要の原文である。** 表示名は、別の明細からの差し替え
+ * （FR-62）とルール自身の置き換え（FR-59）で変わる。表示名で当てると、
+ *
+ * - 差し替わった行にはルールが当たらなくなる（置き換えた本人のルールも含む）
+ * - 「このファイルの何行に当たるか」（AC-57e）が、実際に当たる行数と違う
+ *
+ * **ここが唯一の決め方である**（CLAUDE.md §2.8）。`buildImportRows`・
+ * `redecideWithoutRule`・`countRuleMatches` の3箇所が同じ値を見る。
+ * 以前は `buildImportRows` だけが原文（＝まだ差し替わっていない `name`）を
+ * 見て、残り2つが表示名を見ていた。
+ */
+export function ruleTargetOf(
+  row: Pick<ImportRow, "sourceName" | "type" | "accountId">,
+): RuleTarget {
+  return { name: row.sourceName, type: row.type, accountId: row.accountId };
 }
 
 /**
@@ -688,7 +709,7 @@ export function redecideWithoutRule(
 ): ImportRow[] {
   return rows.map((row) => {
     if (row.ruleId !== ruleId) return row;
-    const next = classifyImportRow(row, { rules, history });
+    const next = classifyImportRow(ruleTargetOf(row), { rules, history });
     return { ...row, ...next };
   });
 }
@@ -740,7 +761,7 @@ export function countRuleMatches(
   draft: Pick<ImportRule, "pattern" | "accountId" | "direction" | "categoryCode">,
 ): number {
   return rows.filter(
-    (row) => row.matchedKey === null && ruleMatches(draft, row),
+    (row) => row.matchedKey === null && ruleMatches(draft, ruleTargetOf(row)),
   ).length;
 }
 
@@ -963,6 +984,18 @@ export interface ImportRow {
    * 当たらなくなる。
    */
   sourceName: string;
+  /**
+   * **表示名の出どころ**（FR-59・FR-62）。`null` は原文のまま。
+   *
+   * | | |
+   * |---|---|
+   * | `"rule"` | 仕分けルールが置き換えた（FR-59） |
+   * | `"source"` | 別の明細の店名に差し替えた（FR-62） |
+   *
+   * 確認画面に出す。**どちらで決まったかが分からないと、直す場所
+   * （ルールか、出どころのファイルか）が分からない。**
+   */
+  nameFrom: "rule" | "source" | null;
   type: EntryType;
   costType: CostType | null;
   categoryCode: string;
@@ -1120,9 +1153,12 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
     if (matched) claimed.add(matched.key);
 
 
-    /* **照合 → ルール → 推定 → 受け皿。** 決め方は1箇所にある（CL-10） */
+    /* **照合 → ルール → 推定 → 受け皿。** 決め方は1箇所にある（CL-10）。
+       ルールが見るのは摘要の原文（`ruleTargetOf`）。ここでは `name` が
+       まだ原文そのものだが、**同じ値を同じ経路で渡す** ―― 差し替えが
+       入ったあとに決め直す `redecideWithoutRule` と揃える（§2.8） */
     const decided = classifyImportRow(
-      { name, type, accountId },
+      ruleTargetOf({ sourceName: name, type, accountId }),
       { matched, rules: input.rules, history },
     );
 
@@ -1136,6 +1172,7 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       name,
       /* **原文は読んだまま。** 以降どの機構も書き換えない（FR-58） */
       sourceName: name,
+      nameFrom: null,
       type,
       costType: decided.costType,
       categoryCode: decided.categoryCode,

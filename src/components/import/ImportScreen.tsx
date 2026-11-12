@@ -17,6 +17,11 @@ import { useMemo, useRef, useState } from "react";
 import { buildBalanceSeries, depositIdsOf } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
 import { checkImportBalance } from "@/core/balance-check";
+import {
+  applyNameSource,
+  buildNameSource,
+  type NameSourceEntry,
+} from "@/core/name-source";
 import type { Actual, ForecastInstance, ImportRule } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
@@ -67,6 +72,15 @@ export function ImportScreen() {
   const fileRef = useRef<HTMLInputElement>(null);
   /** 選んだファイルの名前。Figma 2033:890 がファイル名を出している */
   const [fileName, setFileName] = useState<string | null>(null);
+  /**
+   * **摘要の出どころ**（FR-62・AC-69）。デビット明細など。
+   *
+   * **行としては取り込まない。** 両方を行にすると同じ取引が二重に入る。
+   * 読み取るたびに当て直すので、読み取ったあとに出どころを選んでも効く。
+   */
+  const [nameSource, setNameSource] = useState<NameSourceEntry[] | null>(null);
+  const [nameSourceFile, setNameSourceFile] = useState<string | null>(null);
+  const nameSourceRef = useRef<HTMLInputElement>(null);
 
   /**
    * **取込先の口座**（FR-60・AC-67）。前回選んだ口座のまま開く。
@@ -132,7 +146,10 @@ export function ImportScreen() {
     setError(null);
     setFileName(null);
     setPasteOpen(false);
+    setNameSource(null);
+    setNameSourceFile(null);
     if (fileRef.current) fileRef.current.value = "";
+    if (nameSourceRef.current) nameSourceRef.current.value = "";
   };
 
   const load = (text: string) => {
@@ -180,22 +197,51 @@ export function ImportScreen() {
     [data.rules, disabledRuleIds],
   );
 
+  /**
+   * 摘要の出どころを読む（FR-62・AC-69）。
+   *
+   * 列の推定は銀行明細と同じ `detectColumns` を使う。**別に書かない** ――
+   * 日付や金額の読み方が2通りになると、片方だけ直したときに食い違う（§2.8）。
+   */
+  const onNameSourceFile = async (file: File) => {
+    if (file.size > MAX_BYTES) {
+      setError(
+        `ファイルが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。上限は5MBです。`,
+      );
+      return;
+    }
+    setError(null);
+    try {
+      const parsed = parseCsv(decodeCsv(await file.arrayBuffer()));
+      const entries = buildNameSource(parsed, detectColumns(parsed));
+      setNameSource(entries);
+      setNameSourceFile(file.name);
+      setNotice(
+        `摘要の出どころを${entries.length}件読みました。日付と金額で突き合わせて、` +
+          `銀行明細の摘要を店名に差し替えます（行は増えません）。`,
+      );
+    } catch {
+      setError("摘要の出どころを読み取れませんでした。");
+    }
+  };
+
   const read = () => {
     if (!rows || !mapping) return;
-    setPreview(
-      buildImportRows({
-        rows,
-        mapping,
-        accountId: activeAccount,
-        candidates,
-        history,
-        /* 既に保存されている実績との突き合わせ（FR-50）。口座での絞り込みは
-           core 側でやるので全件渡す */
-        existing: data.actuals,
-        /* 仕分けルール（CL-10）。使わないことにしたぶんは除いて渡す */
-        rules: activeRules,
-      }),
-    );
+    const built = buildImportRows({
+      rows,
+      mapping,
+      accountId: activeAccount,
+      candidates,
+      history,
+      /* 既に保存されている実績との突き合わせ（FR-50）。口座での絞り込みは
+         core 側でやるので全件渡す */
+      existing: data.actuals,
+      /* 仕分けルール（CL-10）。使わないことにしたぶんは除いて渡す */
+      rules: activeRules,
+    });
+    /* **摘要の差し替えは行を組み立てたあと**（FR-62・AC-69）。行数は
+       変わらない ―― 両方を行として取り込むと同じ取引が二重に入る */
+    setPreview(nameSource ? applyNameSource(built, nameSource) : built);
   };
 
   /**
@@ -344,6 +390,18 @@ export function ImportScreen() {
         }}
       />
 
+      {/* 摘要の出どころ（FR-62・AC-69）。行としては取り込まない */}
+      <input
+        ref={nameSourceRef}
+        type="file"
+        accept=".csv,.txt,text/csv"
+        className="sr-only"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void onNameSourceFile(file);
+        }}
+      />
+
       <ImportView
         stats={
           computed ? buildHeaderStats(computed.series, data.accounts, today) : []
@@ -360,6 +418,9 @@ export function ImportScreen() {
         pasteOpen={pasteOpen}
         onTogglePaste={() => setPasteOpen((v) => !v)}
         onPaste={load}
+        nameSourceFile={nameSourceFile}
+        nameSourceCount={nameSource?.length ?? null}
+        onPickNameSource={() => nameSourceRef.current?.click()}
         mapping={mapping}
         columns={columns}
         onMappingChange={setMapping}

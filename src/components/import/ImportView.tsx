@@ -56,6 +56,17 @@ export interface ImportViewProps {
   onTogglePaste?: () => void;
   onPaste?: (text: string) => void;
 
+  /**
+   * **摘要の出どころ**（FR-62・AC-69）。デビット明細など。
+   *
+   * **行としては取り込まない。** 両方を行にすると同じ取引が二重に入る。
+   * 読んだ件数を出すのは、**0件のファイルを選んだときに気づけるように**
+   * するため（列の推定が外れると0件になる）。
+   */
+  nameSourceFile?: string | null;
+  nameSourceCount?: number | null;
+  onPickNameSource?: () => void;
+
   /* 3. 列の割り当て */
   mapping: ColumnMapping | null;
   columns: ImportColumnOption[];
@@ -196,6 +207,9 @@ export function ImportView({
   pasteOpen,
   onTogglePaste,
   onPaste,
+  nameSourceFile,
+  nameSourceCount,
+  onPickNameSource,
   mapping,
   columns,
   onMappingChange,
@@ -296,6 +310,45 @@ export function ImportView({
           <p className="t-body-sm text-muted-foreground">
             カードを選ぶと、利用日で取り込んだうえで引き落とし日に自動で寄せます。
           </p>
+
+          {/* 摘要の出どころ（FR-62・AC-69）。Figma に無い。
+              **ボタンだけ別に条件を付けている** ―― 開発用の画面
+              （`dev/screens/import-wired`）はファイル選択を持たないが、
+              差し替えの説明と結果は出したいので、欄と注記は出す */}
+          {onPickNameSource !== undefined || nameSourceFile !== undefined ? (
+            <div className="flex flex-wrap items-end gap-24">
+              <Field label="摘要の出どころ（任意）" className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    "flex h-control-md items-center rounded-md border border-input bg-background px-control-md t-body",
+                    nameSourceFile ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate">
+                    {nameSourceFile
+                      ? `${nameSourceFile}（${nameSourceCount ?? 0}件）`
+                      : "まだ選んでいません"}
+                  </span>
+                </div>
+              </Field>
+              {onPickNameSource ? (
+                <Button variant="outline" onClick={onPickNameSource}>
+                  デビット明細を選ぶ
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {onPickNameSource !== undefined || nameSourceFile !== undefined ? (
+            <p className="t-body-sm text-muted-foreground">
+              銀行の明細に「デビット　４１２６６９」のように取引ごとの番号しか
+              出ないとき、デビット明細の店名に差し替えます。
+              <strong className="font-semibold">行は増えません</strong>
+              ―― 両方を取り込むと同じ取引が二重に入るので、こちらは摘要の
+              出どころとしてだけ読みます。日付と金額で突き合わせ、数日のずれと
+              海外事務手数料ぶんの差を許します。当たらなかった行は触りません。
+            </p>
+          ) : null}
         </Panel>
 
         {/* 3. 列の割り当て — 2033:920 */}
@@ -476,7 +529,17 @@ export function ImportView({
                     <TableCell className="num whitespace-nowrap">
                       {row.date.replace(/-/g, "/")}
                     </TableCell>
-                    <TableCell>{row.name}</TableCell>
+                    <TableCell>
+                      {row.name}
+                      {/* **差し替えた行は元の摘要も見せる**（FR-62・AC-69）。
+                          見せないと、当たった相手が正しいかを確かめられない */}
+                      {row.nameFrom !== null && row.name !== row.sourceName ? (
+                        <span className="block t-table text-muted-foreground">
+                          {row.nameFrom === "source" ? "明細から" : "ルールで"}
+                          差し替え（元：{row.sourceName}）
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell align="right" className="num text-fg-success">
                       {row.type === "income" ? formatYen(row.amount) : ""}
                     </TableCell>
@@ -522,7 +585,14 @@ export function ImportView({
                                 setDraft(
                                   draft?.rowIndex === row.rowIndex
                                     ? null
-                                    : { rowIndex: row.rowIndex, pattern: row.name },
+                                    : {
+                                        rowIndex: row.rowIndex,
+                                        /* **原文を初期値にする**（FR-62）。
+                                           ルールが当てるのは原文なので、
+                                           差し替わった表示名から作ると
+                                           どの行にも当たらないルールになる */
+                                        pattern: row.sourceName,
+                                      },
                                 )
                               }
                             >
