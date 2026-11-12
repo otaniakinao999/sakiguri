@@ -34,6 +34,8 @@ import {
   updateRecurring,
 } from "@/lib/mutations";
 
+import { planAnchorId } from "@/lib/plan-anchor";
+
 import { EntryFieldCells } from "./EntryFields";
 import { usePlanOrder } from "./use-plan-order";
 
@@ -47,7 +49,7 @@ const DEFAULT_SORT: PlanSort = { column: "when", direction: "asc" };
 /** 日付列の値。**1箇所だけに置く。** 発生日は数なので数のまま渡す */
 const whenOf = (item: RecurringItem) => item.day;
 
-export function RecurringTable() {
+export function RecurringTable({ focus }: { focus?: string | null } = {}) {
   const { data, setData, session } = useAppData();
 
   const accountIds = useMemo(() => data.accounts.map((a) => a.id), [data.accounts]);
@@ -143,7 +145,19 @@ export function RecurringTable() {
             </thead>
             <tbody>
               {visible.map((item) => (
-                <tr key={item.id} className={item.active ? "" : "opacity-50"}>
+                /* **明細の予定の行から飛んでくる**（FR-57・AC-63）。
+                   id は `planAnchorId` が1箇所で作る ―― リンク側と別々に
+                   組み立てると、押しても何も起きないリンクができる（§2.8）。
+                   飛んできた行は `:target` で色が付く */
+                <tr
+                  key={item.id}
+                  id={planAnchorId("recurring", item.id)}
+                  className={`scroll-mt-64${
+                    focus === planAnchorId("recurring", item.id)
+                      ? " bg-primary-subtle"
+                      : ""
+                  }${item.active ? "" : " opacity-50"}`}
+                >
                   <td className={CELL}>
                     <TextInput
                       aria-label="内容"

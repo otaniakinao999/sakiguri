@@ -5,14 +5,22 @@ import * as React from "react";
 import { MonthTab } from "@/components/sakiguri/MonthTab";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
+import { StickyBar } from "@/components/sakiguri/StickyBar";
 import { TodoRow } from "@/components/sakiguri/TodoRow";
 
 import type { EntryActualRow, EntryMonth } from "./rows";
 
 export interface ActualsViewProps {
   stats: PageHeaderStat[];
-  /** 絞り込む口座（FR-42）。見出しの右に出る */
-  headerAction?: React.ReactNode;
+  /**
+   * 絞り込む口座（FR-42）。**追従バーに入る**（FR-56・AC-62）。
+   *
+   * 口座の絞り込みと月の切り替えを両方持つ画面はすべて追従させる。
+   * この一覧は入出金予定表と同じ形の表で、同じ2つの操作を持つ。
+   * 片方の画面にだけ置くと、同じ見た目の表で操作できたりできなかったり
+   * する（§2.8）。
+   */
+  accountControl?: React.ReactNode;
 
   months: EntryMonth[];
   onSelectMonth?: (value: string) => void;
@@ -44,7 +52,7 @@ export interface ActualsViewProps {
  */
 export function ActualsView({
   stats,
-  headerAction,
+  accountControl,
   months,
   onSelectMonth,
   futureNote,
@@ -59,26 +67,30 @@ export function ActualsView({
         title="実績一覧"
         subtitle="記録された実績を月ごとに見ます。費目や口座の間違いはここで直します"
         stats={stats}
-        action={headerAction}
       />
+
+      {/* 追従する領域（FR-56・AC-62）。入出金予定表と同じ部品を使う（§2.8）。
+          一覧は月内200件まで1ページに出るので縦に長い。末尾まで送った位置
+          から、見ている口座と月の切り替えが操作できる必要がある */}
+      <StickyBar lead={accountControl}>
+        <nav aria-label="月を選ぶ" className="flex shrink-0 items-center gap-4">
+          {months.map((m) => (
+            <MonthTab
+              key={m.value}
+              state={m.state}
+              onClick={() => onSelectMonth?.(m.value)}
+            >
+              {m.label}
+            </MonthTab>
+          ))}
+        </nav>
+      </StickyBar>
 
       <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
         {notices}
 
         {/* 実績一覧 — 2032:900 */}
         <Panel title="実績一覧">
-          <div className="flex flex-wrap items-center gap-4">
-            {months.map((m) => (
-              <MonthTab
-                key={m.value}
-                state={m.state}
-                onClick={() => onSelectMonth?.(m.value)}
-              >
-                {m.label}
-              </MonthTab>
-            ))}
-          </div>
-
           {/* screens.md は Callout（caution）だが、Figma は枠も背景も無い
               ただの注記だった。Figma を採った（ADR-0023） */}
           {futureNote ? (

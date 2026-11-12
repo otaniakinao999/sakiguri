@@ -1,4 +1,5 @@
 import * as React from "react";
+import Link from "next/link";
 
 import type { Yen } from "@/core/types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +17,7 @@ import {
 } from "@/components/sakiguri/MonthlyBalanceChart";
 import { MonthJumpNav } from "@/components/sakiguri/MonthJumpNav";
 import { Panel } from "@/components/sakiguri/Panel";
+import { StickyBar } from "@/components/sakiguri/StickyBar";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { StatusChip, type Status } from "@/components/sakiguri/StatusChip";
 import {
@@ -76,6 +78,18 @@ export interface CashflowLedgerEntry {
 
   /** 実績の id。`onEditActual` と両方そろうと内容が押せるようになる（FR-41） */
   actualId?: string;
+
+  /**
+   * 予定の行から、元の定期項目・単発予定の設定へのリンク（FR-57・AC-63）。
+   *
+   * **明細の中で予定を編集させない。** させると「この回だけ」と「項目
+   * そのもの」のどちらなのかを選ばせることになる。明細で見つかる誤り
+   * ―― 振替先の未設定、費目の間違い ―― は項目そのものの誤りであり、
+   * この回だけ直しても次回また出る（OI-23）。
+   *
+   * カード引落（`settle`）は CL-2 の生成物なので元の設定が無く、入らない。
+   */
+  planHref?: string;
 }
 
 export interface TabGroup<T extends string> {
@@ -206,27 +220,11 @@ export function CashflowView({
         stats={stats}
       />
 
-      {/* 追従する領域（FR-56・AC-62）
-          ─────────────────────────────────────────────────────────
-          **この画面で追従するのはこの1つだけ。** 「見ている口座」と
-          「月の切り替え」を同じバーに入れてある。明細は縦に長く、
-          末尾まで送った位置からどちらも操作できる必要がある。
-
-          **2つに分けない。** 以前は月の見出しが自分で `sticky top-0
-          z-30` を持っていて、狭い幅で残高ヘッダー（z-10）を覆っていた。
-          上辺に2つ置くと、下の要素の `top` に上の要素の高さを定数で
-          書くしかなく、折り返す幅でずれる。
-
-          **1行に収める。** 折り返させると高さが変わり、飛び先の
-          `scroll-mt-64` が足りなくなって行がバーの下に潜る。
-          狭い幅では横に送る（サイドバーのナビと同じ扱い）。
-
-          重なり順：表の固定セル z-10 ＜ このバー z-20 ＜ 編集の覆い z-40 */}
+      {/* 追従する領域（FR-56・AC-62）。実績一覧と同じ部品を使う（§2.8） */}
       {accountControl || ledgerMonths ? (
-        <div className="sticky top-0 z-20 flex items-center gap-16 overflow-x-auto border-b border-border bg-card px-32 py-8">
-          {accountControl}
+        <StickyBar lead={accountControl}>
           {ledgerMonths ? <MonthJumpNav months={ledgerMonths} /> : null}
-        </div>
+        </StickyBar>
       ) : null}
 
       <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
@@ -384,6 +382,16 @@ export function CashflowView({
                           >
                             {row.title}
                           </button>
+                        ) : row.planHref ? (
+                          /* 予定の行は元の設定へ飛ぶ（FR-57・AC-63）。
+                             実績の行とは**行き先が違う** ―― あちらは
+                             その実績の編集、こちらは項目そのものの設定 */
+                          <Link
+                            href={row.planHref}
+                            className="text-left underline-offset-2 hover:underline focus-visible:outline-ring"
+                          >
+                            {row.title}
+                          </Link>
                         ) : (
                           row.title
                         )}

@@ -35,6 +35,8 @@ import {
 import type { PlanSort } from "@/lib/plan-order";
 import { settledOneoffIds } from "@/lib/settled-plans";
 
+import { planAnchorId } from "@/lib/plan-anchor";
+
 import { EntryFieldCells } from "./EntryFields";
 import { usePlanOrder } from "./use-plan-order";
 
@@ -48,7 +50,7 @@ const DEFAULT_SORT: PlanSort = { column: "when", direction: "asc" };
 /** 日付列の値。**1箇所だけに置く。** 2箇所に書くと片方だけ直る */
 const whenOf = (item: OneoffItem) => item.date;
 
-export function OneoffsTable() {
+export function OneoffsTable({ focus }: { focus?: string | null } = {}) {
   const { data, setData, today, session } = useAppData();
 
   const settled = useMemo(() => settledOneoffIds(data.actuals), [data.actuals]);
@@ -168,7 +170,15 @@ export function OneoffsTable() {
             </thead>
             <tbody>
               {visible.map((item) => (
-                <tr key={item.id} className={settled.has(item.id) ? "opacity-50" : ""}>
+                /* **明細の予定の行から飛んでくる**（FR-57・AC-63）。
+                   id は `planAnchorId` が1箇所で作る（§2.8） */
+                <tr
+                  key={item.id}
+                  id={planAnchorId("oneoff", item.id)}
+                  className={`scroll-mt-64${
+                    focus === planAnchorId("oneoff", item.id) ? " bg-primary-subtle" : ""
+                  }${settled.has(item.id) ? " opacity-50" : ""}`}
+                >
                   <td className={CELL}>
                     <DateInput
                       aria-label="日付"

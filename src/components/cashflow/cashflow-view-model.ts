@@ -22,6 +22,7 @@ import {
   formatYen,
 } from "@/lib/format";
 import type { LedgerEntry, LedgerView } from "@/lib/ledger";
+import { planSettingsHref } from "@/lib/plan-anchor";
 
 import type { CashflowLedgerEntry, CashflowMonthRow } from "./CashflowView";
 
@@ -201,6 +202,14 @@ export function buildCashflowViewModel({
         status: entry.status === "actual" ? "実績" : "予定",
         note: noteOf(entry),
         actualId: entry.status === "actual" ? entry.srcId : undefined,
+        /* 予定の行は、元の定期項目・単発予定の設定へ飛ばす（FR-57・AC-63）。
+           カード引落（`settle`）は CL-2 の生成物で元の設定が無いので飛ばさない */
+        planHref:
+          entry.status === "plan" &&
+          (entry.src === "recurring" || entry.src === "oneoff") &&
+          entry.srcId
+            ? planSettingsHref(entry.src, entry.srcId)
+            : undefined,
       });
     });
   }

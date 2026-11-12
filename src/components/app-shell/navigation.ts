@@ -17,10 +17,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "SC-03", href: "/cashflow", label: "キャッシュフロー" },
   { id: "SC-04", href: "/pl", label: "年月別 収支" },
   { id: "SC-05", href: "/entry", label: "実績入力" },
-  /* **SC-05 を2ページに分けた**（FR-54・AC-61）。要件定義書 §4.1 の画面
-     一覧はまだ1行なので、画面IDは SC-05 を共有させてある。やること側が
-     照合を持ち、こちらは記録済みの実績を月ごとに辿る */
-  { id: "SC-05", href: "/actuals", label: "実績一覧" },
+  /* **SC-05 を2ページに分けた**（FR-54・AC-61、要件定義書 v1.45）。
+     やること側が照合を持ち、こちらは記録済みの実績を月ごとに辿る */
+  { id: "SC-05b", href: "/actuals", label: "実績一覧" },
   { id: "SC-06", href: "/import", label: "CSV取込" },
   { id: "SC-07", href: "/settings", label: "予定の設定" },
 ];

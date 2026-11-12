@@ -25,9 +25,10 @@ import {
 } from "@/components/app-shell/AppDataProvider";
 import { BalanceHeader } from "@/components/app-shell/BalanceHeader";
 import { CashflowScreen } from "@/components/cashflow/CashflowScreen";
+import { ActualsScreen } from "@/components/entry/ActualsScreen";
+import { ENTRY_ACTUALS } from "@/components/entry/entry-fixture";
 import {
   FIXTURE_ACCOUNTS,
-  FIXTURE_ACTUALS,
   FIXTURE_ASOF,
   FIXTURE_ONEOFFS,
   FIXTURE_RECURRING,
@@ -47,7 +48,7 @@ const INITIAL: AppData = {
   accounts: FIXTURE_ACCOUNTS,
   recurring: FIXTURE_RECURRING,
   oneoffs: FIXTURE_ONEOFFS,
-  actuals: FIXTURE_ACTUALS,
+  actuals: ENTRY_ACTUALS,
   overrides: {},
   rules: [],
 };
@@ -77,7 +78,10 @@ function Harness({ children }: { children: ReactNode }) {
  * 取り落とすと「無いこと」の検査が**見張る先を失ったまま通る。**
  */
 function classes(el: Element): string {
-  return ` ${el.className.replace(/\s+/g, " ").trim()} `;
+  /* **`className` を直接読まない。** SVG では文字列ではなく
+     `SVGAnimatedString` なので `replace` が無く、そこで落ちる */
+  const raw = el.getAttribute("class") ?? "";
+  return ` ${raw.replace(/\s+/g, " ").trim()} `;
 }
 
 /** 上辺に追従している要素。`sticky` かつ `top-0` を持つもの */
@@ -88,36 +92,65 @@ function stickyTop(root: HTMLElement): HTMLElement[] {
   });
 }
 
+/**
+ * 口座の絞り込みと月の切り替えを**両方持つ画面**（AC-62）。
+ *
+ * **手で並べている。** 「両方持つ画面」を実行時に見分ける手だてが無い
+ * ―― 口座の選択も月のタブも画面ごとにラベルが違い、共通の印は
+ * 付けていない（印を本番に足すのは測るためのコードになる）。
+ * **3つめができたらここに足すこと。** `/pl`（年月別収支）は月が列なので
+ * 対象外である。
+ */
+const SCREENS = [
+  {
+    label: "入出金予定表（SC-03）",
+    component: CashflowScreen,
+    account: "見る口座",
+    months: "月へ移動",
+    /* 月の切り替えの中身。飛び先のリンクか、月のタブか */
+    items: "a",
+  },
+  {
+    label: "実績一覧（SC-05b）",
+    component: ActualsScreen,
+    account: "絞り込む口座",
+    months: "月を選ぶ",
+    items: "button",
+  },
+] as const;
+
 describe("AC-62 追従する領域（FR-56）", () => {
-  it("上辺に追従する要素は1つだけ（重なる余地が無い）", () => {
-    const { container } = render(
-      createElement(Harness, null, createElement(CashflowScreen)),
-    );
-    expect(stickyTop(container).length).toBe(1);
-  });
+  for (const target of SCREENS) {
+    it(`${target.label}：上辺に追従する要素は1つだけ（重なる余地が無い）`, () => {
+      const { container } = render(
+        createElement(Harness, null, createElement(target.component)),
+      );
+      expect(stickyTop(container).length).toBe(1);
+    });
 
-  it("そのバーに「見ている口座」と「月の切り替え」が両方入っている", () => {
-    const { container } = render(
-      createElement(Harness, null, createElement(CashflowScreen)),
-    );
-    const bar = stickyTop(container)[0];
-    expect(bar).toBeTruthy();
+    it(`${target.label}：そのバーに「見ている口座」と「月の切り替え」が両方入っている`, () => {
+      const { container } = render(
+        createElement(Harness, null, createElement(target.component)),
+      );
+      const bar = stickyTop(container)[0];
+      expect(bar).toBeTruthy();
 
-    /* 在ること ―― どちらも画面に出ている。月の見出しは2ヶ月以上
-       ないと描かれないので、出ていることを先に確かめる */
-    const account = screen.getByLabelText("見る口座");
-    const months = screen.getByRole("navigation", { name: "月へ移動" });
-    expect(months.querySelectorAll("a").length).toBeGreaterThan(1);
+      /* 在ること ―― どちらも画面に出ている。月の並びは2ヶ月以上
+         ないと意味が無いので、件数を先に確かめる */
+      const account = screen.getByLabelText(target.account);
+      const months = screen.getByRole("navigation", { name: target.months });
+      expect(months.querySelectorAll(target.items).length).toBeGreaterThan(1);
 
-    expect(bar.contains(account)).toBe(true);
-    expect(bar.contains(months)).toBe(true);
-  });
+      expect(bar.contains(account)).toBe(true);
+      expect(bar.contains(months)).toBe(true);
+    });
 
-  it("月の見出しは自分で追従しない（ヘッダーを覆わない）", () => {
-    render(createElement(Harness, null, createElement(CashflowScreen)));
-    const months = screen.getByRole("navigation", { name: "月へ移動" });
-    expect(classes(months)).not.toMatch(/ sticky /);
-  });
+    it(`${target.label}：月の切り替えは自分で追従しない（ヘッダーを覆わない）`, () => {
+      render(createElement(Harness, null, createElement(target.component)));
+      const months = screen.getByRole("navigation", { name: target.months });
+      expect(classes(months)).not.toMatch(/ sticky /);
+    });
+  }
 
   it("残高ヘッダーは追従しない（狭い幅でバーと同じ上辺に来るため）", () => {
     const { container } = render(

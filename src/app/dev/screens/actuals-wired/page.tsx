@@ -40,7 +40,7 @@ export default function DevActualsWiredPage() {
   return (
     <ActualsView
       stats={stats}
-      headerAction={
+      accountControl={
         <label className="flex shrink-0 items-center gap-8 whitespace-nowrap t-body-sm text-muted-foreground">
           口座
           <Select aria-label="絞り込む口座" defaultValue="all">

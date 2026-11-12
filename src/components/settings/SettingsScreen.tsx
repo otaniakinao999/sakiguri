@@ -41,9 +41,15 @@ import { AsOfDialog } from "./AsOfDialog";
 import { OneoffsTable } from "./OneoffsTable";
 import { RecurringTable } from "./RecurringTable";
 import { RulesTable } from "./RulesTable";
+import { usePlanFocus } from "./use-plan-focus";
 
 export function SettingsScreen() {
   const { data, setData, today } = useAppData();
+
+  /* 明細の予定の行から飛んできたとき、当の行を画面に送って色で示す
+     （FR-57・AC-63）。データが入るまで対象が存在しないので、ブラウザの
+     アンカーだけでは一覧の先頭のままになる */
+  const planFocus = usePlanFocus(data);
 
   /**
    * 基準日を変えようとしている日付。null なら確認を出していない。
@@ -170,8 +176,8 @@ export function SettingsScreen() {
         </Panel>
 
         <AccountsTable />
-        <RecurringTable />
-        <OneoffsTable />
+        <RecurringTable focus={planFocus} />
+        <OneoffsTable focus={planFocus} />
         <RulesTable />
 
         {/* この回だけ変更した予定 — 2034:1150 */}
