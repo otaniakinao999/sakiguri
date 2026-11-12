@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildImportRows, duplicateKeyOf, parseCsv, type ColumnMapping } from "../csv";
+import {
+  buildImportRows,
+  duplicateKeyOf,
+  parseCsv,
+  type ColumnMapping,
+  type ImportRow,
+} from "../csv";
 import type { Actual } from "../types";
 
 /**
@@ -51,7 +57,7 @@ describe("FR-50 既に保存されている実績との突き合わせ", () => {
     /* 既存の呼び出しが変わらないことを固定する */
     const got = buildImportRows({ rows: ONE, mapping: mapping(), accountId: "a1" });
 
-    expect(got.map((r) => [r.alreadyRegistered, r.include])).toEqual([[false, true]]);
+    expect(got.map((r) => [r.duplicate, r.include])).toEqual([["none", true]]);
   });
 
   it("同じ行が既に保存されていれば、印が付いて既定で外れる", () => {
@@ -62,7 +68,7 @@ describe("FR-50 既に保存されている実績との突き合わせ", () => {
       existing: [actual({ id: "x" })],
     });
 
-    expect(got.map((r) => [r.alreadyRegistered, r.include])).toEqual([[true, false]]);
+    expect(got.map((r) => [r.duplicate, r.include])).toEqual([["registered", false]]);
   });
 
   it("保存されていなければ印は付かない", () => {
@@ -73,7 +79,7 @@ describe("FR-50 既に保存されている実績との突き合わせ", () => {
       existing: [actual({ id: "x", date: "2026-04-26" })],
     });
 
-    expect(got.map((r) => [r.alreadyRegistered, r.include])).toEqual([[false, true]]);
+    expect(got.map((r) => [r.duplicate, r.include])).toEqual([["none", true]]);
   });
 });
 
@@ -87,7 +93,7 @@ describe("FR-50 個数を合わせる", () => {
     /* 明細に同じ行が2つ並ぶのは、同じ店で2回買ったということ */
     const got = buildImportRows({ rows: TWO_SAME, mapping: mapping(), accountId: "a1" });
 
-    expect(got.map((r) => r.alreadyRegistered)).toEqual([false, false]);
+    expect(got.map((r) => r.duplicate)).toEqual(["none", "none"]);
   });
 
   it("**保存済み1件・CSV2件なら、1件だけ外して1件は通す**", () => {
@@ -99,7 +105,7 @@ describe("FR-50 個数を合わせる", () => {
       existing: [actual({ id: "x" })],
     });
 
-    expect(got.map((r) => r.alreadyRegistered)).toEqual([true, false]);
+    expect(got.map((r) => r.duplicate)).toEqual(["registered", "none"]);
     expect(got.map((r) => r.include)).toEqual([false, true]);
   });
 
@@ -111,7 +117,7 @@ describe("FR-50 個数を合わせる", () => {
       existing: [actual({ id: "x" }), actual({ id: "y" })],
     });
 
-    expect(got.map((r) => r.alreadyRegistered)).toEqual([true, true]);
+    expect(got.map((r) => r.duplicate)).toEqual(["registered", "registered"]);
   });
 
   it("保存済み2件・CSV1件でも、外れるのは1件ぶん", () => {
@@ -122,20 +128,29 @@ describe("FR-50 個数を合わせる", () => {
       existing: [actual({ id: "x" }), actual({ id: "y" })],
     });
 
-    expect(got.map((r) => r.alreadyRegistered)).toEqual([true]);
+    expect(got.map((r) => r.duplicate)).toEqual(["registered"]);
   });
 });
 
 describe("FR-50 一致の厳しさ", () => {
-  const cases: Array<[string, Partial<Actual>]> = [
-    ["口座が違う", { accountId: "a2" }],
-    ["日付が違う", { date: "2026-04-26" }],
-    ["金額が違う", { amount: 4821 }],
-    ["摘要が違う", { name: "ｺﾝﾋﾞﾆ" }],
-    ["収支が違う", { type: "income", costType: null }],
+  /**
+   * **3つの状態を同じ表で測る**（AC-65・CLAUDE.md §2.11）。
+   *
+   * `registered`（外す）/ `similar`（出すが外さない）/ `none`。
+   * 2つしか出さない表だと、**全部を `similar` にする実装**とも
+   * **摘要を見ない実装**とも区別が付かない。
+   */
+  const cases: Array<[string, Partial<Actual>, ImportRow["duplicate"]]> = [
+    ["何も違わない", {}, "registered"],
+    /* 摘要だけが違う行は「似た行があります」。**外さない** */
+    ["摘要が違う", { name: "ｺﾝﾋﾞﾆ" }, "similar"],
+    ["口座が違う", { accountId: "a2" }, "none"],
+    ["日付が違う", { date: "2026-04-26" }, "none"],
+    ["金額が違う", { amount: 4821 }, "none"],
+    ["収支が違う", { type: "income", costType: null }, "none"],
   ];
 
-  it.each(cases)("%s だけで当てない", (_label, over) => {
+  it.each(cases)("%s → %s", (_label, over, want) => {
     const got = buildImportRows({
       rows: ONE,
       mapping: mapping(),
@@ -143,11 +158,18 @@ describe("FR-50 一致の厳しさ", () => {
       existing: [actual({ id: "x", ...over })],
     });
 
-    expect(got[0].alreadyRegistered).toBe(false);
-    expect(got[0].include).toBe(true);
+    expect(got[0].duplicate).toBe(want);
+    /* **外すのは原文まで一致したときだけ**（AC-65） */
+    expect(got[0].include).toBe(want !== "registered");
   });
 
-  it("**同じ日・同じ額でも、摘要が違えばどれも当たらない**", () => {
+  it("3つの状態が本当に全部出ている（表が退化していない）", () => {
+    expect(new Set(cases.map(([, , want]) => want))).toEqual(
+      new Set(["registered", "similar", "none"]),
+    );
+  });
+
+  it("**同じ日・同じ額でも、摘要が違えば外さない**（似た行として出す）", () => {
     /* **保存済みの摘要を、CSVのどの行とも違うものにする。**
        保存済みを `ｺﾝﾋﾞﾆA`、CSVを A と B にすると、摘要を見ない実装でも
        「1件ぶん消費して [true, false]」になり、**厳しさの差が出ない**
@@ -165,10 +187,11 @@ describe("FR-50 一致の厳しさ", () => {
       existing: [actual({ id: "x", name: "ｺﾝﾋﾞﾆC", amount: 500 })],
     });
 
-    expect(got.map((r) => [r.name, r.alreadyRegistered])).toEqual([
-      ["ｺﾝﾋﾞﾆA", false],
-      ["ｺﾝﾋﾞﾆB", false],
-    ]);
+    /* **どちらも外れない。** 保存済みの枠は1件なので、似た行の印が付くのは
+       1行だけで、もう1行は `none` になる（AC-65） */
+    expect(got.map((r) => r.name)).toEqual(["ｺﾝﾋﾞﾆA", "ｺﾝﾋﾞﾆB"]);
+    expect(got.filter((r) => r.duplicate === "similar")).toHaveLength(1);
+    expect(got.filter((r) => r.duplicate === "registered")).toHaveLength(0);
     expect(got.every((r) => r.include)).toBe(true);
   });
 
@@ -181,7 +204,7 @@ describe("FR-50 一致の厳しさ", () => {
     });
 
     /* a2 のぶんは数えないので、消費できるのは a1 の1件だけ */
-    expect(got[0].alreadyRegistered).toBe(true);
+    expect(got[0].duplicate).toBe("registered");
   });
 });
 
@@ -194,7 +217,7 @@ describe("FR-50 照合とは別の軸", () => {
       existing: [actual({ id: "x" })],
     });
 
-    expect(got[0].alreadyRegistered).toBe(true);
+    expect(got[0].duplicate).toBe("registered");
     /* 予定を渡していないので候補なし。重複印に引きずられない */
     expect(got[0].matchHint).toBe("noCandidate");
   });
@@ -222,7 +245,7 @@ describe("FR-50 照合とは別の軸", () => {
     });
 
     expect(got[0].matchHint).toBe("matched");
-    expect(got[0].alreadyRegistered).toBe(false);
+    expect(got[0].duplicate).toBe("none");
     expect(got[0].include).toBe(true);
   });
 });

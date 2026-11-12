@@ -355,7 +355,7 @@ describe("AC-57e 縮めた `pattern` が何行に当たるか", () => {
 
   it("既に登録済みの行は数える（画面には費目が出る）", () => {
     const rows = built().map((r, i) =>
-      i === 0 ? { ...r, alreadyRegistered: true, include: false } : r,
+      i === 0 ? { ...r, duplicate: "registered" as const, include: false } : r,
     );
     expect(
       countRuleMatches(rows, {

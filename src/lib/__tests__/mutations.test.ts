@@ -711,6 +711,25 @@ describe("editableActualFields", () => {
     expect(editableActualFields({ ...actual, unplanned: true }).unplanned).toBe(true);
   });
 
+  /**
+   * **摘要を直しても原文は残る**（AC-64）。
+   *
+   * `blankActual` は原文を持たないので、上の「全部を返す」の検査だけでは
+   * **原文を落としても通る。** 取込から来た実績を通して測る
+   * （CLAUDE.md §2.11）。
+   */
+  it("摘要を直しても、取込時の摘要の原文が残る（AC-64）", () => {
+    const imported = { ...actual, name: "振込＊カ）ラボル", sourceName: "振込＊カ）ラボル" };
+    const patch = editableActualFields({ ...imported, name: "㈱ラボル" });
+
+    expect(patch.sourceName).toBe("振込＊カ）ラボル");
+
+    const data = addActual(emptyAppData(ASOF), imported);
+    const after = updateActual(data, "act1", patch);
+    expect(after.actuals[0].name).toBe("㈱ラボル");
+    expect(after.actuals[0].sourceName).toBe("振込＊カ）ラボル");
+  });
+
   it("updateActual に通しても id と key は変わらない（AC-24・AC-25）", () => {
     const data = addActual(emptyAppData(ASOF), actual);
     const after = updateActual(

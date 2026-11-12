@@ -116,18 +116,33 @@ function MatchCell({ row }: { row: ImportRow }) {
 }
 
 /**
- * 重複列（FR-50）。
+ * 重複列（FR-50・AC-65）。
  *
  * **`MatchCell` と別にする。** あちらは「予定と照合できたか」、こちらは
  * 「実績として既に入っているか」。1つの列にまとめると、照合できなかった
  * 重複行と、照合できた新規行の区別がつかない（CLAUDE.md §2.12）。
  *
- * **色は控えめにする。** これは間違いではなく「こちらで外しました」という
- * 知らせで、利用者がすることは無い。目を引かせるべきは `要対応` のほう。
+ * **3つの状態を書き分ける。**
+ *
+ * | | 色 | 取込 |
+ * |---|---|---|
+ * | 登録済み（原文まで一致） | 控えめ | 外してある |
+ * | 似た行があります（摘要だけ違う） | warning | **入れたまま** |
+ * | （重なりなし） | — | 入れたまま |
+ *
+ * **「登録済み」の色は控えめにする。** これは間違いではなく「こちらで
+ * 外しました」という知らせで、利用者がすることは無い。**「似た行があります」
+ * は見てほしい** ―― こちらは外していないので、同じ取引なら利用者が
+ * チェックを外す必要がある。
  */
 function DuplicateCell({ row }: { row: ImportRow }) {
-  if (!row.alreadyRegistered) return null;
-  return <span className="t-table text-muted-foreground">登録済み</span>;
+  if (row.duplicate === "registered") {
+    return <span className="t-table text-muted-foreground">登録済み</span>;
+  }
+  if (row.duplicate === "similar") {
+    return <span className="t-table text-fg-warning">似た行があります</span>;
+  }
+  return null;
 }
 
 /**
@@ -202,7 +217,9 @@ export function ImportView({
   } | null>(null);
 
   const chosen = preview?.filter((r) => r.include).length ?? 0;
-  const duplicates = preview?.filter((r) => r.alreadyRegistered).length ?? 0;
+  const duplicates =
+    preview?.filter((r) => r.duplicate === "registered").length ?? 0;
+  const similars = preview?.filter((r) => r.duplicate === "similar").length ?? 0;
 
   const setColumn = (key: keyof ColumnMapping, value: number) => {
     if (!mapping) return;
@@ -605,9 +622,22 @@ export function ImportView({
             {duplicates > 0 ? (
               <p className="t-body-sm text-fg-warning">
                 同じ内容が既に登録されている{duplicates}件は、あらかじめ「取込」を
-                外してあります。口座・日付・収支・金額・摘要が
-                <strong className="font-semibold">すべて</strong>一致した行だけです。
-                入れ直すこともできます。
+                外してあります。口座・日付・収支・金額・
+                <strong className="font-semibold">取込時の摘要</strong>が
+                すべて一致した行だけです。摘要を直したあとでも当たります
+                （判定は表示名ではなく取込時の摘要で行います）。入れ直すこともできます。
+              </p>
+            ) : null}
+
+            {similars > 0 ? (
+              <p className="t-body-sm text-fg-warning">
+                {/* **外さない**（AC-65）。外すのは取り落としで、出すだけなら
+                    利用者が判断できる */}
+                口座・日付・収支・金額は一致しますが摘要が違う{similars}件は、
+                「似た行があります」と出したうえで
+                <strong className="font-semibold">取込に入れたまま</strong>
+                にしています。明細の摘要は、保留から確定になるときに変わることが
+                あります。同じ取引だと分かったら「取込」を外してください。
               </p>
             ) : null}
             <p className="t-body-sm text-muted-foreground">

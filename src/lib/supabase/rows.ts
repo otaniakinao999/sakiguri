@@ -74,6 +74,13 @@ export interface ActualRow extends EntryRowBase {
   plan_key: string | null;
   /** key が null である理由が「予定に対応しない」と確定済みか（FR-46） */
   unplanned: boolean;
+  /**
+   * 取込時の摘要の原文（FR-58・AC-64）。重複判定はこちらで行う。
+   *
+   * null は「原文を持たない」＝表示名を原文として扱う。手入力の実績と、
+   * 0009 より前に取り込んだ実績。
+   */
+  source_name: string | null;
 }
 
 /**
@@ -181,6 +188,7 @@ export const SELECT_COLUMNS = {
     date: true,
     plan_key: true,
     unplanned: true,
+    source_name: true,
   }),
   overrides: columns<OverrideRow>({
     plan_key: true,
@@ -266,6 +274,9 @@ export function toActual(row: ActualRow): Actual {
     id: row.id,
     key: row.plan_key,
     unplanned: row.unplanned ?? false,
+    /* **null は undefined に寄せる。** 「原文を持たない」を1つの形で
+       表す（`matchNameOf` が表示名に落とす） */
+    ...(row.source_name ? { sourceName: row.source_name } : {}),
     date: row.date,
     name: row.name,
     type: row.type,
@@ -381,6 +392,7 @@ export function fromActual(item: Actual, userId: string): ActualRow {
     user_id: userId,
     plan_key: item.key,
     unplanned: item.unplanned ?? false,
+    source_name: item.sourceName ?? null,
     date: item.date,
     name: item.name,
     type: item.type,

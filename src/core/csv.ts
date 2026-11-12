@@ -834,9 +834,49 @@ export function matchPlan(
 /* ========================= 取込行の組み立て ========================= */
 
 /**
- * 重複の判定に使うキー（FR-50）。
+ * 判定に使う摘要（FR-58・AC-64）。
  *
- * **口座・日付・収支・金額・摘要が全部一致したときだけ**同じとみなす。
+ * **原文があれば原文、無ければ表示名。**
+ *
+ * `name` は表示名で、実績編集でも仕分けルールの置き換え（FR-59）でも
+ * 変わる。変わった行は**二度と「登録済み」にならない** ―― 利用者の
+ * 「登録済みの数が毎回変わる」の一因である。
+ *
+ * **原文を持たない実績は表示名を原文として扱う。** 手入力の実績と、
+ * 0009 より前に取り込んだ実績がこれに当たる。既存のデータは、
+ * 摘要を直していない限り今までと同じ判定になる（AC-64）。
+ *
+ * **ここが唯一の決め方である**（CLAUDE.md §2.8）。鍵を作る側と、
+ * 既存の実績を数える側の2箇所で書くと、片方だけが原文を見る状態になる。
+ */
+export function matchNameOf(entry: {
+  name: string;
+  sourceName?: string | null;
+}): string {
+  return entry.sourceName?.trim() || entry.name;
+}
+
+/**
+ * **摘要を外した鍵**（AC-65）。口座・日付・収支・金額。
+ *
+ * 「摘要だけが違う行」を見つけるために要る。銀行やカードの明細は
+ * **保留から確定になるときに摘要が変わる**ので、この4つが一致する行は
+ * 同じ取引でありうる。**ただし外さない** ―― 同じ日に同じ額の取引が2件
+ * あるのも普通のことで、摘要を見ずに外すと本物のデータが消える。
+ */
+export function nearKeyOf(entry: {
+  accountId: string;
+  date: DateStr;
+  type: EntryType;
+  amount: Yen;
+}): string {
+  return [entry.accountId, entry.date, entry.type, entry.amount].join("\u0000");
+}
+
+/**
+ * 重複の判定に使うキー（FR-50・FR-58）。
+ *
+ * **口座・日付・収支・金額・摘要の原文が全部一致したときだけ**同じとみなす。
  *
  * **ゆるく当てない。** 同じ日に同じ額の取引が2件あるのは普通のことで
  * （同じ店で2回買う、同じ額の振込が2件来る）、摘要を見ずに当てると
@@ -844,8 +884,12 @@ export function matchPlan(
  * 「外し忘れた行が1つ混じる」で済むが、取りすぎは**気づかないまま消える。**
  * 外す側に倒す。
  *
- * 取り込んだ実績は摘要をCSVのまま保存する（`ImportScreen`）ので、
- * 同じファイルを読ませれば同じキーになる。
+ * **摘要は原文で比べる**（`matchNameOf`）。取り込んだ実績は原文を
+ * `source_name` に持つので、表示名を直しても同じキーになる（AC-64）。
+ *
+ * **この鍵で全部一致しても、同じ取引だとは限らない。** 口座・日付・収支・
+ * 金額・摘要が完全に重なる行は実在する（2026年10月の実データで18行）。
+ * 鍵に足せる項目はもう無いので、**結果を残高で検算する**（FR-61・AC-68）。
  */
 export function duplicateKeyOf(entry: {
   accountId: string;
@@ -853,8 +897,9 @@ export function duplicateKeyOf(entry: {
   type: EntryType;
   amount: Yen;
   name: string;
+  sourceName?: string | null;
 }): string {
-  return [entry.accountId, entry.date, entry.type, entry.amount, entry.name].join("\u0000");
+  return [nearKeyOf(entry), matchNameOf(entry)].join("\u0000");
 }
 
 /**
@@ -863,17 +908,37 @@ export function duplicateKeyOf(entry: {
  * **件数で持つ。** 「そのキーがあるか」で見ると、保存済み1件に対して
  * CSVの同一行2件が**両方とも重複印になる。** 実際には1件が新しい取引
  * なので、1件ぶんだけ当てて、残りは通す。
+ *
+ * **2つの数え方を同時に持つ**（AC-65）。原文まで一致したぶん（`exact`）と、
+ * 摘要を外したぶん（`near`）である。`near` は `exact` を含む。
  */
-function countByKey(existing: readonly Actual[], accountId: string): Map<string, number> {
-  const pool = new Map<string, number>();
+interface DuplicatePool {
+  exact: Map<string, number>;
+  near: Map<string, number>;
+}
+
+function countByKey(existing: readonly Actual[], accountId: string): DuplicatePool {
+  const exact = new Map<string, number>();
+  const near = new Map<string, number>();
+
+  const bump = (pool: Map<string, number>, key: string) =>
+    pool.set(key, (pool.get(key) ?? 0) + 1);
 
   for (const actual of existing) {
     if (actual.accountId !== accountId) continue;
-    const key = duplicateKeyOf(actual);
-    pool.set(key, (pool.get(key) ?? 0) + 1);
+    bump(exact, duplicateKeyOf(actual));
+    bump(near, nearKeyOf(actual));
   }
 
-  return pool;
+  return { exact, near };
+}
+
+/** 1件ぶん使う。残っていれば true */
+function take(pool: Map<string, number>, key: string): boolean {
+  const left = pool.get(key) ?? 0;
+  if (left <= 0) return false;
+  pool.set(key, left - 1);
+  return true;
 }
 
 /** 確認画面に出す1行。利用者が修正できる。 */
@@ -883,8 +948,21 @@ export interface ImportRow {
   /** 取込可否。既定は true */
   include: boolean;
   date: DateStr;
-  /** 摘要。空なら「（摘要なし）」 */
+  /**
+   * **表示名。** 空なら「（摘要なし）」。
+   *
+   * 仕分けルールの置き換え（FR-59）と、別の明細からの差し替え（FR-62）が
+   * ここを変える。**判定には使わない**（`sourceName` を使う）。
+   */
   name: string;
+  /**
+   * **摘要の原文**（FR-58・AC-64）。CSVから読んだまま。
+   *
+   * 重複判定はこれで行い、実績の `sourceName` に保存する。**どの機構も
+   * ここを書き換えない** ―― 書き換えたら、次に同じ明細を読んだときに
+   * 当たらなくなる。
+   */
+  sourceName: string;
   type: EntryType;
   costType: CostType | null;
   categoryCode: string;
@@ -929,16 +1007,24 @@ export interface ImportRow {
    */
   matchHint: "matched" | "amountDiffers" | "noCandidate";
   /**
-   * **既に同じ実績が保存されている行**（FR-50）。
+   * **既に保存されている実績との重なり**（FR-50・AC-65）。
    *
-   * 同じファイルを二度読ませたときや、前回と範囲が重なるファイルを
-   * 読ませたときに立つ。立った行は `include` の初期値が false になる。
+   * | | | 取込 |
+   * |---|---|---|
+   * | `none` | 重なる実績が無い | **入れる** |
+   * | `similar` | 口座・日付・収支・金額は一致、**摘要の原文が違う** | **入れる** |
+   * | `registered` | 原文まで一致 | **外す** |
+   *
+   * **`similar` は外さない**（AC-65）。銀行やカードの明細は保留から確定に
+   * なるときに摘要が変わるので、摘要だけで外すと取り落とす。一方、摘要を
+   * 見ずに外すと別の取引を外す。**外すのは取り落とし、出すだけなら
+   * 利用者が判断できる。**
    *
    * **`matchHint` とは別の軸である。** あちらは「予定と照合できたか」、
    * こちらは「実績として既に入っているか」。混ぜると、照合できなかった
    * 重複行と、照合できた新規行の区別がつかなくなる（CLAUDE.md §2.12）。
    */
-  alreadyRegistered: boolean;
+  duplicate: "none" | "similar" | "registered";
 }
 
 export interface BuildImportRowsInput {
@@ -1040,18 +1126,16 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       { matched, rules: input.rules, history },
     );
 
-    const key = duplicateKeyOf({ accountId, date, type, amount, name });
-    const left = registered.get(key) ?? 0;
-    const alreadyRegistered = left > 0;
-    if (alreadyRegistered) registered.set(key, left - 1);
-
     out.push({
       rowIndex,
-      /* **重複の行は既定で外す。** 消すのではなく外すだけにして、
-         利用者が入れ直せるようにする（取りこぼしよりも取りすぎが怖い） */
-      include: !alreadyRegistered,
+      /* 重複の判定は全行を組み立てたあと（`markDuplicates`）。
+         **原文まで一致した行に先に枠を使わせる**ため、1行ずつ決められない */
+      include: true,
+      duplicate: "none",
       date,
       name,
+      /* **原文は読んだまま。** 以降どの機構も書き換えない（FR-58） */
+      sourceName: name,
       type,
       costType: decided.costType,
       categoryCode: decided.categoryCode,
@@ -1071,11 +1155,61 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
             )
           ? ("amountDiffers" as const)
           : ("noCandidate" as const),
-      alreadyRegistered,
     });
   });
 
-  return out;
+  return markDuplicates(out, registered);
+}
+
+/**
+ * 既に保存されている実績との重なりを決める（FR-50・AC-65）。
+ *
+ * **2段階で決める。原文まで一致した行に先に枠を使わせる。**
+ *
+ * 1行ずつ決めると、**先に来た行が「似た行」の枠を取ってしまう。**
+ * 保存済みが摘要 B の1件、CSVが A・B の2行という場合、
+ *
+ *   1行ずつ  A が似た行の枠を取る → `[似た行, 登録済み]`
+ *   2段階    B が先に枠を使う     → `[なし, 登録済み]`
+ *
+ * **正しいのは後者。** 保存済みの1件は B そのものであって、A に対応する
+ * 実績は無い。A は新しい取引なので、警告を出す相手がいない。**在りもしない
+ * 相手について「似た行があります」と出すと、利用者はその警告を見なくなる。**
+ *
+ * **同じファイルの中の同一行どうしは当てない。** 明細に同じ行が2つ並ぶのは
+ * 実在の2件なので、消費するのは保存済みのぶんだけである。
+ */
+function markDuplicates(
+  rows: readonly ImportRow[],
+  pool: DuplicatePool,
+): ImportRow[] {
+  const mark = new Map<number, ImportRow["duplicate"]>();
+
+  /* 段階1：原文まで一致した行。`near` の枠も同時に使う */
+  for (const row of rows) {
+    if (!take(pool.exact, duplicateKeyOf(row))) continue;
+    take(pool.near, nearKeyOf(row));
+    mark.set(row.rowIndex, "registered");
+  }
+
+  /* 段階2：残った行のうち、摘要だけが違うもの */
+  for (const row of rows) {
+    if (mark.has(row.rowIndex)) continue;
+    if (!take(pool.near, nearKeyOf(row))) continue;
+    mark.set(row.rowIndex, "similar");
+  }
+
+  return rows.map((row) => {
+    const duplicate = mark.get(row.rowIndex) ?? "none";
+    return {
+      ...row,
+      duplicate,
+      /* **原文まで一致した行だけ外す**（AC-65）。消すのではなく外すだけに
+         して、利用者が入れ直せるようにする。`similar` は入れたままにする
+         ―― 外すと取り落とし、出すだけなら利用者が判断できる */
+      include: duplicate !== "registered",
+    };
+  });
 }
 
 /** 1行から符号つきの金額を読む。入金が正、出金が負。 */
@@ -1120,5 +1254,7 @@ export function actualFromImportRow(row: ImportRow, id: string): Actual {
     amount: row.amount,
     bizRatio: row.bizRatio,
     accountId: row.accountId,
+    /* **原文を保存する**（FR-58・AC-64）。表示名を直しても判定は変わらない */
+    sourceName: row.sourceName,
   };
 }
