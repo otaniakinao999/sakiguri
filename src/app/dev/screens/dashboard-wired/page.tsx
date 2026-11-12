@@ -19,6 +19,7 @@ import {
 } from "@/components/dashboard/DashboardNotices";
 import {
   buildFixtureModel,
+  FIXTURE_ACCOUNTS,
   FIXTURE_RESERVE_LINE,
   FIXTURE_TODAY,
 } from "@/components/dashboard/dashboard-fixture";
@@ -31,6 +32,7 @@ export default function DevDashboardWiredPage() {
   const view = buildDashboardViewModel({
     series,
     dashboard,
+    accounts: FIXTURE_ACCOUNTS,
     today: FIXTURE_TODAY,
     reserveLine: FIXTURE_RESERVE_LINE,
     range: "90",

@@ -71,6 +71,7 @@ function run(actuals: Actual[]) {
   const model = buildCashflowViewModel({
     series,
     monthly,
+    accounts,
     view,
     from: "2026-10-01",
     to: "2026-10-31",

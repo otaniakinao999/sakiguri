@@ -39,6 +39,7 @@ export default function DevCashflowWiredPage() {
   const view = buildCashflowViewModel({
     series: fixture.series,
     monthly: fixture.monthly,
+    accounts: FIXTURE_ACCOUNTS,
     view: fixture.view,
     from: fixture.from,
     to: fixture.to,

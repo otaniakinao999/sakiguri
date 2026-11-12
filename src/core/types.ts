@@ -116,7 +116,33 @@ export function touchesAccount(
   accountId: string,
 ): boolean {
   if (item.accountId === accountId) return true;
-  return item.type === "transfer" && item.toAccountId === accountId;
+  /* **判定は `transferEnds` の1箇所から借りる**（CLAUDE.md §2.8）。
+     「`toAccountId` は振替のときだけ意味を持つ」を写すと、片方にだけ
+     条件が増えたときに食い違う。2026-11-11 の欠陥は、この規則を
+     読む経路が2つあって一方だけ直っていたことだった */
+  return transferEnds(item)?.toId === accountId;
+}
+
+/**
+ * その行が**両端を持っている**か。持っていれば移動元と移動先。
+ *
+ * **`toAccountId` が意味を持つのは `type = transfer` のときだけ**
+ * （AC-58d）。片側の明細から記録した振替（適用規則5a）は `type` が
+ * expense / income で振替先を持たず、**非振替の行に振替先が入っていれば
+ * それは収支を切り替える前の残りかすである。**
+ *
+ * **ここが「toAccountId を読んでよいか」の唯一の判定である。** 読む側は
+ * `touchesAccount`（一覧の絞り込みと口座削除）と `formatTransferDirection`
+ * （向きの表示。FR-63）。残高（`accountDelta`）は `type = transfer` の
+ * 分岐の中でしか振替先を見ないので、同じ規則が別の形で1度だけ現れる。
+ */
+export function transferEnds(item: {
+  type: string;
+  accountId: string;
+  toAccountId?: string;
+}): { fromId: string; toId: string | null } | null {
+  if (item.type !== "transfer") return null;
+  return { fromId: item.accountId, toId: item.toAccountId ?? null };
 }
 
 /** カードかどうか。CL-2 はこの判定で残高を動かすかを分ける。 */

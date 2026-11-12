@@ -144,6 +144,28 @@ export const FIXTURE_ONEOFFS: OneoffItem[] = [
     accountId: "a1",
     date: "2026-12-10",
   },
+  /* **予定の側の資金移動**（`type = transfer`）。向き（FR-63・AC-70）が
+     「やること」と「ダッシュボードの要対応」にも出ることを画面で見る
+     ために入れてある。**実績だけだと、予定の行には1件も無い** ――
+     行が0件の条項は必ず通る（CLAUDE.md §2.11 の3つ目の形）。
+
+     **単発にしてある。** 定期項目にすると24ヶ月ぶんの予定が立ち、
+     件数を見ているほかの条項の母数が動く。 */
+  {
+    id: "o2",
+    name: "△△信金へ資金移動",
+    type: "transfer",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 200_000,
+    bizRatio: 0,
+    accountId: "a1",
+    toAccountId: "a2",
+    /* **基準日（10/18）より前にしてある。** ダッシュボードの要対応は
+       「実績が未入力の過去の予定」なので、未来の日付だとそちらに
+       出てこない（`lib/dashboard` の `unfilled`） */
+    date: "2026-10-15",
+  },
 ];
 
 /**
@@ -203,6 +225,48 @@ export const FIXTURE_ACTUALS: Actual[] = [
     bizRatio: 0,
     accountId: "a2",
     date: "2026-10-09",
+  },
+  /* **両端を持つ振替（`type = transfer`）が2件**。向き（FR-63・AC-70）と
+     口座ごとの日別（FR-64・AC-71）を画面で見るために入れてある。
+
+     **現金（a0）を動かす行は、これを入れるまで0件だった。** 0件の口座で
+     日別を測ると増減も合計も0で、どんな実装でも通る（CLAUDE.md §2.11 の
+     3つ目の形）。**入る日と出る日を両方**作る。
+
+     **向きが逆の組にしてある。** これが 2026-11-12 に 46,000円 ずれた
+     ときの形である ―― 引出し17件のなかに預け入れ1件が同じ名前で紛れて
+     いた。合計の範囲では両方とも符号が付かない（閉じる振替）ので、
+     **向きが出ていないと2件の区別が付かない。**
+
+     額は他の行に出てこない 50,000 と 23,000。相殺して0にならない
+     （+27,000。§2.11 の1つ目の形） */
+  {
+    id: "ac4",
+    key: null,
+    unplanned: true,
+    name: "ＡＴＭ　セブン銀行",
+    type: "transfer",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 50_000,
+    bizRatio: 0,
+    accountId: "a1",
+    toAccountId: "a0",
+    date: "2026-10-14",
+  },
+  {
+    id: "ac5",
+    key: null,
+    unplanned: true,
+    name: "ＡＴＭ　ローソン",
+    type: "transfer",
+    costType: null,
+    categoryCode: "TRF-01",
+    amount: 23_000,
+    bizRatio: 0,
+    accountId: "a0",
+    toAccountId: "a1",
+    date: "2026-10-23",
   },
 ];
 

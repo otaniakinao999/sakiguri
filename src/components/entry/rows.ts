@@ -27,6 +27,14 @@ export interface RowBase {
   amount: Yen;
   /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
   display: AmountView;
+  /**
+   * 資金移動の向き（「現金 → ○○銀行」）。向きを持たない行では undefined。
+   *
+   * **符号では足りない**（FR-63・AC-70）。合計で見ているときは閉じる
+   * 振替の delta が0なので符号が付かない。`formatTransferDirection` が
+   * 1箇所で決める。
+   */
+  direction?: string;
   category: Category | null;
 }
 

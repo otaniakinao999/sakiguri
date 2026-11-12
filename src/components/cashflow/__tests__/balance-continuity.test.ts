@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCashflowFixture, FIXTURE_TODAY } from "../cashflow-fixture";
+import {
+  buildCashflowFixture,
+  FIXTURE_ACCOUNTS,
+  FIXTURE_TODAY,
+} from "../cashflow-fixture";
 import { buildCashflowViewModel } from "../cashflow-view-model";
 
 /**
@@ -15,6 +19,7 @@ const fixture = buildCashflowFixture();
 const view = buildCashflowViewModel({
   series: fixture.series,
   monthly: fixture.monthly,
+  accounts: FIXTURE_ACCOUNTS,
   view: fixture.view,
   from: fixture.from,
   to: fixture.to,

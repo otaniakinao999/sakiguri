@@ -22,7 +22,7 @@ import {
   FIXTURE_TODAY,
 } from "@/components/dashboard/dashboard-fixture";
 
-export { FIXTURE_RESERVE_LINE, FIXTURE_TODAY };
+export { FIXTURE_ACCOUNTS, FIXTURE_RESERVE_LINE, FIXTURE_TODAY };
 
 /** 表示する期間。Figma 2030:186 と同じ6ヶ月（2026年9月〜2027年2月） */
 export const FIXTURE_FROM = "2026-09";

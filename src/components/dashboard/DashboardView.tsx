@@ -48,6 +48,8 @@ export interface DashboardTodo {
   amount: Yen;
   /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
   display: AmountView;
+  /** 資金移動の向き（FR-63・AC-70）。向きを持たない行では undefined */
+  direction?: string;
   /** 区分が決まらないものは省く（固定／変動を費目から決めない。§3.1.2 適用規則1） */
   category: Category | null;
 }
@@ -266,6 +268,8 @@ export function DashboardView({
                   key={t.id}
                   date={t.date}
                   title={t.title}
+                  /* 資金移動の向き（FR-63・AC-70） */
+                  detail={t.direction}
                   amount={t.display.value}
                   amountType={t.display.type}
                   signed={t.display.signed}

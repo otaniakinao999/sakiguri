@@ -18,7 +18,11 @@ import {
   type BalanceSeries,
 } from "@/core/balance";
 import { addDays } from "@/core/date";
-import type { DateStr, Yen } from "@/core/types";
+import {
+  accountNames,
+  formatTransferDirection,
+} from "@/core/transfer-direction";
+import type { Account, DateStr, Yen } from "@/core/types";
 import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
 import type { ForecastMarker, ForecastPoint } from "@/components/sakiguri/ForecastChart";
@@ -99,6 +103,8 @@ export interface DashboardViewModel {
 export interface DashboardViewModelInput {
   series: BalanceSeries;
   dashboard: Dashboard;
+  /** 資金移動の向きに出す口座名（FR-63・AC-70） */
+  accounts: readonly Account[];
   today: DateStr;
   reserveLine: Yen;
   range: Range;
@@ -107,6 +113,7 @@ export interface DashboardViewModelInput {
 export function buildDashboardViewModel({
   series,
   dashboard,
+  accounts,
   today,
   reserveLine,
   range,
@@ -166,6 +173,11 @@ export function buildDashboardViewModel({
   const deposits = new Set(depositIdsOf(series));
   const viewed = [...depositIdsOf(series), ...cardIdsOf(series)];
 
+  /* 向きの表示（FR-63・AC-70）。**符号とは別の軸である** ―― この範囲は
+     カードも含むので振替でも符号が付くことがあるが、合計で見る画面では
+     付かない。向きはどちらでも同じものが出る（`formatTransferDirection`） */
+  const names = accountNames(accounts);
+
   const todos: DashboardTodo[] = dashboard.unfilled.slice(0, TODO_LIMIT).map((plan) => {
     const category = categoryTagFor(plan.categoryCode, plan.costType);
     return {
@@ -180,6 +192,7 @@ export function buildDashboardViewModel({
         category,
         type: plan.type,
       }),
+      direction: formatTransferDirection(plan, names) ?? undefined,
       category,
     };
   });

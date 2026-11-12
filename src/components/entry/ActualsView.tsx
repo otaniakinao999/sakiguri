@@ -108,6 +108,8 @@ export function ActualsView({
                   key={row.id}
                   date={row.date}
                   title={row.title}
+                  /* 資金移動の向き（FR-63・AC-70） */
+                  detail={row.direction}
                   amount={row.display.value}
                   amountType={row.display.type}
                   signed={row.display.signed}

@@ -10,6 +10,14 @@ export interface TodoRowProps {
   /** 整形済み。例：9/27 */
   date: string;
   title: string;
+  /**
+   * 内容の下に小さく出す1行。**資金移動の向き**（FR-63・AC-70）。
+   *
+   * 備考（キャッシュフローの列）とは別物である。あちらは1行に1つしか
+   * 出せず、優先順位で落ちる（繰延・未入力が先）。向きは落ちてはいけない
+   * ので内容に添える。
+   */
+  detail?: string;
   amount: Yen;
   amountType?: AmountType;
   /** 符号を付けるか。残高の動きで決まる（AC-58b・`amountView`） */
@@ -37,6 +45,7 @@ export interface TodoRowProps {
 export function TodoRow({
   date,
   title,
+  detail,
   amount,
   amountType = "neutral",
   signed,
@@ -51,7 +60,14 @@ export function TodoRow({
     <div className={cn(last ? null : "border-b border-border", className)}>
       <div className="flex items-center gap-12 py-12">
         <span className="num w-48 shrink-0 t-table text-muted-foreground">{date}</span>
-        <span className="min-w-0 flex-1 truncate t-body text-foreground">{title}</span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate t-body text-foreground">{title}</span>
+          {detail ? (
+            <span className="block truncate t-body-sm text-muted-foreground">
+              {detail}
+            </span>
+          ) : null}
+        </div>
         <Amount
           value={amount}
           type={amountType}

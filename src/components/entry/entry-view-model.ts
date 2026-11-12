@@ -9,6 +9,10 @@
  */
 
 import { viewDelta } from "@/core/balance";
+import {
+  accountNames,
+  formatTransferDirection,
+} from "@/core/transfer-direction";
 import type { Account, Actual, DateStr, ForecastInstance } from "@/core/types";
 import { isCard } from "@/core/types";
 import { amountView } from "@/components/sakiguri/amount-view";
@@ -37,12 +41,17 @@ import type {
 export interface EntryAmountScope {
   viewed: readonly string[];
   deposits: ReadonlySet<string>;
+  /** 資金移動の向きに出す口座名（FR-63・AC-70） */
+  names: ReadonlyMap<string, string>;
 }
 
 export function entryAmountScope(accounts: readonly Account[]): EntryAmountScope {
   return {
     viewed: accounts.map((a) => a.id),
     deposits: new Set(accounts.filter((a) => !isCard(a)).map((a) => a.id)),
+    /* **カードも入れる。** 振替先がカードの行でも向きは出す ―― 残高に
+       反映されないことは備考が言う（`oneSidedReason`） */
+    names: accountNames(accounts),
   };
 }
 
@@ -60,6 +69,20 @@ function displayOf(
   });
 }
 
+/**
+ * 資金移動の向き（FR-63・AC-70）。
+ *
+ * **符号とは別の軸である。** この画面の範囲はカードも含むので振替でも
+ * 符号が付くことがあるが、**合計で見る画面（キャッシュフロー）では
+ * 付かない。** 向きはどちらの範囲でも同じものが出る必要がある。
+ */
+function directionOf(
+  item: Pick<Actual, "type" | "accountId" | "toAccountId">,
+  scope: EntryAmountScope,
+) {
+  return formatTransferDirection(item, scope.names) ?? undefined;
+}
+
 function planToRow(plan: ForecastInstance, scope: EntryAmountScope) {
   const category = categoryTagFor(plan.categoryCode, plan.costType);
   return {
@@ -68,6 +91,7 @@ function planToRow(plan: ForecastInstance, scope: EntryAmountScope) {
     title: plan.name,
     amount: plan.amount,
     display: displayOf(plan, category, scope),
+    direction: directionOf(plan, scope),
     category,
   };
 }
@@ -80,6 +104,7 @@ function actualToRow(actual: Actual, scope: EntryAmountScope) {
     title: actual.name,
     amount: actual.amount,
     display: displayOf(actual, category, scope),
+    direction: directionOf(actual, scope),
     category,
   };
 }

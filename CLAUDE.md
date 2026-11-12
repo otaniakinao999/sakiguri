@@ -63,6 +63,7 @@ src/core/          ← 計算ロジック。React / DOM / fetch / Date.now() を
   loan.ts          CL-8  借入返済スケジュール
   receivable.ts    CL-9  売掛金の入金予定
   balance-check.ts FR-61 取込の結果を残高で検算する
+  transfer-direction.ts FR-63 資金移動の向き（移動元 → 移動先）
   __tests__/       受入基準 AC-01〜17 に対応するテスト
 ```
 

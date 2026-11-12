@@ -167,6 +167,7 @@ export function CashflowScreen() {
     return buildCashflowViewModel({
       series: computed.series,
       monthly,
+      accounts: data.accounts,
       view,
       from: rows[0]?.date ?? today,
       to: rows[rows.length - 1]?.date ?? today,

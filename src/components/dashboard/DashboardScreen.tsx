@@ -103,12 +103,13 @@ export function DashboardScreen() {
         ? buildDashboardViewModel({
             series: model.series,
             dashboard: model.dashboard,
+            accounts: data.accounts,
             today,
             reserveLine: data.reserveLine,
             range,
           })
         : null,
-    [model, today, data.reserveLine, range],
+    [model, today, data.accounts, data.reserveLine, range],
   );
 
   if (!today) return <Panel title="ダッシュボード">読み込み中…</Panel>;

@@ -52,6 +52,13 @@ export interface CashflowLedgerEntry {
   amount: Yen;
   /** 画面に出す値・符号・色。`amountView` が1箇所で決める（AC-58b） */
   display: AmountView;
+  /**
+   * 資金移動の向き（「現金 → ○○銀行」。FR-63・AC-70）。
+   *
+   * **内容の列に添える。備考ではない。** 備考は1行に1つしか出せず
+   * （繰延・未入力が先に取る）、向きは落ちてはいけない。
+   */
+  direction?: string;
   category: Category | null;
   status: Status;
   /**
@@ -395,6 +402,14 @@ export function CashflowView({
                         ) : (
                           row.title
                         )}
+                        {/* 資金移動の向き（FR-63・AC-70）。合計で見ている
+                            ときは符号が付かないので、これが無いと引出しと
+                            預け入れの区別が付かない */}
+                        {row.direction ? (
+                          <span className="block t-body-sm text-muted-foreground">
+                            {row.direction}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell align="right">
                         <Amount

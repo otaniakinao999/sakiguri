@@ -4,6 +4,7 @@ import { DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
 
 import {
   buildFixtureModel,
+  FIXTURE_ACCOUNTS,
   FIXTURE_RESERVE_LINE,
   FIXTURE_TODAY,
 } from "../dashboard-fixture";
@@ -29,6 +30,7 @@ const model = buildFixtureModel();
 const view = buildDashboardViewModel({
   series: model.series,
   dashboard: model.dashboard,
+  accounts: FIXTURE_ACCOUNTS,
   today: FIXTURE_TODAY,
   reserveLine: FIXTURE_RESERVE_LINE,
   range: "90",
@@ -61,6 +63,7 @@ describe("buildDashboardViewModel", () => {
     const safe = buildDashboardViewModel({
       series: model.series,
       dashboard: { ...model.dashboard, warning: null },
+      accounts: FIXTURE_ACCOUNTS,
       today: FIXTURE_TODAY,
       reserveLine: FIXTURE_RESERVE_LINE,
       range: "90",
@@ -75,6 +78,7 @@ describe("buildDashboardViewModel", () => {
     const noLine = buildDashboardViewModel({
       series: model.series,
       dashboard: { ...model.dashboard, warning: null },
+      accounts: FIXTURE_ACCOUNTS,
       today: FIXTURE_TODAY,
       reserveLine: 0,
       range: "90",
@@ -109,9 +113,17 @@ describe("buildDashboardViewModel", () => {
   });
 
   it("未来日付の実績があれば実線が今日より先まで伸びる", () => {
-    const later = buildFixtureModel("2026-10-10");
-    /* 10/10 を今日にすると、まだ 10/10 より後の実績は無いので継ぎ目は今日 */
-    expect(later.series.actualEnd).toBe("2026-10-10");
+    /* **今日より後に実績がある状態で測る。** フィクスチャの最後の実績は
+       10/23（振替）なので、10/10 を今日にすると継ぎ目はそこまで伸びる。
+
+       以前はここが `toBe("2026-10-10")` だった ―― **今日より後の実績が
+       1件も無かったので、「伸びる」ほうを一度も測っていなかった**
+       （CLAUDE.md §2.11 の3つ目の形。test の名前だけが残っていた）。 */
+    expect(buildFixtureModel("2026-10-10").series.actualEnd).toBe("2026-10-23");
+
+    /* **同じ実行で、伸びないほうも測る。** 片方だけだと「常に最後の
+       実績まで伸ばす実装」と区別が付かない */
+    expect(buildFixtureModel("2026-11-01").series.actualEnd).toBe("2026-11-01");
   });
 
   it("横幅は 今日−30日 から 今日+期間 まで", () => {
@@ -126,6 +138,7 @@ describe("buildDashboardViewModel", () => {
     const year = buildDashboardViewModel({
       series: model.series,
       dashboard: model.dashboard,
+      accounts: FIXTURE_ACCOUNTS,
       today: FIXTURE_TODAY,
       reserveLine: FIXTURE_RESERVE_LINE,
       range: "12m",
@@ -209,6 +222,7 @@ describe("buildDashboardViewModel", () => {
         ...model.dashboard,
         unrecorded: { amount: 123_000, count: 0 },
       },
+      accounts: FIXTURE_ACCOUNTS,
       today: FIXTURE_TODAY,
       reserveLine: FIXTURE_RESERVE_LINE,
       range: "90",

@@ -10,7 +10,11 @@
 
 import type { BalanceSeries, OneSidedReason } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
-import type { DateStr, Yen } from "@/core/types";
+import {
+  accountNames,
+  formatTransferDirection,
+} from "@/core/transfer-direction";
+import type { Account, DateStr, Yen } from "@/core/types";
 import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor, type Category } from "@/components/sakiguri/CategoryTag";
 import type { MonthlyBalancePoint } from "@/components/sakiguri/MonthlyBalanceChart";
@@ -54,6 +58,8 @@ export interface CashflowViewModel {
 export interface CashflowViewModelInput {
   series: BalanceSeries;
   monthly: readonly MonthlyCashflowRow[];
+  /** 資金移動の向きに出す口座名（FR-63・AC-70） */
+  accounts: readonly Account[];
   /** 期間で絞ったあとの明細（lib/ledger の出力） */
   view: LedgerView;
   /** 表示する期間。グラフの横幅もこれに従う */
@@ -125,6 +131,7 @@ function noteOf(entry: LedgerEntry): string | undefined {
 export function buildCashflowViewModel({
   series,
   monthly,
+  accounts,
   view,
   from,
   to,
@@ -169,6 +176,19 @@ export function buildCashflowViewModel({
   /* 月グループは畳んで1枚の表にする。月の区切りは行で入れる（下の
      groupLabel）。Figma 2030:348 は9月と10月が区切り無しで続いているが、
      要件定義書 §4.2 は月ごとのまとまりを求めている */
+  /**
+   * 向きの表示（FR-63・AC-70）。
+   *
+   * **この画面がいちばん要る。** 合計で見ているときは閉じる振替の
+   * delta が0なので符号が付かず（AC-58b。それ自体は正しい）、
+   * 向きが出ていないと引出しと預け入れの区別が付かない。
+   * 2026-11-12 に 46,000円 ずれたのはこの状態だった（制約11）。
+   *
+   * **備考の列には入れない。** あちらは1行に1つしか出せず、繰延や
+   * 未入力が先に取る（`noteOf`）。向きは落ちてはいけない。
+   */
+  const names = accountNames(accounts);
+
   const ledger: CashflowLedgerEntry[] = [];
   const ledgerMonths: CashflowViewModel["ledgerMonths"] = [];
   for (const group of view.groups) {
@@ -197,6 +217,7 @@ export function buildCashflowViewModel({
         title: entry.name,
         amount: entry.amount,
         display: amountView({ amount: entry.amount, delta: entry.delta, category }),
+        direction: formatTransferDirection(entry, names) ?? undefined,
         category,
         balance: entry.balance,
         status: entry.status === "actual" ? "実績" : "予定",
