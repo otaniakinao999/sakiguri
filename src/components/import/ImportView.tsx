@@ -11,6 +11,7 @@ import {
   type ImportRow,
 } from "@/core/csv";
 import { categoryOf } from "@/core/categories";
+import type { BalanceCheckMessage } from "@/lib/balance-check-message";
 import { Callout } from "@/components/sakiguri/Callout";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
@@ -66,6 +67,13 @@ export interface ImportViewProps {
   preview: ImportRow[] | null;
   onPreviewChange?: (rows: ImportRow[]) => void;
   onCommit?: () => void;
+  /**
+   * **残高での検算**（FR-61・AC-68）。null なら何も出さない。
+   *
+   * 残高の列が無いCSVでは null が来る。文の組み立ては
+   * `lib/balance-check-message.ts` が持つ（確認画面と登録後の知らせで同じ文）。
+   */
+  balanceCheck?: BalanceCheckMessage | null;
 
   /**
    * **この取込で使わないことにしたルール**（FR-18・AC-57b）。
@@ -180,6 +188,7 @@ export function ImportView({
   preview,
   onPreviewChange,
   onCommit,
+  balanceCheck,
   disabledRules,
   onDisableRule,
   onCreateRule,
@@ -358,6 +367,23 @@ export function ImportView({
                     ))}
                   </Select>
                 )}
+              </Field>
+
+              {/* **残高の列**（FR-61・AC-68）。取込の検算にだけ使う。
+                  見出しから推定できなければ「（使わない）」のまま */}
+              <Field label="残高の列" htmlFor="col-balance">
+                <Select
+                  id="col-balance"
+                  value={mapping.balance}
+                  onChange={(e) => setColumn("balance", Number(e.target.value))}
+                >
+                  <option value={-1}>（使わない）</option>
+                  {columns.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
               </Field>
             </div>
 
@@ -566,6 +592,14 @@ export function ImportView({
                 （{disabledRules.map((r) => r.pattern).join("、")}）。
                 ルールは消えていないので、次の取込では また当たります。
               </p>
+            ) : null}
+
+            {/* **残高での検算**（FR-61・AC-68）。
+                重複判定が外しても、取り落としと二重計上がここで分かる。
+                **取込のチェックを変えるたびに出し直す** ―― 外した行の
+                ぶんだけ差額が動くので、どの行を戻せばよいかが分かる */}
+            {balanceCheck ? (
+              <Callout tone={balanceCheck.tone}>{balanceCheck.text}</Callout>
             ) : null}
 
             {duplicates > 0 ? (

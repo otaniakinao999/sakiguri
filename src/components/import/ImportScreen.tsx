@@ -14,16 +14,24 @@
 
 import { useMemo, useRef, useState } from "react";
 
-import { buildBalanceSeries } from "@/core/balance";
+import { buildBalanceSeries, depositIdsOf } from "@/core/balance";
 import { buildForecast } from "@/core/forecast";
+import { checkImportBalance } from "@/core/balance-check";
 import type { Actual, ForecastInstance, ImportRule } from "@/core/types";
 import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { track } from "@/lib/analytics/track";
 import { Callout } from "@/components/sakiguri/Callout";
 import { Panel } from "@/components/sakiguri/Panel";
 import type { StepItem } from "@/components/sakiguri/Steps";
+import { balanceCheckMessage } from "@/lib/balance-check-message";
+import {
+  pickImportAccount,
+  readImportAccount,
+  writeImportAccount,
+} from "@/lib/import-account";
 import { buildHeaderStats } from "@/lib/header-stats";
 import {
+  actualFromImportRow,
   buildImportRows,
   CSV_MAX_ROWS,
   decodeCsv,
@@ -60,7 +68,27 @@ export function ImportScreen() {
   /** 選んだファイルの名前。Figma 2033:890 がファイル名を出している */
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const activeAccount = accountId || data.accounts[0]?.id || "";
+  /**
+   * **取込先の口座**（FR-60・AC-67）。前回選んだ口座のまま開く。
+   *
+   * **効果で後から直さない。** 最初の描画でいちばん上の口座を出してから
+   * 効果で入れ替えると、その一瞬のあいだに「読み取る」を押せてしまう。
+   * 選ぶのは描画のたびに `pickImportAccount` が決める（純関数）。
+   *
+   * `remembered` を `useMemo` で持つのは、読み出しを毎回の描画でやらない
+   * ためだけである。値は `localStorage` にあり、書くのは下の `chooseAccount`。
+   */
+  const remembered = useMemo(
+    () => readImportAccount(session?.user.id),
+    [session?.user.id],
+  );
+  const activeAccount = pickImportAccount(accountId, remembered, data.accounts);
+
+  /** 選び直したら覚える。覚えられなくても取込は続けられる */
+  const chooseAccount = (id: string) => {
+    setAccountId(id);
+    writeImportAccount(session?.user.id, id);
+  };
 
   /** 未消込の予定。自動照合の候補になる。残高系列は PageHeader も使う */
   const computed = useMemo(() => {
@@ -213,21 +241,33 @@ export function ImportScreen() {
     );
   };
 
+  /**
+   * **残高での検算**（FR-61・AC-68）。
+   *
+   * 「取込後にこの口座に在ることになる実績」を渡す ―― 保存済みの全件と、
+   * いま取込のチェックが入っている行である。**登録したあとは保存済みが
+   * それを含むので、同じ関数に同じ値が入り、出る額も同じになる。**
+   * 画面に出した額と、登録後の残高が違うということが起きない。
+   *
+   * 取込行から実績への変換は `actualFromImportRow` が1箇所で持つ（§2.8）。
+   * `id` は検算では読まないので空で渡す。
+   */
+  const balanceCheck = useMemo(() => {
+    if (!preview || !computed) return null;
+    return checkImportBalance({
+      rows: preview,
+      existing: data.actuals,
+      accountId: activeAccount,
+      /* 現預金の集合は系列から引く（`depositIdsOf`）。口座一覧から
+         組み直すと、違う集合で足すことになる */
+      deposits: new Set(depositIdsOf(computed.series)),
+    });
+  }, [preview, computed, data.actuals, activeAccount]);
+
   const commit = () => {
     if (!preview) return;
     const chosen = preview.filter((r) => r.include);
-    const actuals: Actual[] = chosen.map((r) => ({
-      id: newId(),
-      key: r.matchedKey,
-      date: r.date,
-      name: r.name,
-      type: r.type,
-      costType: r.costType,
-      categoryCode: r.categoryCode,
-      amount: r.amount,
-      bizRatio: r.bizRatio,
-      accountId: r.accountId,
-    }));
+    const actuals: Actual[] = chosen.map((r) => actualFromImportRow(r, newId()));
     /* CSV取込は、照合が1件も成立しなくても消し込み操作として数える。
        測っているのは「利用者が消し込みに向き合ったか」であって、成果の
        有無ではない（FR-43、§3.2 Settings） */
@@ -244,8 +284,13 @@ export function ImportScreen() {
       settled: chosen.some((r) => r.matchedKey),
       fromCsv: true,
     });
+    /* **検算の結果を登録後にも残す**（AC-68）。`reset()` で確認画面が
+       消えるので、ここで文に入れないと差額が見えなくなる。**文の組み立ては
+       `balanceCheckMessage` が1箇所で持つ**（§2.8） */
+    const checked = balanceCheckMessage(balanceCheck);
     setNotice(
-      `${chosen.length}件を登録しました。うち${chosen.filter((r) => r.matchedKey).length}件が予定と紐づいています。`,
+      `${chosen.length}件を登録しました。うち${chosen.filter((r) => r.matchedKey).length}件が予定と紐づいています。` +
+        (checked ? ` ${checked.text}` : ""),
     );
     reset();
   };
@@ -309,7 +354,7 @@ export function ImportScreen() {
           label: `${a.name}${a.kind === "card" ? "（カード）" : ""}`,
         }))}
         accountId={activeAccount}
-        onAccountChange={setAccountId}
+        onAccountChange={chooseAccount}
         fileName={fileName}
         onPickFile={() => fileRef.current?.click()}
         pasteOpen={pasteOpen}
@@ -322,6 +367,8 @@ export function ImportScreen() {
         preview={preview}
         onPreviewChange={setPreview}
         onCommit={commit}
+        /* 残高での検算（FR-61・AC-68）。列が無ければ null で、何も出ない */
+        balanceCheck={balanceCheckMessage(balanceCheck)}
         disabledRules={data.rules.filter((r) => disabledRuleIds.includes(r.id))}
         onDisableRule={disableRule}
         onCreateRule={createRule}

@@ -18,6 +18,7 @@ const mapping = (over: Partial<ColumnMapping> = {}): ColumnMapping => ({
   outflow: 3,
   amount: -1,
   sign: "outMinus",
+  balance: -1,
   hasHeader: true,
   ...over,
 });

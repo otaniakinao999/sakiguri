@@ -10,8 +10,9 @@
 
 import { useState } from "react";
 
-import { buildBalanceSeries } from "@/core/balance";
+import { buildBalanceSeries, depositIdsOf } from "@/core/balance";
 import { buildForecast, recurringKey } from "@/core/forecast";
+import { checkImportBalance } from "@/core/balance-check";
 import {
   buildImportRows,
   detectColumns,
@@ -32,6 +33,7 @@ import {
 } from "@/components/dashboard/dashboard-fixture";
 import type { Actual, ImportRule } from "@/core/types";
 import { ImportView } from "@/components/import/ImportView";
+import { balanceCheckMessage } from "@/lib/balance-check-message";
 import { buildHeaderStats } from "@/lib/header-stats";
 import { forecastEnd } from "@/lib/period";
 
@@ -49,14 +51,35 @@ import { forecastEnd } from "@/lib/period";
  * **5件目は「何行に当たるか」のために足した**（AC-57e）。4件だと、
  * どう縮めても当たるのは1行だけで、**数が増えるところを一度も見られない。**
  * 1行しか当たらないデータでは、数え方が違っても 1 と出る
- * （CLAUDE.md §2.11）。`ﾌﾘｺﾐ` で2行に当たる状態を作っている。
+ * （CLAUDE.md §2.11）。`ﾌﾘｺﾐ` で複数行に当たる状態を作っている。
+ *
+ * ## 残高の列（FR-61・AC-68）
+ *
+ * **列を足さないと、この画面は検算を一度も出せない。** 残高の列が無い
+ * CSVでは何も出さないのが条項なので、列の無いデータでは「出さない」側
+ * しか見られない（CLAUDE.md §2.11「無いことを測る条項は、同じ実行で
+ * 在ることも測る」）。
+ *
+ * **4件目（ﾁｲｷｼﾝｷﾝ 77,777）は、検算が当てる当のものを出すために足した。**
+ * この額は `FIXTURE_ACTUALS` に「△△信金へ移動」として**手入力で既に
+ * 入っている。** 摘要が漢字なので重複判定には当たらず（AC-64 の原文が
+ * 一致しない）、取込のチェックは入ったままになる。つまり既定の状態は
+ * **同じ取引が二重に入る**状態で、検算がそれを 77,777 と出す。
+ *
+ * **その行のチェックを外すと一致する。** 1クリックで「差額が出る」と
+ * 「黙る」の両方を見られるようにしてある ―― 片方しか出せないデータだと、
+ * 出っぱなしの実装とも、常に黙る実装とも区別が付かない。
+ *
+ * 残高は 9/25 の直前を 2,127,300（a1 の基準日残高 2,145,300 から 9/24 の
+ * 備品 18,000 を引いた額）として、各行の増減で繋いである。
  */
-const CSV = `お取引日,お取引内容,お預入額,お引出額
-2026/09/25,ﾌﾘｺﾐ ｼﾖｳｶｲ,330000,
-2026/09/27,ｼﾞﾑｼﾖﾔﾁﾝ,,95000
-2026/10/01,ﾂｳｼﾝﾋ,,10230
-2026/10/10,ﾌﾘｺﾐ ﾀﾅｶ,200000,
-2026/10/11,ﾌﾘｺﾐ ｽｽﾞｷ,150000,`;
+const CSV = `お取引日,お取引内容,お預入額,お引出額,残高
+2026/09/25,ﾌﾘｺﾐ ｼﾖｳｶｲ,330000,,2457300
+2026/09/27,ｼﾞﾑｼﾖﾔﾁﾝ,,95000,2362300
+2026/10/01,ﾂｳｼﾝﾋ,,10230,2352070
+2026/10/09,ﾌﾘｺﾐ ﾁｲｷｼﾝｷﾝ,,77777,2274293
+2026/10/10,ﾌﾘｺﾐ ﾀﾅｶ,200000,,2474293
+2026/10/11,ﾌﾘｺﾐ ｽｽﾞｷ,150000,,2624293`;
 
 /**
  * 既に保存されている実績（FR-50 の重複検出の相手）。
@@ -169,6 +192,16 @@ export default function DevImportWiredPage() {
           onMappingChange={setMapping}
           preview={preview}
           onPreviewChange={setPreview}
+          /* **本番と同じ関数で組む**（§2.8）。写し取ると、本番を直しても
+             この画面は古いまま動く */
+          balanceCheck={balanceCheckMessage(
+            checkImportBalance({
+              rows: preview,
+              existing: ALREADY_IMPORTED,
+              accountId: "a1",
+              deposits: new Set(depositIdsOf(series)),
+            }),
+          )}
           disabledRules={rules.filter((r) => disabled.includes(r.id))}
           onDisableRule={(id) => {
             const remaining = rules.filter(

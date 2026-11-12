@@ -216,6 +216,20 @@ export interface ColumnMapping {
   amount: number;
   /** 金額が1列の場合の符号の解釈 */
   sign: "outMinus" | "outPlus";
+  /**
+   * **残高の列**（FR-61・AC-68）。無ければ -1。
+   *
+   * 取込の結果を検算するためだけに読む。費目にも照合にも使わない。
+   * **見出しからしか拾わない。** 数として見ると金額の列と区別が付かず、
+   * 取り違えると検算が意味のない額を出す。したがって**見出しの無いCSVでは
+   * 検算しない**（`-1` のまま）。利用者が確認画面で選べる（CL-7「推定結果は
+   * 必ず画面に表示し、利用者が修正できること」）。
+   *
+   * 「日付,摘要,出金,入金,残高」の並びで最後の数の列を金額として拾って
+   * しまう経路は、**見出しが無いときにしか通らない**（列の推定は1行目しか
+   * 見ない）。そこでは残高も拾えていないので、除く処理を書いても効かない。
+   */
+  balance: number;
   /** 1行目が見出しか */
   hasHeader: boolean;
 }
@@ -226,6 +240,8 @@ const HEADER_PATTERNS = {
   inflow: /入金|お預り|お預入|預入/,
   outflow: /出金|お支払|お引出|引出|支払金額/,
   amount: /金額/,
+  /** 「差引残高」「現在高」も含む。**「残高」を含む語を広く拾う** */
+  balance: /残高|残額|現在高/,
 } as const;
 
 /**
@@ -246,6 +262,8 @@ export function detectColumns(rows: string[][]): ColumnMapping {
   const inflow = find(HEADER_PATTERNS.inflow);
   const outflow = find(HEADER_PATTERNS.outflow);
   let amount = find(HEADER_PATTERNS.amount);
+  /* **残高は見出しからだけ拾う。** 中身から推し量らない（`balance` の注記） */
+  const balance = find(HEADER_PATTERNS.balance);
 
   /* 見出しに当たらなければ、1行目の中身から推し量る */
   if (date < 0) date = head.findIndex((cell) => normalizeDate(cell) !== null);
@@ -259,7 +277,9 @@ export function detectColumns(rows: string[][]): ColumnMapping {
     /* すでに他の用途に割り当たっている列は候補から外す。
        外さないと「日付,入金,出金」のようなCSVで、入金の列を
        摘要として拾ってしまう。 */
-    const taken = new Set([date, inflow, outflow, amount].filter((i) => i >= 0));
+    const taken = new Set(
+      [date, inflow, outflow, amount, balance].filter((i) => i >= 0),
+    );
     name = head.findIndex(
       (cell, i) =>
         !taken.has(i) &&
@@ -279,6 +299,7 @@ export function detectColumns(rows: string[][]): ColumnMapping {
     outflow,
     amount,
     sign: "outMinus",
+    balance,
     hasHeader,
   };
 }
@@ -870,6 +891,14 @@ export interface ImportRow {
   bizRatio: number;
   /** 絶対値 */
   amount: Yen;
+  /**
+   * **その行の時点の残高**（FR-61・AC-68）。列が無ければ null。
+   *
+   * 取込の結果を検算するためだけに持つ（`core/balance-check.ts`）。実績には
+   * 保存しない ―― 残高は口座の属性であって1件の取引の属性ではなく、
+   * 保存すると同じ残高が2箇所から出る（CLAUDE.md §2.12）。
+   */
+  balance: Yen | null;
   accountId: string;
   /** 自動照合された予定インスタンスのキー。無ければ null */
   matchedKey: string | null;
@@ -990,6 +1019,12 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
     const amount = Math.abs(signed);
     const name =
       String(cells[mapping.name] ?? "").trim() || NO_DESCRIPTION;
+    /* **読めない残高は null。** 0 にすると鎖が繋がらないのに
+       繋がっているように見える（`checkBalance` が `broken` を返せない） */
+    const balance =
+      mapping.balance >= 0
+        ? normalizeAmount(cells[mapping.balance] ?? "")
+        : null;
 
     const matched = matchPlan(
       { date, amount, type, accountId },
@@ -1022,6 +1057,7 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       categoryCode: decided.categoryCode,
       bizRatio: decided.bizRatio,
       amount,
+      balance,
       accountId,
       matchedKey: matched?.key ?? null,
       matchedName: matched?.name ?? null,
@@ -1060,4 +1096,29 @@ function readAmount(cells: string[], mapping: ColumnMapping): Yen | null {
   const value = normalizeAmount(cells[mapping.amount] ?? "");
   if (value === null) return null;
   return mapping.sign === "outMinus" ? value : -value;
+}
+
+/**
+ * 取込行を実績にする（CL-7 一括登録）。
+ *
+ * **ここが唯一の変換である**（CLAUDE.md §2.8）。登録のときと、登録前の
+ * 検算（FR-61）のときの2箇所から呼ぶ。別々に書くと、**画面に出した検算の
+ * 額と、実際に登録される額が違う**という形で食い違う ―― しかも登録するまで
+ * 誰も気づけない。
+ *
+ * `id` は呼び出し側が渡す。`newId()` は乱数なので core では呼べない（§2.3）。
+ */
+export function actualFromImportRow(row: ImportRow, id: string): Actual {
+  return {
+    id,
+    key: row.matchedKey,
+    date: row.date,
+    name: row.name,
+    type: row.type,
+    costType: row.costType,
+    categoryCode: row.categoryCode,
+    amount: row.amount,
+    bizRatio: row.bizRatio,
+    accountId: row.accountId,
+  };
 }

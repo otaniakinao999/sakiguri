@@ -62,6 +62,7 @@ src/core/          ← 計算ロジック。React / DOM / fetch / Date.now() を
   csv.ts           CL-7  CSV 解析と照合
   loan.ts          CL-8  借入返済スケジュール
   receivable.ts    CL-9  売掛金の入金予定
+  balance-check.ts FR-61 取込の結果を残高で検算する
   __tests__/       受入基準 AC-01〜17 に対応するテスト
 ```
 
