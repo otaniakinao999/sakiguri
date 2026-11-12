@@ -60,7 +60,7 @@ export function Sidebar({ currentHref }: { currentHref?: string } = {}) {
           **仮置きの SAKIGURI から支給されたロゴに差し替え**（2026-11-13）。
           色はここで渡す ―― ロゴ側は `currentColor`（§2.6） */}
       <div className="flex items-baseline gap-12 wide:flex-col wide:items-start wide:px-12">
-        <Wordmark className="h-32 text-primary-foreground" />
+        <Wordmark className="h-40 text-primary-foreground" />
       </div>
 
       <nav aria-label="画面">
