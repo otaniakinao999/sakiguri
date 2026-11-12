@@ -231,11 +231,16 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
     "2026/10/20,デビット　４１２６６９,3212,",
   ].join("\n");
 
-  const sourceOf = (storeName: string) =>
-    buildNameSource(
-      parseCsv(["利用日,利用店名,利用金額", `2026/10/20,${storeName},3134`].join("\n")),
-      detectColumns(parseCsv(["利用日,利用店名,利用金額", "2026/10/20,X,3134"].join("\n"))),
+  /** 明細の額 3,134 ＋ 海外事務手数料 78 ＝ 銀行の 3,212（AC-69） */
+  const sourceOf = (storeName: string) => {
+    const csv = parseCsv(
+      [
+        "利用日,利用店名,利用金額,海外事務手数料",
+        `2026/10/20,${storeName},3134,78`,
+      ].join("\n"),
     );
+    return buildNameSource(csv, detectColumns(csv));
+  };
 
   const debitRule = (replaceName: string | null) =>
     rule({ pattern: "デビット", categoryCode: "EXP-20", bizRatio: 0, replaceName });

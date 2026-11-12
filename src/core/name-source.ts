@@ -56,7 +56,22 @@ import type { DateStr, Yen } from "./types";
 /** デビット明細の1行。**向きは持たない**（利用＝出金として扱う） */
 export interface NameSourceEntry {
   date: DateStr;
-  /** 絶対値 */
+  /**
+   * **銀行の明細に出る額**（AC-69）。絶対値。
+   *
+   * お取引金額に、**明細が持っている手数料の列を足したもの**である ――
+   * 事務手数料・ATM手数料・海外事務手数料。外貨の利用は、銀行側に
+   * 手数料込みの額で出る。
+   *
+   * **割合で推測しない。** 足す数字は明細に書かれている。実データ：
+   *
+   * ```
+   * +435円   17,421 → 17,856   ANTHROPIC* CLAUDE SUB
+   * + 78円    3,134 →  3,212   FIGMA
+   * + 87円    3,486 →  3,573   OPENAI *CHATGPT SUBSCR
+   * + 63円    2,531 →  2,594   MONTHLY
+   * ```
+   */
   amount: Yen;
   /** 店名。空のこともある（11月の実データで7件） */
   name: string;
@@ -66,31 +81,53 @@ export interface NameSourceEntry {
  * 日付のずれをどこまで許すか（AC-69）。
  *
  * 実データでは同日・同額が162件中145件、**±3日まで広げると157件**になった。
- * 残り5件は外貨取引で、金額が手数料ぶん違う（下）。
  */
 export const NAME_SOURCE_DAYS = 3;
 
 /**
- * 海外事務手数料ぶんの差をどこまで許すか（AC-69）。
+ * 手数料の列（AC-69）。**見出しに「手数料」が入っている列を全部足す。**
  *
- * 実データ：FIGMA の利用が明細では 3,134円、銀行では 3,212円。差は78円で
- * **2.49%** である。
- *
- * **上限だけでなく下限も置く。** 上限だけだと、大きな金額では窓が広く
- * （200,000円なら1万円まで）、**無関係な額に当たりうる。** 手数料として
- * ありうる帯（0.5%〜5%）に収めると、たまたま当たる余地がほとんど無くなる。
- *
- * **この2つの数字は仕様に書かれていない。** 実データの2.49%が入る帯として
- * こちらで決めた値である。
+ * 実データの列は `事務手数料`・`ATM手数料`・`海外事務手数料` の3つだが、
+ * **名前を3つ並べない。** 並べると、別の明細に4つめがあったときに漏れる
+ * （CLAUDE.md §2.8 の列挙）。「手数料」を含む列、という規則にしておけば
+ * 増えても拾える。
  */
-export const FEE_MIN_PERMILLE = 5; // 0.5%
-export const FEE_MAX_PERCENT = 5;
+const FEE_HEADER = /手数料/;
+
+/**
+ * 手数料の列を探す（AC-69）。
+ *
+ * **ほかの役に割り当たっている列は外す。** 「ご利用金額（手数料込）」の
+ * ような見出しがあると、**金額の列を自分自身に足してしまう。**
+ *
+ * **見出しが無い明細では見つけられない**（`hasHeader` が false）。その場合は
+ * 手数料を足さない ―― 列の意味が分からないまま数を足すほうが危ない。
+ */
+function feeColumns(head: readonly string[], mapping: ColumnMapping): number[] {
+  if (!mapping.hasHeader) return [];
+  const taken = new Set(
+    [
+      mapping.date,
+      mapping.name,
+      mapping.amount,
+      mapping.inflow,
+      mapping.outflow,
+      mapping.balance,
+    ].filter((i) => i >= 0),
+  );
+  return head
+    .map((cell, i) => (!taken.has(i) && FEE_HEADER.test(String(cell)) ? i : -1))
+    .filter((i) => i >= 0);
+}
 
 /**
  * デビット明細を読む。**日付と金額と店名だけ。**
  *
  * 向きの列は読まない ―― デビット明細は利用（出金）の一覧なので、向きを
  * 読んでも常に同じになる。**当てる相手も出金の行に限る**（`applyNameSource`）。
+ *
+ * **金額には手数料の列を足す**（AC-69）。外貨の利用は、銀行側に手数料込みの
+ * 額で出る。**割合で推測しない** ―― 足す数字は明細に書かれている。
  *
  * **店名が空の行も残す。** 落とすと、その取引に当たるはずだった銀行の行が
  * **別の店名に当たりうる。** 残しておけば枠を使って止められる。当たった
@@ -101,6 +138,7 @@ export function buildNameSource(
   mapping: ColumnMapping,
 ): NameSourceEntry[] {
   const body = mapping.hasHeader ? rows.slice(1) : rows;
+  const fees = feeColumns(rows[0] ?? [], mapping);
   const out: NameSourceEntry[] = [];
 
   for (const cells of body) {
@@ -110,9 +148,15 @@ export function buildNameSource(
     const amount = readAmount(cells, mapping);
     if (amount === null || amount === 0) continue;
 
+    /* **手数料は足す側。** 符号の書き方は明細によるので絶対値で足す */
+    const fee = fees.reduce(
+      (sum, column) => sum + Math.abs(normalizeAmount(cells[column] ?? "") ?? 0),
+      0,
+    );
+
     out.push({
       date,
-      amount: Math.abs(amount),
+      amount: Math.abs(amount) + fee,
       name: mapping.name >= 0 ? String(cells[mapping.name] ?? "").trim() : "",
     });
   }
@@ -130,21 +174,14 @@ function readAmount(cells: readonly string[], mapping: ColumnMapping): Yen | nul
   return null;
 }
 
-/** 当たりの厳しさ。前のほうが厳しい */
-const TIERS = [
-  { days: 0, fee: false },
-  { days: NAME_SOURCE_DAYS, fee: false },
-  { days: 0, fee: true },
-  { days: NAME_SOURCE_DAYS, fee: true },
-] as const;
-
-/** 手数料ぶんの差として認められるか */
-function feeFits(rowAmount: Yen, entryAmount: Yen): boolean {
-  const fee = rowAmount - entryAmount;
-  if (fee <= 0) return false;
-  if (fee * 100 > entryAmount * FEE_MAX_PERCENT) return false;
-  return fee * 1000 >= entryAmount * FEE_MIN_PERMILLE;
-}
+/**
+ * 当たりの厳しさ。前のほうが厳しい。
+ *
+ * **金額は常に完全一致。** 手数料は明細の列から足してあるので（`amount`）、
+ * **割合の帯は置かない** ―― 0.5%〜5% のような帯を置くと、200,000円の行に
+ * 1万円ずれた相手が当たる（AC-69）。
+ */
+const TIERS = [{ days: 0 }, { days: NAME_SOURCE_DAYS }] as const;
 
 function hits(
   row: Pick<ImportRow, "date" | "amount">,
@@ -152,7 +189,7 @@ function hits(
   tier: (typeof TIERS)[number],
 ): boolean {
   if (daysBetween(row.date, entry.date) > tier.days) return false;
-  return tier.fee ? feeFits(row.amount, entry.amount) : row.amount === entry.amount;
+  return row.amount === entry.amount;
 }
 
 /**
