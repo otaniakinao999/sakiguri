@@ -194,7 +194,10 @@ export default function ConfirmPage() {
       <div className="bg-surface-base-primary border-border-base-low rounded-base w-full max-w-[var(--layout-signin-width)] border p-24">
         {/* サインインと同じ殻なので揃える（中央寄せ・h-40） */}
         <div className="mb-24 text-center">
-          <Wordmark className="h-40 text-object-base-high" />
+          {/* **`mx-auto` が要る。** `<svg>` は preflight で `display: block`
+              になるので、親の `text-center` では中央に寄らない（文字だけが
+              寄って、ロゴは左のままになる。2026-11-13 の実機で見つけた） */}
+          <Wordmark className="mx-auto h-40 text-object-base-high" />
         </div>
         {body()}
       </div>
