@@ -27,6 +27,7 @@ import {
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
 
+import { Wordmark } from "@/components/sakiguri/Wordmark";
 import { useAppData } from "./AppDataProvider";
 import { formatYearMonthDay } from "@/lib/format";
 import { NAV_ITEMS } from "./navigation";
@@ -55,9 +56,11 @@ export function Sidebar({ currentHref }: { currentHref?: string } = {}) {
         wide:h-full wide:w-sidenav wide:gap-24 wide:rounded-lg wide:px-16 wide:py-24
       "
     >
-      {/* ロゴだけ。説明文は v0.6.0 の SideNav（2008:19）に無い */}
+      {/* ロゴだけ。説明文は v0.6.0 の SideNav（2008:19）に無い。
+          **仮置きの SAKIGURI から支給されたロゴに差し替え**（2026-11-13）。
+          色はここで渡す ―― ロゴ側は `currentColor`（§2.6） */}
       <div className="flex items-baseline gap-12 wide:flex-col wide:items-start wide:px-12">
-        <span className="wordmark text-primary-foreground">SAKIGURI</span>
+        <Wordmark className="h-24 text-primary-foreground" />
       </div>
 
       <nav aria-label="画面">

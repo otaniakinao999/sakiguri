@@ -28,6 +28,7 @@
  * 検証を走らせない。
  */
 
+import { Wordmark } from "@/components/sakiguri/Wordmark";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -192,9 +193,7 @@ export default function ConfirmPage() {
     <div className="bg-surface-base-secondary flex min-h-screen items-center justify-center p-24">
       <div className="bg-surface-base-primary border-border-base-low rounded-base w-full max-w-[var(--layout-signin-width)] border p-24">
         <div className="mb-24">
-          <p className="font-display-en text-object-base-high text-headline-md tracking-wide leading-none font-bold">
-            SAKIGURI
-          </p>
+          <Wordmark className="h-32 text-object-base-high" />
         </div>
         {body()}
       </div>

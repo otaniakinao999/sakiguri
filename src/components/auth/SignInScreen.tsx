@@ -11,6 +11,7 @@
  * このアプリはパスワードを保存しない（要件定義書 §5.3）。
  */
 
+import { Wordmark } from "@/components/sakiguri/Wordmark";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/legacy/Button";
@@ -281,9 +282,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="bg-surface-base-secondary flex min-h-screen items-center justify-center p-24">
       <div className="bg-surface-base-primary border-border-base-low rounded-base w-full max-w-[var(--layout-signin-width)] border p-24">
         <div className="mb-24">
-          <p className="font-display-en text-object-base-high text-headline-md tracking-wide leading-none font-bold">
-            SAKIGURI
-          </p>
+          <Wordmark className="h-32 text-object-base-high" />
           <p className="font-display-jp text-object-base-mid mt-4 text-body-xxs">
             個人事業主の資金繰り帳
           </p>

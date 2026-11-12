@@ -53,7 +53,7 @@ Figma fileKey: `diqeunxgHCLNIPKVXL4evB`
 - **サイズ：** 幅 224px、高さは画面いっぱい。外側に 8px の余白を取ります（Sidebar inset：`p-2`）。
 - **見た目：** 背景 `bg-primary`、角丸 `rounded-lg`、内側の余白は上下 24px・左右 16px、項目の間隔は 4px。
 - **構成（上から）：**
-  1. ロゴ「SAKIGURI」。Figma では Cormorant Garamond 22px で仮置きしています。正式なロゴは画像で差し替えます（未支給）。
+  1. ロゴ。**支給された SVG のワードマーク**（`Wordmark`、`h-24`・`text-primary-foreground`）。Figma の Cormorant Garamond 22px は仮置きで、2026-11-13 に差し替えました（decisions.md 2）。
   2. NavItem × 6。並び順と URL は下の表のとおりです。
   3. 空きスペース（spacer）。
   4. フッター：上辺に `border-t border-border-primary-subtle` の区切り線。その下にラベル「基準日」（`t-label-sm`）と日付「2026年9月1日」を置き、どちらも `text-primary-foreground` にします。
