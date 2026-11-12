@@ -87,6 +87,13 @@ create policy "own rows" on public.actuals
 
 ### 2.5.1 マイグレーションとデプロイの順序
 
+**本番の台帳は 2026-11-12 に整えた。** それまで `db push` に本番を指す指定が
+無く（既定はローカル）、0001〜0008 は SQL エディタ経由で当たっていたため、
+**台帳は空だった。** 再実行できない3つ（0001・0004・0008）を
+`migration repair --status applied` で埋め、残りは実際に走らせてある。
+**いまは 0001〜0010 がすべて台帳に入っているので、以後は `pnpm db:migrate`
+がそのまま使える。**
+
 列の追加のように後方互換のあるマイグレーションは、**先に適用してからコードをデプロイする。** 逆順にすると、デプロイ完了からマイグレーション適用までのあいだ機能が壊れる。
 
 後方互換でないマイグレーション（列の削除・型変更・NOT NULL 化）は、「新旧どちらのコードでも動く状態」を経由する。追加 → コード切替 → 削除の3段階に分け、1つのPRにまとめない。
@@ -386,7 +393,7 @@ pnpm test:watch
 pnpm typecheck      # tsc --noEmit
 pnpm lint
 pnpm bench          # 10万件のローカル再現（通常のテストには混ぜない）
-pnpm db:migrate     # Supabase マイグレーション
+pnpm db:migrate     # Supabase マイグレーション（本番を指す。非対話で流すときは -- --yes）
 
 pnpm check:node-import   # plain Node から本番の定数を読めるか（§2.8）
 pnpm loadtest:account    # 負荷試験アカウントを用意する（冪等）

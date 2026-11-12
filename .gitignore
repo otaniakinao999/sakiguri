@@ -36,6 +36,9 @@ yarn-debug.log*
 # クラウド側へ渡すための一時アーカイブ（検証のたびに作り直す）
 /.claude-tmp/
 
+# Supabase CLI が書くリンク情報（端末ごとに変わる。project_id は config.toml が持つ）
+/supabase/.temp/linked-project.json
+
 # OS
 .DS_Store
 
