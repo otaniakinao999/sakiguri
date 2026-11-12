@@ -351,6 +351,7 @@ describe("AC-69 摘要を差し替えてもルールは原文に当たる", () =
     categoryCode: "EXP-03",
     costType: "fixed",
     bizRatio: 0,
+    replaceName: null,
   });
 
   it("当たり判定の対象は原文", () => {

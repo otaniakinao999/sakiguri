@@ -48,6 +48,8 @@ function blankRule(): ImportRule {
     categoryCode: "EXP-20",
     costType: "variable",
     bizRatio: 0,
+    /* 既定は置き換えない（FR-59） */
+    replaceName: null,
   };
 }
 
@@ -123,6 +125,7 @@ function RuleRow({
   onRemove: () => void;
 }) {
   const [pattern, setPattern] = useState(rule.pattern);
+  const [replaceName, setReplaceName] = useState(rule.replaceName ?? "");
   const [message, setMessage] = useState<string | null>(null);
 
   /** 当たる条件を変える操作。通らなければ**当てない**（画面も戻す） */
@@ -142,6 +145,13 @@ function RuleRow({
     if (!applyPatch({ pattern })) setPattern(rule.pattern);
   };
 
+  /** 置き換える摘要。**空は null に寄せる**（「置き換えない」を1つの形で表す） */
+  const commitReplaceName = () => {
+    const next = replaceName.trim() || null;
+    if (next === (rule.replaceName ?? null)) return;
+    onPatch({ replaceName: next });
+  };
+
   return (
     <>
       <tr>
@@ -151,6 +161,22 @@ function RuleRow({
             value={pattern}
             onChange={(e) => setPattern(e.target.value)}
             onBlur={commitPattern}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+          />
+        </td>
+        <td className={CELL}>
+          {/* **当たる条件ではないので `ruleConflict` を通さない**（FR-59）。
+              一意制約（`pattern`・口座・向き）に入っていないため、ここを
+              変えてもほかのルールと衝突しない。**打っているあいだは手元に
+              置く** ―― 一打ごとに保存すると、打ち終わる前の文字列が入る */}
+          <TextInput
+            aria-label="摘要を置き換える"
+            value={replaceName}
+            placeholder="置き換えないなら空"
+            onChange={(e) => setReplaceName(e.target.value)}
+            onBlur={commitReplaceName}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
@@ -252,7 +278,7 @@ function RuleRow({
       </tr>
       {message ? (
         <tr>
-          <td className={`${CELL} t-body-sm text-fg-warning`} colSpan={7}>
+          <td className={`${CELL} t-body-sm text-fg-warning`} colSpan={8}>
             {message}
           </td>
         </tr>
@@ -298,6 +324,13 @@ export function RulesTable() {
         複数当たったときは<strong className="font-semibold">長いほうが勝ちます</strong>
         （細かいルールをあとから足せます）。
       </p>
+      <p className="t-body-sm text-muted-foreground">
+        「摘要を置き換える」を入れると、当たった行の内容がその文字列になります
+        （「振込＊カ）ラボル」→「㈱ラボル」）。
+        <strong className="font-semibold">取込時の摘要は残る</strong>ので、
+        置き換えても重複判定は変わりません。あとから置き換えを変えても、
+        すでに取り込んだ行の判定は変わりません。
+      </p>
 
       {data.rules.length === 0 && !draft ? (
         <p className="py-24 text-center t-body-sm text-muted-foreground">
@@ -305,10 +338,17 @@ export function RulesTable() {
           「次回もこうする」で作れます。
         </p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
+        /* **w-full にしない**（`RecurringTable` と同じ理由）。器に合わせると
+           列が潰れ、向きが縦書きになり、置き換える摘要が読めない細い箱に
+           なる。内容ぶんの幅を取らせて、親の overflow-x-auto で横に送る。
+           **列が1つ増えた時点でこうなった**（FR-59） */
+        <div className="overflow-x-auto">
+          <table className="w-max min-w-full border-collapse">
+            <thead>
             <tr>
               <th className={HEAD}>摘要に含まれる文字列</th>
+              {/* **摘要の置き換え**（FR-59・AC-66）。当たる条件ではない */}
+              <th className={HEAD}>摘要を置き換える</th>
               <th className={HEAD}>口座</th>
               <th className={HEAD}>向き</th>
               <th className={HEAD}>費目</th>
@@ -339,6 +379,17 @@ export function RulesTable() {
                     value={draft.pattern}
                     placeholder="ﾄｳｷﾖｳﾄﾞﾝ"
                     onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
+                  />
+                </td>
+                <td className={CELL}>
+                  {/* 摘要の置き換え（FR-59・AC-66）。当たる条件ではない */}
+                  <TextInput
+                    aria-label="新しいルールの摘要の置き換え"
+                    value={draft.replaceName ?? ""}
+                    placeholder="置き換えないなら空"
+                    onChange={(e) =>
+                      setDraft({ ...draft, replaceName: e.target.value.trim() || null })
+                    }
                   />
                 </td>
                 <td className={CELL}>
@@ -436,8 +487,9 @@ export function RulesTable() {
                 </td>
               </tr>
             ) : null}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       )}
 
       {conflict ? (

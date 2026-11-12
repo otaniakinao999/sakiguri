@@ -270,6 +270,8 @@ export function ImportScreen() {
     categoryCode: string;
     costType: ImportRule["costType"];
     bizRatio: number;
+    /** 摘要の置き換え（FR-59・AC-66）。空なら置き換えない */
+    replaceName?: string;
   }) => {
     const rule = ruleFromImport(draft, activeAccount, newId());
     /* 当たる条件が同じルールは増やさず上書きする（`addRule`）。
@@ -280,10 +282,16 @@ export function ImportScreen() {
       patternLength: [...rule.pattern].length,
       fromImport: true,
     });
+    /* **置き換えを作ったことも知らせる**（FR-59）。費目だけ伝えると、
+       摘要が変わる設定をしたことが記録に残らない */
+    const renames = rule.replaceName
+      ? `摘要は「${rule.replaceName}」に置き換わります（取込時の摘要は残るので、重複判定は変わりません）。`
+      : "";
     setNotice(
-      replaced
+      (replaced
         ? `当たる条件が同じルールがあったので、費目を${categoryOf(rule.categoryCode).name}に差し替えました。`
-        : `ルールを保存しました。「${rule.pattern}」を含む行は、次回から${categoryOf(rule.categoryCode).name}になります。`,
+        : `ルールを保存しました。「${rule.pattern}」を含む行は、次回から${categoryOf(rule.categoryCode).name}になります。`) +
+        renames,
     );
   };
 

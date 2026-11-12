@@ -100,6 +100,8 @@ export interface ImportViewProps {
     categoryCode: string;
     costType: ImportRule["costType"];
     bizRatio: number;
+    /** 摘要の置き換え（FR-59）。空なら置き換えない */
+    replaceName?: string;
   }) => void;
 
   /* 差し込み口 */
@@ -228,6 +230,8 @@ export function ImportView({
   const [draft, setDraft] = React.useState<{
     rowIndex: number;
     pattern: string;
+    /** 摘要の置き換え（FR-59）。空なら置き換えない */
+    replaceName: string;
   } | null>(null);
 
   const chosen = preview?.filter((r) => r.include).length ?? 0;
@@ -539,6 +543,45 @@ export function ImportView({
                           差し替え（元：{row.sourceName}）
                         </span>
                       ) : null}
+                      {/* **置き換えが2つぶつかった**（FR-59・FR-62・§2.9）。
+                          どちらも入れず、両方を出して利用者が選ぶ ――
+                          機械が選ぶと、間違えたほうが黙って入る */}
+                      {row.nameConflict ? (
+                        <span className="mt-4 block">
+                          <span className="block t-table text-fg-warning">
+                            置き換えの候補が2つあります。どちらも入れていません
+                          </span>
+                          <span className="flex flex-wrap items-center gap-8">
+                            {(
+                              [
+                                ["rule", "ルール", row.nameConflict.rule],
+                                ["source", "明細", row.nameConflict.source],
+                              ] as const
+                            ).map(([from, label, candidate]) => (
+                              <Button
+                                key={from}
+                                variant="ghost"
+                                onClick={() =>
+                                  onPreviewChange?.(
+                                    preview.map((r) =>
+                                      r.rowIndex === row.rowIndex
+                                        ? {
+                                            ...r,
+                                            name: candidate,
+                                            nameFrom: from,
+                                            nameConflict: null,
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                              >
+                                {label}：{candidate}
+                              </Button>
+                            ))}
+                          </span>
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell align="right" className="num text-fg-success">
                       {row.type === "income" ? formatYen(row.amount) : ""}
@@ -592,6 +635,11 @@ export function ImportView({
                                            差し替わった表示名から作ると
                                            どの行にも当たらないルールになる */
                                         pattern: row.sourceName,
+                                        /* **置き換えは空から始める**（FR-59）。
+                                           表示名を初期値にすると、置き換えて
+                                           いない行にも置き換えのルールが
+                                           できる（結果は同じなので気づけない） */
+                                        replaceName: "",
                                       },
                                 )
                               }
@@ -616,7 +664,21 @@ export function ImportView({
                               id={`rule-pattern-${row.rowIndex}`}
                               value={draft.pattern}
                               onChange={(e) =>
-                                setDraft({ rowIndex: row.rowIndex, pattern: e.target.value })
+                                setDraft({ ...draft, pattern: e.target.value })
+                              }
+                            />
+                          </Field>
+                          <Field
+                            label="摘要をこれに置き換える（任意）"
+                            htmlFor={`rule-replace-${row.rowIndex}`}
+                            className="min-w-0 flex-1"
+                          >
+                            <TextInput
+                              id={`rule-replace-${row.rowIndex}`}
+                              value={draft.replaceName}
+                              placeholder="置き換えないなら空のまま"
+                              onChange={(e) =>
+                                setDraft({ ...draft, replaceName: e.target.value })
                               }
                             />
                           </Field>
@@ -654,6 +716,7 @@ export function ImportView({
                                 categoryCode: row.categoryCode,
                                 costType: row.costType,
                                 bizRatio: row.bizRatio,
+                                replaceName: draft.replaceName,
                               });
                               setDraft(null);
                             }}

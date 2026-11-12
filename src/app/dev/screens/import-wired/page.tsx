@@ -130,22 +130,34 @@ const ALREADY_IMPORTED: Actual[] = [
  *   4行目 ﾌﾘｺﾐ ﾀﾅｶ → ルールは当たらず、履歴からの推定が当たる
  */
 const DEV_RULES: ImportRule[] = [
-  { id: "d1", pattern: "ﾂｳ", accountId: null, direction: null, categoryCode: "EXP-20", costType: "variable", bizRatio: 0 },
-  { id: "d2", pattern: "ﾂｳｼﾝﾋ", accountId: null, direction: null, categoryCode: "EXP-03", costType: "fixed", bizRatio: 50 },
+  { id: "d1", pattern: "ﾂｳ", accountId: null, direction: null, categoryCode: "EXP-20", costType: "variable", bizRatio: 0, replaceName: null },
+  /* **置き換えを入れてある**（FR-59・AC-66）。入れないと、摘要が置き換わる
+     行を一度も出せない。下の `DEV_NAME_SOURCE` が同じ行に違う名前を言うので、
+     この行は**ぶつかり**として両方が出る（§2.9） */
+  { id: "d2", pattern: "ﾂｳｼﾝﾋ", accountId: null, direction: null, categoryCode: "EXP-03", costType: "fixed", bizRatio: 50, replaceName: "通信費（ＮＴＴ）" },
 ];
 
 /**
  * 摘要の出どころ（FR-62・AC-69）。デビット明細の代わり。
  *
- * **1件だけ当てている。** 全行に当てると「触らなかった行」が1行も出ず、
+ * **2件だけ当てている。** 全行に当てると「触らなかった行」が1行も出ず、
  * **全部差し替える実装と区別が付かない**（CLAUDE.md §2.11）。
- * 3行目（ﾂｳｼﾝﾋ 10,230）が「ＮＴＴ東日本」に差し替わり、元の摘要が
- * 併記される。残りの行は触られていない。
+ *
+ * | 行 | 何が出るか |
+ * |---|---|
+ * | 3行目 ﾂｳｼﾝﾋ 10,230 | **ぶつかり。** ルールは「通信費（ＮＴＴ）」、明細は「ＮＴＴ東日本」。どちらも入れず、両方をボタンで出す（§2.9） |
+ * | 4行目 ﾁｲｷｼﾝｷﾝ 77,777 | ルールが当たらないので、明細の店名がそのまま入る |
+ * | ほか | 触られていない |
+ *
+ * **摘要の3つの状態がこの1画面に全部出る。** 差し替わった行・ぶつかった行・
+ * 触られていない行である。ぶつかりが出ない画面だと、**片方を勝たせる実装と
+ * 区別が付かない。**
  *
  * **行は増えない**（AC-69）。確認画面の件数は差し替えの前後で同じである。
  */
 const DEV_NAME_SOURCE: NameSourceEntry[] = [
   { date: "2026-10-01", amount: 10_230, name: "ＮＴＴ東日本" },
+  { date: "2026-10-09", amount: 77_777, name: "△△信金ＡＴＭ" },
 ];
 
 /** `historyKeyOf` は先頭4文字。`ﾌﾘｺﾐ` が4行目の摘要に当たる */

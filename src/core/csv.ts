@@ -548,6 +548,8 @@ export function ruleFromImport(
     categoryCode: string;
     costType: CostType | null;
     bizRatio: number;
+    /** 摘要の置き換え（FR-59）。空や未指定は「置き換えない」 */
+    replaceName?: string | null;
   },
   accountId: string,
   id: string,
@@ -563,6 +565,8 @@ export function ruleFromImport(
     costType: costTypeApplies(draft.categoryCode) ? draft.costType : null,
     /* 資金移動では効かない値を持たせない（§3.2 ImportRule） */
     bizRatio: isTransfer ? 0 : draft.bizRatio,
+    /* **空文字は null に寄せる**（FR-59）。「置き換えない」を1つの形で表す */
+    replaceName: draft.replaceName?.trim() || null,
   };
 }
 
@@ -625,6 +629,13 @@ export interface Classification {
   ruleId: string | null;
   /** 同じルールの `pattern`。確認画面に出す */
   rulePattern: string | null;
+  /**
+   * **ルールが置き換える表示名**（FR-59・AC-66）。置き換えないなら null。
+   *
+   * 当てたルールの `replaceName` そのもの。**原文は置き換えない**ので、
+   * 重複判定は変わらない（AC-66）。
+   */
+  replacedName: string | null;
   /** 推定で決まったときだけ、もとになった名称 */
   guessedFrom: string | null;
 }
@@ -682,6 +693,10 @@ export function classifyImportRow(
     bizRatio: matched?.bizRatio ?? rule?.bizRatio ?? guess?.bizRatio ?? 0,
     ruleId: rule?.id ?? null,
     rulePattern: rule?.pattern ?? null,
+    /* **照合が成立した行では置き換えない。** そもそもルールを当てていない
+       （`rule` が null）。予定から費目を引き継いだ行の摘要を書き換えると、
+       予定の内容とCSVの摘要のどちらとも違う名前になる */
+    replacedName: rule?.replaceName?.trim() || null,
     guessedFrom: guess?.from ?? null,
   };
 }
@@ -710,7 +725,17 @@ export function redecideWithoutRule(
   return rows.map((row) => {
     if (row.ruleId !== ruleId) return row;
     const next = classifyImportRow(ruleTargetOf(row), { rules, history });
-    return { ...row, ...next };
+    /* **表示名も決め直す**（FR-59）。置き換えるルールを外したのに名前が
+       残ると、「使わない」と言ったルールの結果だけが画面に残る */
+    const name = next.replacedName ?? fallbackName(row);
+    return {
+      ...row,
+      ...next,
+      name,
+      nameFrom: next.replacedName ? ("rule" as const) : name === row.sourceName ? null : ("source" as const),
+      /* ぶつかりは解消した（片方が居なくなった） */
+      nameConflict: null,
+    };
   });
 }
 
@@ -743,6 +768,24 @@ export function editImportRowCategory(
     rulePattern: null,
     guessedFrom: null,
   };
+}
+
+/**
+ * ルールが当たらなくなったときに、表示名を何に戻すか（FR-59・FR-62）。
+ *
+ * **ルールの置き換えを外したら、次に強いものへ落ちる。**
+ *
+ * 1. 摘要の置き換えとぶつかって保留していた店名（`nameConflict.source`）
+ * 2. 別の明細から差し替えた店名（`nameFrom === "source"`）
+ * 3. 摘要の原文
+ *
+ * 1が2より先なのは、**ぶつかった相手がもう居ないなら、その店名を使うのが
+ * 利用者の意図に近い**ためである（ルールを外したのだから）。
+ */
+function fallbackName(row: ImportRow): string {
+  if (row.nameConflict) return row.nameConflict.source;
+  if (row.nameFrom === "source") return row.name;
+  return row.sourceName;
 }
 
 /**
@@ -996,6 +1039,19 @@ export interface ImportRow {
    * （ルールか、出どころのファイルか）が分からない。**
    */
   nameFrom: "rule" | "source" | null;
+  /**
+   * **摘要の置き換えが2つぶつかった**（FR-59・FR-62・CLAUDE.md §2.9）。
+   *
+   * 仕分けルールの置き換え（FR-59）と、別の明細の店名（FR-62）が同じ行に
+   * 当たって、**違う名前を言っている**ときに立つ。
+   *
+   * **どちらも入れない。** 表示名は原文のままにして、確認画面に両方を出し、
+   * 利用者が選ぶ（2026-11-12 の決定）。機械が選ぶと、間違えたほうが黙って
+   * 入る ―― どちらが正しいかは取引ごとに違う。
+   *
+   * 同じ名前を言っているときはぶつかりではない（どちらを採っても同じ）。
+   */
+  nameConflict: { rule: string; source: string } | null;
   type: EntryType;
   costType: CostType | null;
   categoryCode: string;
@@ -1169,10 +1225,13 @@ export function buildImportRows(input: BuildImportRowsInput): ImportRow[] {
       include: true,
       duplicate: "none",
       date,
-      name,
+      /* **ルールが置き換えるなら置き換えた名前**（FR-59・AC-66）。
+         原文（`sourceName`）は下でCSVのまま入れる */
+      name: decided.replacedName ?? name,
       /* **原文は読んだまま。** 以降どの機構も書き換えない（FR-58） */
       sourceName: name,
-      nameFrom: null,
+      nameFrom: decided.replacedName ? ("rule" as const) : null,
+      nameConflict: null,
       type,
       costType: decided.costType,
       categoryCode: decided.categoryCode,

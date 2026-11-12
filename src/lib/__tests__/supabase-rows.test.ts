@@ -17,9 +17,15 @@
 import { describe, expect, it } from "vitest";
 
 import { duplicateKeyOf } from "@/core/csv";
-import type { Actual } from "@/core/types";
+import type { Actual, ImportRule } from "@/core/types";
 
-import { fromActual, toActual, type ActualRow } from "../supabase/rows";
+import {
+  fromActual,
+  fromImportRule,
+  toActual,
+  toImportRule,
+  type ActualRow,
+} from "../supabase/rows";
 
 const USER = "11111111-1111-4111-8111-000000000001";
 
@@ -90,5 +96,59 @@ describe("AC-64 原文が DB を往復する", () => {
 
     const back = toActual(fromActual(edited, USER));
     expect(duplicateKeyOf(back)).not.toBe(duplicateKeyOf(IMPORTED));
+  });
+});
+
+/**
+ * 仕分けルールの置き換えが DB を往復する（AC-66）
+ *
+ * **ここも最初はどのテストも割らなかった。** `fromImportRule` と
+ * `toImportRule` から `replace_name` を落とす2通りは、取込側のテストが
+ * DB を通らないので素通りした（CLAUDE.md §2.11）。落ちると**置き換えが
+ * 保存されず、次に開いたときルールが元に戻っている**。
+ */
+describe("AC-66 置き換えが DB を往復する", () => {
+  const RULE: ImportRule = {
+    id: "r-1",
+    pattern: "カ）ラボル",
+    accountId: null,
+    direction: null,
+    categoryCode: "INC-01",
+    costType: null,
+    bizRatio: 100,
+    replaceName: "㈱ラボル",
+  };
+
+  it("保存する行に置き換えが入り、読み戻せる", () => {
+    const row = fromImportRule(RULE, USER);
+    expect(row.replace_name).toBe("㈱ラボル");
+    expect(toImportRule(row).replaceName).toBe("㈱ラボル");
+  });
+
+  it("空や空白だけの置き換えは null で保存される", () => {
+    expect(fromImportRule({ ...RULE, replaceName: "" }, USER).replace_name).toBeNull();
+    expect(fromImportRule({ ...RULE, replaceName: "   " }, USER).replace_name).toBeNull();
+    expect(fromImportRule({ ...RULE, replaceName: null }, USER).replace_name).toBeNull();
+  });
+
+  it("前後の空白は落として保存する", () => {
+    expect(
+      fromImportRule({ ...RULE, replaceName: " ㈱ラボル " }, USER).replace_name,
+    ).toBe("㈱ラボル");
+  });
+
+  it("**当たる条件は変わっていない**（一意制約の4つ）", () => {
+    /* 置き換えを変えても、当たる条件を表す4つは同じ値のまま。
+       条件に入れてしまうと、同じ条件で違う置き換えをする2行が持てる */
+    const a = fromImportRule(RULE, USER);
+    const b = fromImportRule({ ...RULE, replaceName: "ラボル株式会社" }, USER);
+
+    expect([a.user_id, a.pattern, a.account_id, a.direction]).toEqual([
+      b.user_id,
+      b.pattern,
+      b.account_id,
+      b.direction,
+    ]);
+    expect(a.replace_name).not.toBe(b.replace_name);
   });
 });

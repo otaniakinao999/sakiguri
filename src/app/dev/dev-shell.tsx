@@ -49,6 +49,10 @@ export const DEV_DATA: AppData = {
       categoryCode: "EXP-03",
       costType: "fixed",
       bizRatio: 50,
+      /* **置き換えを入れてある**（FR-59・AC-66）。2件とも空だと、設定の
+         ルール表で「置き換えが入っている行」を一度も出せない
+         （CLAUDE.md §2.11）。2件目は空のままにして、両方の見え方を出す */
+      replaceName: "通信費（ＮＴＴ）",
     },
     /* **2件目は衝突（AC-57f）を画面で出すために要る。** 1件だと、
        `pattern` を打ち替えても衝突する相手がいない ―― 相手が0件の条項は
@@ -62,6 +66,7 @@ export const DEV_DATA: AppData = {
       categoryCode: "EXP-09",
       costType: "variable",
       bizRatio: 100,
+      replaceName: null,
     },
   ],
 };

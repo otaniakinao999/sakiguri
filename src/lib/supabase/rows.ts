@@ -97,6 +97,12 @@ export interface ImportRuleRow {
   category_code: string;
   cost_type: "fixed" | "variable" | null;
   biz_ratio: number;
+  /**
+   * 当たった行の表示名をこれに置き換える（FR-59・AC-66）。null は置き換えない。
+   *
+   * **当たる条件ではない。** 一意制約には入っていない。
+   */
+  replace_name: string | null;
 }
 
 export interface OverrideRow {
@@ -205,6 +211,7 @@ export const SELECT_COLUMNS = {
     category_code: true,
     cost_type: true,
     biz_ratio: true,
+    replace_name: true,
   }),
 } as const;
 
@@ -298,6 +305,7 @@ export function toImportRule(row: ImportRuleRow): ImportRule {
     categoryCode: row.category_code,
     costType: row.cost_type,
     bizRatio: row.biz_ratio,
+    replaceName: row.replace_name,
   };
 }
 
@@ -415,6 +423,8 @@ export function fromImportRule(rule: ImportRule, userId: string): ImportRuleRow 
     category_code: rule.categoryCode,
     cost_type: rule.costType,
     biz_ratio: rule.bizRatio,
+    /* **空文字は null に寄せる。** 「置き換えない」を1つの形で表す */
+    replace_name: rule.replaceName?.trim() || null,
   };
 }
 

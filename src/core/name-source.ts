@@ -30,6 +30,18 @@
  * 差し替えるのは表示名（`name`）だけで、**原文（`sourceName`）はCSVから読んだ
  * ままにする**（FR-58）。書き換えると、次に同じ銀行明細を読んだときに重複
  * 判定が当たらなくなる。
+ *
+ * ## 仕分けルールの置き換えとぶつかったら、どちらも入れない
+ *
+ * 摘要を書き換える機構は2つある ―― この店名の差し替え（FR-62）と、仕分け
+ * ルールの置き換え（FR-59）である。**同じ行に両方が当たって違う名前を
+ * 言っているとき、どちらも入れない。** 表示名は原文のままにして、確認画面に
+ * 両方を出し、利用者が選ぶ（CLAUDE.md §2.9・2026-11-12 の決定）。
+ *
+ * **機械が選ぶと、間違えたほうが黙って入る。** どちらが正しいかは取引ごとに
+ * 違うので、優先順位を決めても半分は外れる。
+ *
+ * 同じ名前を言っているときはぶつかりではない（どちらを採っても同じ）。
  */
 
 import {
@@ -193,6 +205,18 @@ export function applyNameSource(
   return rows.map((row) => {
     const name = picked.get(row.rowIndex);
     if (name === undefined) return row;
+
+    /* **仕分けルールの置き換えとぶつかったら、どちらも入れない**（§2.9）。
+       表示名を原文に戻し、両方を確認画面に出す */
+    if (row.nameFrom === "rule" && row.name !== name) {
+      return {
+        ...row,
+        name: row.sourceName,
+        nameFrom: null,
+        nameConflict: { rule: row.name, source: name },
+      };
+    }
+
     /* **原文は触らない**（FR-58）。書き換えると次回当たらなくなる */
     return { ...row, name, nameFrom: "source" as const };
   });

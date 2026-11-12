@@ -153,6 +153,7 @@ describe("口座・カード", () => {
           categoryCode: "EXP-05",
           costType: "fixed" as const,
           bizRatio: 0,
+          replaceName: null,
         },
         {
           id: "r2",
@@ -162,6 +163,7 @@ describe("口座・カード", () => {
           categoryCode: "INC-01",
           costType: null,
           bizRatio: 0,
+          replaceName: null,
         },
       ],
     };

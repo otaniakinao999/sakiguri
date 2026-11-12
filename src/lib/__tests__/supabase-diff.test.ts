@@ -238,6 +238,7 @@ describe("diffAppData", () => {
             categoryCode: "EXP-05",
             costType: "variable",
             bizRatio: 0,
+            replaceName: null,
           },
         ],
       }),

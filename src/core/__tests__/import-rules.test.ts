@@ -40,6 +40,7 @@ const rule = (over: Partial<ImportRule> & Pick<ImportRule, "id" | "pattern" | "c
   direction: null,
   costType: "variable",
   bizRatio: 0,
+  replaceName: null,
   ...over,
 });
 
