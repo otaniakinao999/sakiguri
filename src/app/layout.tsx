@@ -18,8 +18,6 @@ import "@fontsource/noto-sans-jp/500.css";
 import "@fontsource/noto-sans-jp/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 /* ワードマーク「SAKIGURI」のみ。正式なロゴ画像は未支給（decisions.md 未決2）。 */
-import "@fontsource/cormorant-garamond/500.css";
-import "@fontsource/cormorant-garamond/600.css";
 
 import "./globals.css";
 

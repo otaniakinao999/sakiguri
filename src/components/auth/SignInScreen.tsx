@@ -281,10 +281,13 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-surface-base-secondary flex min-h-screen items-center justify-center p-24">
       <div className="bg-surface-base-primary border-border-base-low rounded-base w-full max-w-[var(--layout-signin-width)] border p-24">
-        <div className="mb-24">
-          <Wordmark className="h-32 text-object-base-high" />
+        {/* **中央寄せ。** ロゴと添え書きだけの塊なので、左に寄せると
+            下のフォームの行頭と2本の軸ができる（2026-11-13 の指示）。
+            **「個人事業主の」は対象が狭い** ―― 家計も小規模法人も使う */}
+        <div className="mb-24 text-center">
+          <Wordmark className="h-40 text-object-base-high" />
           <p className="font-display-jp text-object-base-mid mt-4 text-body-xxs">
-            個人事業主の資金繰り帳
+            事業と暮らしの資金繰り帳
           </p>
         </div>
         {children}

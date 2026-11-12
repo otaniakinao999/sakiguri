@@ -133,7 +133,7 @@
   /* ==========================================================
      2.1 書体
      ---------------------------------------------------------
-     Inter と Cormorant Garamond は next/font 経由で読み込み、
+     Inter を next/font 経由で読み込み、
      生成されたフォント名を var(--font-*) で受け取る。
      Web フォントが無い環境でも壊れないよう、第2引数に原典の
      ファミリ名を残してある。詳細は docs/adr/0005 を参照。
@@ -144,8 +144,8 @@
      ========================================================== */
   --family-ui: var(--font-inter, "Inter"), "Hiragino Kaku Gothic ProN",
     "Yu Gothic", Meiryo, system-ui, sans-serif;
-  --family-display-en: var(--font-cormorant, "Cormorant Garamond"),
-    "Times New Roman", serif;
+  /* --family-display-en は廃止（2026-11-13）。ワードマークが SVG に
+     なり、使う所が無くなった。ADR-0005 を参照 */
   --family-display-jp: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho",
     serif;
 

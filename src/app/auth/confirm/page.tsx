@@ -192,8 +192,9 @@ export default function ConfirmPage() {
   return (
     <div className="bg-surface-base-secondary flex min-h-screen items-center justify-center p-24">
       <div className="bg-surface-base-primary border-border-base-low rounded-base w-full max-w-[var(--layout-signin-width)] border p-24">
-        <div className="mb-24">
-          <Wordmark className="h-32 text-object-base-high" />
+        {/* サインインと同じ殻なので揃える（中央寄せ・h-40） */}
+        <div className="mb-24 text-center">
+          <Wordmark className="h-40 text-object-base-high" />
         </div>
         {body()}
       </div>
