@@ -39,6 +39,30 @@ import type { Account, DateStr, ForecastInstance, Yen } from "@/core/types";
  */
 export const UNRECORDED_LABEL = "うち未記録の予定";
 
+/**
+ * 「未記録」に入る日の境界。**今日は入る**（AC-72）。
+ *
+ * 金額は今日の行の `proj − act` なので、**今日の予定は既に今日の残高に
+ * 効いている。** 一覧だけが `< today` だと、金額から飛んだ先にその予定が
+ * 無く、合計が合わない（2026-11-13 の報告）。
+ *
+ * **境界はここにしか書かない。** 金額・件数・一覧の3箇所に同じ条件を
+ * 書いていて、一覧だけが `<` のまま残ったのがこの欠陥である
+ * （CLAUDE.md §2.8・§2.12）。
+ *
+ * **どの日付を渡すかは呼び出し側が決める。** 金額と件数は現金が動く日
+ * （`cashDateOf`）、一覧は発生日（`plan.date`）である。**この差は意図した
+ * ものである** ―― 要件定義書 §3.3 が「発生日は過ぎたが引落日が未来の
+ * カード利用は、件数には入るが金額には入らない。これは仕様である」と
+ * 定めている（AC-49d は一覧の件数を発生日で数えることを要求している）。
+ * **したがって一覧の合計と金額は、そのカード利用のぶんだけ食い違う。**
+ * ここは AC-72 の2つ目の条項と衝突しているので、優先順位を待っている
+ * （2026-11-13 に申し送り。CLAUDE.md §2.9）。
+ */
+export function isUnrecordedOn(date: DateStr, today: DateStr): boolean {
+  return date <= today;
+}
+
 export interface Unrecorded {
   /**
    * 残高に含まれている、記録ではなく予定から来ている額。**符号つき。**
@@ -93,8 +117,8 @@ export function unrecordedInBalance(
   if (!todayRow || todayRow.act === null) return NONE;
 
   const byId = new Map(accounts.map((a) => [a.id, a]));
-  const count = series.unmatchedForecast.filter(
-    (plan) => cashDateOf(plan, byId) <= today,
+  const count = series.unmatchedForecast.filter((plan) =>
+    isUnrecordedOn(cashDateOf(plan, byId), today),
   ).length;
 
   return { amount: todayRow.proj - todayRow.act, count };

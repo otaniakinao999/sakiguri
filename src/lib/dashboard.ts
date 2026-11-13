@@ -17,7 +17,7 @@ import { addDays } from "@/core/date";
 import type { ShortfallKind } from "@/core/monthly";
 import { isCard } from "@/core/types";
 
-import { unrecordedInBalance, type Unrecorded } from "./unrecorded";
+import { isUnrecordedOn, unrecordedInBalance, type Unrecorded } from "./unrecorded";
 import type {
   Account,
   CardAccount,
@@ -62,7 +62,12 @@ export interface Dashboard {
   lowest: { balance: Yen; date: DateStr };
   /** 防衛ラインを下回らなければ null */
   warning: DashboardWarning | null;
-  /** 実績が未入力の過去の予定。新しい順 */
+  /**
+   * 実績が未入力の予定。新しい順。**今日の予定も入る**（AC-72）。
+   *
+   * 「うち未記録の予定」の金額が指す集合と同じものを指す ―― ただし
+   * 日付の基準だけは違う（発生日。`isUnrecordedOn` のコメント）。
+   */
   unfilled: ForecastInstance[];
   accounts: AccountBalance[];
   cards: CardBalance[];
@@ -112,9 +117,16 @@ export function buildDashboard(input: DashboardInput): Dashboard {
       : null;
 
   /* CL-3 の注記：実績が入力されていない過去の予定は予定額のまま
-     予測に残す。UI では件数と一覧を出して消し込みを促す */
+     予測に残す。UI では件数と一覧を出して消し込みを促す。
+
+     **今日の予定も入れる**（AC-72）。「うち未記録の予定」の金額は今日の行の
+     `proj − act` なので今日を含む。ここだけ `< today` だと、金額から飛んだ
+     先にその予定が無い。境界は `isUnrecordedOn` の1箇所で決める（§2.8）。
+
+     **日付は発生日で見る。** 金額は現金が動く日で見るが、一覧は利用者が
+     消し込む対象なので発生日である（要件定義書 §3.3・AC-49d）。 */
   const unfilled = series.unmatchedForecast
-    .filter((plan) => plan.date < today)
+    .filter((plan) => isUnrecordedOn(plan.date, today))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const depositAccounts = accounts.filter(

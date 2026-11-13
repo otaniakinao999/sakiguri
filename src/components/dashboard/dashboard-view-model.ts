@@ -193,6 +193,10 @@ export function buildDashboardViewModel({
         type: plan.type,
       }),
       direction: formatTransferDirection(plan, names) ?? undefined,
+      /* 今日の予定は「遅れている」ものではない（AC-72）。
+         **発生日で見る。** 一覧に入るかどうかの基準と同じものを使う
+         （`lib/dashboard` の `unfilled`） */
+      isToday: plan.date === today,
       category,
     };
   });

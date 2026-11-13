@@ -166,6 +166,26 @@ export const FIXTURE_ONEOFFS: OneoffItem[] = [
        出てこない（`lib/dashboard` の `unfilled`） */
     date: "2026-10-15",
   },
+  /* **今日（10/18）の予定**（AC-72）。
+
+     これを入れるまで、今日付の予定は**1件も無かった。** 一覧の境界が
+     `< today` でも `<= today` でも結果が同じになるデータで、**今日を
+     外している実装でも AC-72 が通る**（CLAUDE.md §2.11 の3つ目の形 ――
+     対象の行が0件のとき、その条項は必ず通る）。
+
+     **単発にしてある。** 定期項目にすると24ヶ月ぶん立ち、件数を見ている
+     ほかの条項の母数が動く。額は他の行に出てこない 31,500 */
+  {
+    id: "o3",
+    name: "電気代",
+    type: "expense",
+    costType: "variable",
+    categoryCode: "EXP-02",
+    amount: 31_500,
+    bizRatio: 40,
+    accountId: "a1",
+    date: FIXTURE_TODAY,
+  },
 ];
 
 /**

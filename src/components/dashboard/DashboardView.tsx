@@ -50,6 +50,17 @@ export interface DashboardTodo {
   display: AmountView;
   /** 資金移動の向き（FR-63・AC-70）。向きを持たない行では undefined */
   direction?: string;
+  /**
+   * 今日の予定か（AC-72）。
+   *
+   * **「遅れている」行と同じ扱いにしない。** 今日の予定は期日を過ぎて
+   * いないので、「実績を入れて消し込むか、支払日をずらしてください」は
+   * 言い過ぎである。**残高には予定額のまま入っている**（金額は今日の行の
+   * `proj − act`）ので、一覧から外すこともできない。
+   *
+   * 省略すると期日を過ぎた扱い（従来の見え方）。
+   */
+  isToday?: boolean;
   /** 区分が決まらないものは省く（固定／変動を費目から決めない。§3.1.2 適用規則1） */
   category: Category | null;
 }
@@ -121,6 +132,34 @@ export interface DashboardViewProps {
   footer?: React.ReactNode;
 }
 
+type TodoSectionKey = "today" | "overdue";
+
+/**
+ * やることの2つの組（AC-72）。
+ *
+ * **今日の予定は「遅れている」ものではない。** 金額（うち未記録の予定）は
+ * 今日の予定を含むので一覧からは外せないが、同じ注記を当てると
+ * 「支払日をずらしてください」が今日の予定にも掛かる。
+ *
+ * 並びは**今日が先**。一覧は新しい順なので行の並びと一致する。
+ */
+const TODO_SECTIONS: ReadonlyArray<{
+  key: TodoSectionKey;
+  label: string;
+  note: string;
+}> = [
+  {
+    key: "today",
+    label: "今日の予定",
+    note: "今日の残高には予定額のまま入っています。実績が分かったら消し込んでください。",
+  },
+  {
+    key: "overdue",
+    label: "期日を過ぎた予定",
+    note: "予定額のまま予測に残っています。実績を入れて消し込むか、支払日をずらしてください。残しておくと残高を実際より低く見積もります。",
+  },
+];
+
 const ANNOTATION_TONE: Record<DashboardAnnotation["tone"], string> = {
   muted: "text-muted-foreground",
   warning: "text-fg-warning",
@@ -171,6 +210,13 @@ export function DashboardView({
     : 0;
 
   const controlled = range !== undefined && onRangeChange !== undefined;
+
+  /* 今日の予定と、期日を過ぎた予定を分ける（AC-72）。**どちらも一覧に
+     出す** ―― 残高に入っているのは両方である。注記だけを分ける */
+  const groups: Record<TodoSectionKey, DashboardTodo[]> = {
+    today: todos.filter((t) => t.isToday),
+    overdue: todos.filter((t) => !t.isToday),
+  };
 
   return (
     <>
@@ -262,24 +308,38 @@ export function DashboardView({
               未入力はありません。
             </p>
           ) : (
-            <div>
-              {todos.map((t, i) => (
-                <TodoRow
-                  key={t.id}
-                  date={t.date}
-                  title={t.title}
-                  /* 資金移動の向き（FR-63・AC-70） */
-                  detail={t.direction}
-                  amount={t.display.value}
-                  amountType={t.display.type}
-                  signed={t.display.signed}
-                  category={t.category}
-                  status="予定"
-                  last={i === todos.length - 1}
-                  actions={rowAction ? rowAction(t) : undefined}
-                />
-              ))}
-            </div>
+            TODO_SECTIONS.filter((section) => groups[section.key].length > 0).map(
+              (section) => {
+                const rows = groups[section.key];
+                return (
+                  <div key={section.key}>
+                    <div className="flex items-baseline justify-between gap-12">
+                      <span className="t-label text-foreground">{section.label}</span>
+                      <span className="num t-body-sm text-muted-foreground">
+                        {rows.length}件
+                      </span>
+                    </div>
+                    {rows.map((t, i) => (
+                      <TodoRow
+                        key={t.id}
+                        date={t.date}
+                        title={t.title}
+                        /* 資金移動の向き（FR-63・AC-70） */
+                        detail={t.direction}
+                        amount={t.display.value}
+                        amountType={t.display.type}
+                        signed={t.display.signed}
+                        category={t.category}
+                        status="予定"
+                        last={i === rows.length - 1}
+                        actions={rowAction ? rowAction(t) : undefined}
+                      />
+                    ))}
+                    <p className="t-body-sm text-muted-foreground">{section.note}</p>
+                  </div>
+                );
+              },
+            )
           )}
 
           {todoCount > todos.length && (
@@ -287,11 +347,6 @@ export function DashboardView({
               ほかに{todoCount - todos.length}件あります。
             </p>
           )}
-
-          <p className="t-body-sm text-muted-foreground">
-            予定額のまま予測に残っています。実績を入れて消し込むか、支払日を
-            ずらしてください。残しておくと残高を実際より低く見積もります。
-          </p>
         </Panel>
 
         <Panel title="口座・カード" className="shrink-0 self-start wide:w-ledger">
@@ -321,10 +376,17 @@ export function DashboardView({
             ))}
           </div>
 
+          {/* AC-73。**口座の数に依存する言い方をしない。** 「上の残高どちらにも」
+              は口座が2つのときだけ成り立つ言い方で、「どの口座にも同じ額が
+              入っている」とも読める。実際に入っているのは**その予定に設定した
+              口座の残高**と、それを足した**現預金 合計**である。
+              合計の行を出していないときは、その語を使わない（CL-3・AC-49b） */}
           {unrecorded !== null && (
             <p className="t-body-sm text-muted-foreground">
               <UnrecordedLink amount={unrecorded} />
-              {" は、上の残高どちらにも含まれています。"}
+              {total
+                ? ` は、その予定に設定した口座の残高と、${total.label}に含まれています。`
+                : " は、その予定に設定した口座の残高に含まれています。"}
             </p>
           )}
         </Panel>
