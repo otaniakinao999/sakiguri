@@ -138,7 +138,14 @@ function noteOf(entry: LedgerEntry): string | undefined {
      同じ文言にすると、直すべき行が正常な行に紛れる。
      **理由ごとに書き分ける。** 直す場所が違うため（§4.1 の考え方と同じ）。 */
   if (entry.oneSided) return ONE_SIDED_NOTE[entry.oneSided];
-  if (entry.type === "transfer") return "合計残高は増減なし";
+  /* **その行が、いま見ている残高を動かさないときだけ言う**（FR-65・AC-74）。
+     口座で絞ると振替は片端しか範囲に入らないので、**+¥50,000 と出ている
+     行に「増減なし」と書くことになる**（2026-11-13 に実機で見つけた）。
+     判定は `delta`（残高を積むのに使った額そのもの）から引く ―― 「振替
+     だから」で決めると、範囲が変わったときに文だけ古くなる */
+  if (entry.type === "transfer" && entry.delta === 0) {
+    return "合計残高は増減なし";
+  }
   return undefined;
 }
 

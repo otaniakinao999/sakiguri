@@ -19,6 +19,7 @@ import {
 import { groupOfCategory } from "@/core/categories";
 import { compareDate, compareString, toYearMonth } from "@/core/date";
 import type { MonthlyCashflowRow, ShortfallWarning } from "@/core/monthly";
+import { touchesAccount } from "@/core/types";
 import type { CashEvent, DateStr, Yen, YearMonth } from "@/core/types";
 
 /**
@@ -167,6 +168,8 @@ export interface LedgerInput {
    *
    * **`series` に渡した範囲と必ず揃えること。** 別にすると、行ごとの
    * 残高がその日の終値に着地しなくなる。
+   *
+   * **行もこれで絞る**（FR-65・AC-74）。範囲の口座に関わらない行は出さない。
    */
   scope?: ReadonlySet<string>;
 }
@@ -281,6 +284,19 @@ export function buildLedgerView(input: LedgerInput): LedgerView {
     const entryStatus = event.src === "actual" ? "actual" : "plan";
     if (!matchesStatus(entryStatus, status)) continue;
     if (!matchesKind(event, kind)) continue;
+    /* **口座で絞る**（FR-65・AC-74）。判定は core の `touchesAccount` を
+       借りる ―― 実績一覧・年月別収支と同じものを見る（§2.8。2026-11-11
+       の欠陥は、この規則の読み手が2つあって一方だけ直っていたこと）。
+
+       **資金移動は両端に出る。** 移動先を落とすと、**残高だけが上がって
+       理由の行が無い**画面になる（AC-71 が留めている「行が残高を説明する」
+       が崩れる）。符号は範囲で決まるので、移動先では正・移動元では負で
+       出る（`totalDelta`・AC-58b）。
+
+       **残高の積み上げには影響しない。** 範囲に関わらない行は
+       `totalDelta` が 0 を返すので、出さなくても見えている行の残高は
+       その日の終値に着地する */
+    if (scope && !inScope.some((id) => touchesAccount(event, id))) continue;
 
     const origDate = event.key ? deferredByKey.get(event.key) : undefined;
     entries.push({
