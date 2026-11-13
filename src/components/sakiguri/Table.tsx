@@ -32,7 +32,15 @@ export function Table({
     <div className="w-full overflow-x-auto">
       <table
         data-density={density === "compact" ? "compact" : undefined}
-        className={cn("w-full border-collapse text-left", className)}
+        className={cn(
+          /* **狭い幅では表ごと横に送る**（375px の決定。decisions.md 未決5）。
+             `w-full` のまま 343px に収めると、列が内容より狭くなって
+             「2026年9月」が3行に割れ、「−¥1,856,800」が折り返す
+             （2026-11-13 に実機で見た）。内容ぶんの幅を取らせ、
+             上の `overflow-x-auto` で横に送る。900px 以上は従来どおり */
+          "w-max min-w-full border-collapse text-left wide:w-full",
+          className,
+        )}
         {...props}
       >
         {children}

@@ -180,7 +180,7 @@ export function EntryView({
         action={headerAction}
       />
 
-      <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
+      <div className="flex min-w-0 flex-1 flex-col gap-24 bg-muted px-16 py-24 wide:px-32">
         {/* やること — 2032:760 */}
         <Panel title="やること" count={`${todoCount}件`} action={todoAction}>
           <p className="t-body-sm text-muted-foreground">

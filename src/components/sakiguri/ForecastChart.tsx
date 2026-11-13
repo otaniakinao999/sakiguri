@@ -172,8 +172,18 @@ export function ForecastChart({
   }, [low, high]);
 
   return (
-    <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    /* **狭い幅では縮めずに横スクロールさせる**（375px の決定2。
+       decisions.md 未決5）。375px の画面では幅が 343px まで縮み、
+       点のラベル（「30日後（11月17日）」と金額）が線と重なって詰まる
+       （2026-11-13 に実機で見た）。900px 以上は従来どおり親の幅
+       いっぱい（`wide:min-w-0`）。
+
+       **下限は `--container-chart`（640px）。** Tailwind は
+       `min-w-chart` をビルド時に実寸へ畳むので、画面から変えられない
+       （実行時に差し替えて測ろうとして、値が動かずに気づいた） */
+    <div className="overflow-x-auto">
+      <div className="min-w-chart wide:min-w-0" style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={points}
           margin={{ top: 36, right: yAxis ? 12 : 8, bottom: 4, left: 8 }}
@@ -301,7 +311,8 @@ export function ForecastChart({
             />
           ))}
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

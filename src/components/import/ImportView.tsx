@@ -254,7 +254,7 @@ export function ImportView({
         stats={stats}
       />
 
-      <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
+      <div className="flex min-w-0 flex-1 flex-col gap-24 bg-muted px-16 py-24 wide:px-32">
         <Steps steps={steps} />
 
         {notices}
@@ -503,7 +503,7 @@ export function ImportView({
                 固定変動の `<select>` が 30px まで潰れ、照合の文が縦に
                 折り返す（2026-11-13 に実機で確認）。設定の表・年月別収支と
                 同じやり方にしてある（`Table` の既定は `w-full`） */}
-            <Table density="compact" className="w-max min-w-full">
+            <Table density="compact" className="wide:w-max">
               <TableHeaderRow>
                 {/* Figma に無い列。要らない行を外せないとやり直すしかない */}
                 <TableHead>取込</TableHead>

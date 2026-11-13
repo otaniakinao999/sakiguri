@@ -9,8 +9,26 @@ import { cn } from "@/lib/utils";
  * Tabs — docs/design/components.md §1（Figma 12:18）Segmented
  *
  * bg-muted の器の中で、選ばれたタブだけを bg-background に浮かせる。
+ *
+ * **狭い幅では帯ごと横に送る**（375px の決定2と同じ考え。decisions.md
+ * 未決5）。選択肢が6つある帯（入出金予定表の期間）は 468px あり、
+ * 中のタブは折り返せないので、**そのままだと画面を横にはみ出させる。**
+ * 900px 以上は従来どおり（`wide:` の側に元の形を残してある）。
  */
-export const Tabs = TabsPrimitive.Root;
+export const Tabs = React.forwardRef<
+  React.ComponentRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  /* **器にも幅の上限を付ける。** 中の帯の `max-w-full` は親（この器）を
+     基準にするので、器が内容ぶんに広がったままだと 100% が 468px に
+     なって何も効かない（2026-11-13 に実機で見つけた） */
+  <TabsPrimitive.Root
+    ref={ref}
+    className={cn("min-w-0 max-w-full", className)}
+    {...props}
+  />
+));
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 export const TabsList = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.List>,
@@ -18,7 +36,11 @@ export const TabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn("inline-flex items-center gap-4 rounded-md bg-muted p-4", className)}
+    className={cn(
+      "inline-flex max-w-full items-center gap-4 overflow-x-auto rounded-md bg-muted p-4",
+      "wide:max-w-none wide:overflow-visible",
+      className,
+    )}
     {...props}
   />
 ));

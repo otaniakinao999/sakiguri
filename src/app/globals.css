@@ -236,6 +236,10 @@
   --container-amount: 112px;
   /* 年月別 収支の費目列（Figma 2031:256 は 175px）。折り返させない */
   --container-pl-label: 176px;
+  /* 残高推移グラフを縮めない下限（375px の決定2。decisions.md 未決5）。
+     これより狭い画面では、グラフを縮めずに横スクロールさせる ――
+     375px では幅が 343px まで縮み、点のラベルが線と重なって詰まる */
+  --container-chart: 640px;
   --container-main: 1200px;
   --container-content: 1136px;
 }

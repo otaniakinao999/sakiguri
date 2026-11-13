@@ -137,7 +137,7 @@ export function ProfitLossView({
         stats={stats}
       />
 
-      <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
+      <div className="flex min-w-0 flex-1 flex-col gap-24 bg-muted px-16 py-24 wide:px-32">
         {notices}
 
         <Panel

@@ -271,7 +271,7 @@ export function CashflowView({
         </StickyBar>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-24 bg-muted px-32 py-24">
+      <div className="flex min-w-0 flex-1 flex-col gap-24 bg-muted px-16 py-24 wide:px-32">
         {notices}
 
         {/* 残高推移 — 2030:152 */}
@@ -455,7 +455,16 @@ export function CashflowView({
           count={ledgerTotal}
           action={<FilterTabs group={period} />}
         >
-          <div className="flex flex-wrap items-center gap-12">
+          {/* **狭い幅では横に送る**（375px の決定2と同じ考え）。区分の帯
+              だけで 400px あり、折り返しても1本が画面に収まらない。
+              `-mx-16 px-16` で画面の端まで送れるようにする（左ナビの
+              帯と同じやり方）。900px 以上は従来どおり折り返す */}
+          <div
+            className="
+              -mx-16 flex items-center gap-12 overflow-x-auto px-16
+              wide:mx-0 wide:flex-wrap wide:overflow-visible wide:px-0
+            "
+          >
             <FilterTabs group={categoryFilter} />
             <FilterTabs group={kindFilter} />
             {periodDetail}

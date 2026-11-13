@@ -58,7 +58,16 @@ export function TodoRow({
 }: TodoRowProps) {
   return (
     <div className={cn(last ? null : "border-b border-border", className)}>
-      <div className="flex items-center gap-12 py-12">
+      {/* **狭い幅では2段にする**（375px の決定5。decisions.md 未決5）。
+          1段目が日付と項目、2段目が金額・区分・状態・操作。
+
+          1段に収めると、375px では項目の欄が 84px しか残らず、
+          **「○○商会 売上入金」が読めない。** 900px 以上は1段のまま
+          （`wide:` の側に元の形を残してある）。
+
+          2段目は `w-full` で改行させる ―― `flex-wrap` の行の中で幅
+          いっぱいの要素は必ず次の行に落ちる。 */}
+      <div className="flex flex-wrap items-center gap-12 py-12 wide:flex-nowrap">
         <span className="num w-48 shrink-0 t-table text-muted-foreground">{date}</span>
         <div className="min-w-0 flex-1">
           <span className="block truncate t-body text-foreground">{title}</span>
@@ -68,16 +77,18 @@ export function TodoRow({
             </span>
           ) : null}
         </div>
-        <Amount
-          value={amount}
-          type={amountType}
-          signed={signed}
-          size="body"
-          className="shrink-0"
-        />
-        {category ? <CategoryTag category={category} /> : null}
-        {status ? <StatusChip status={status} /> : null}
-        {actions ? <div className="flex shrink-0 items-center gap-8">{actions}</div> : null}
+        <div className="flex w-full items-center justify-end gap-12 wide:w-auto">
+          <Amount
+            value={amount}
+            type={amountType}
+            signed={signed}
+            size="body"
+            className="shrink-0"
+          />
+          {category ? <CategoryTag category={category} /> : null}
+          {status ? <StatusChip status={status} /> : null}
+          {actions ? <div className="flex shrink-0 items-center gap-8">{actions}</div> : null}
+        </div>
       </div>
       {children}
     </div>

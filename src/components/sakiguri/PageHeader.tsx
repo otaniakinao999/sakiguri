@@ -47,7 +47,8 @@ export function PageHeader({
     <header
       className={cn(
         "flex flex-wrap items-center justify-between gap-24",
-        "border-b border-border bg-background px-32 py-20",
+        /* 狭い幅の余白は 16px（375px の決定4。decisions.md 未決5） */
+        "border-b border-border bg-background px-16 py-20 wide:px-32",
         className,
       )}
     >

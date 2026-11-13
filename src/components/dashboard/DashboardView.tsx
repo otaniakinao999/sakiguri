@@ -236,7 +236,7 @@ export function DashboardView({
   return (
     <>
       {/* Hero — 2029:88。Main の全幅。パネルではない */}
-      <section className="bg-background px-32 pt-32 pb-24">
+      <section className="bg-background px-16 pt-32 pb-24 wide:px-32">
         <div className="flex flex-wrap items-start justify-between gap-32">
           <div className="flex flex-col gap-4">
             <span className="t-body-sm text-muted-foreground">
@@ -251,7 +251,7 @@ export function DashboardView({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-12">
+          <div className="flex flex-wrap items-center gap-12 wide:shrink-0">
             <Tabs
               {...(controlled
                 ? { value: range, onValueChange: onRangeChange }
@@ -307,14 +307,14 @@ export function DashboardView({
       </section>
 
       {/* Body — 2029:133 */}
-      <div className="flex flex-1 flex-col gap-24 bg-muted px-32 pt-24 pb-32 wide:flex-row">
+      <div className="flex min-w-0 flex-1 flex-col gap-24 bg-muted px-16 pt-24 pb-32 wide:flex-row wide:px-32">
         <Panel
           id={TODO_ANCHOR}
           title="やること"
           count={`${todoCount}件`}
           action={todoAction}
           /* 「うち未記録の予定」からの飛び先。見出しが上に隠れないよう余白を取る */
-          className="min-w-0 flex-1 scroll-mt-24 self-start"
+          className="min-w-0 flex-1 scroll-mt-24 wide:self-start"
         >
           {notices}
 
@@ -366,7 +366,7 @@ export function DashboardView({
           )}
         </Panel>
 
-        <Panel title="口座・カード" className="shrink-0 self-start wide:w-ledger">
+        <Panel title="口座・カード" className="min-w-0 wide:w-ledger wide:shrink-0 wide:self-start">
           <div className="flex flex-col">
             {accounts.map((a) => (
               <LedgerRow key={a.label} label={a.label} value={a.value} />
@@ -423,7 +423,7 @@ export function DashboardView({
         </Panel>
       </div>
 
-      {footer ? <div className="bg-muted px-32 pb-32">{footer}</div> : null}
+      {footer ? <div className="bg-muted px-16 pb-32 wide:px-32">{footer}</div> : null}
     </>
   );
 }
