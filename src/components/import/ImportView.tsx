@@ -6,11 +6,13 @@ import type { ImportRule, Yen } from "@/core/types";
 import {
   countRuleMatches,
   ruleFromImport,
+  editImportRowBizRatio,
   editImportRowCategory,
+  editImportRowCostType,
   type ColumnMapping,
   type ImportRow,
 } from "@/core/csv";
-import { categoryOf } from "@/core/categories";
+import { categoryOf, costTypeApplies, groupOfCategory } from "@/core/categories";
 import type { BalanceCheckMessage } from "@/lib/balance-check-message";
 import { Callout } from "@/components/sakiguri/Callout";
 import { PageHeader, type PageHeaderStat } from "@/components/sakiguri/PageHeader";
@@ -25,7 +27,7 @@ import {
 } from "@/components/sakiguri/Table";
 import { Button } from "@/components/ui/button";
 import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
-import { CategorySelect, TextInput } from "@/components/ui/inputs";
+import { CategorySelect, NumberInput, TextInput } from "@/components/ui/inputs";
 import { Field, Select } from "@/components/ui/select";
 import { formatYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -496,7 +498,12 @@ export function ImportView({
               </Button>
             }
           >
-            <Table density="compact">
+            {/* **内容ぶんの幅を取らせ、親の `overflow-x-auto` で横に送る。**
+                11列ある表を `w-full` で収めると、列が内容より狭くなって
+                固定変動の `<select>` が 30px まで潰れ、照合の文が縦に
+                折り返す（2026-11-13 に実機で確認）。設定の表・年月別収支と
+                同じやり方にしてある（`Table` の既定は `w-full`） */}
+            <Table density="compact" className="w-max min-w-full">
               <TableHeaderRow>
                 {/* Figma に無い列。要らない行を外せないとやり直すしかない */}
                 <TableHead>取込</TableHead>
@@ -509,6 +516,13 @@ export function ImportView({
                 {/* CL-7「行ごとに費目を修正できること」。FR-18 のルールは
                     ここで直した結果から作る */}
                 <TableHead>費目</TableHead>
+                {/* CL-7「行ごとに固定変動・事業割合を修正できること」。
+                    **取込のあとに1行ずつ直すのと違い、ここで直せば
+                    そのまま登録される**（`actualFromImportRow`）。
+                    事業割合は事業と家計のあいだで金額を動かすので、
+                    合計では間違いに気づけない（§3.3） */}
+                <TableHead>固定変動</TableHead>
+                <TableHead align="right">事業割合</TableHead>
                 <TableHead>決まり方</TableHead>
               </TableHeaderRow>
               <tbody>
@@ -600,6 +614,7 @@ export function ImportView({
                     </TableCell>
                     <TableCell>
                       <CategorySelect
+                        aria-label={`${row.name} の費目`}
                         type={row.type}
                         value={row.categoryCode}
                         onChange={(categoryCode) =>
@@ -612,6 +627,56 @@ export function ImportView({
                           )
                         }
                       />
+                    </TableCell>
+                    <TableCell>
+                      {/* 収入と資金移動には固定／変動が無い（適用規則6）。
+                          **条件は `costTypeApplies` 1つから引く** ――
+                          画面の条件と core の条件を別に書くと、画面から
+                          入らない値が入る（§2.8） */}
+                      {costTypeApplies(row.categoryCode) ? (
+                        <Select
+                          aria-label={`${row.name} の固定変動`}
+                          value={row.costType ?? "variable"}
+                          onChange={(e) =>
+                            onPreviewChange?.(
+                              preview.map((r) =>
+                                r.rowIndex === row.rowIndex
+                                  ? editImportRowCostType(
+                                      r,
+                                      e.target.value === "fixed" ? "fixed" : "variable",
+                                    )
+                                  : r,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="variable">変動費</option>
+                          <option value="fixed">固定費</option>
+                        </Select>
+                      ) : (
+                        <span className="t-body-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      {/* 資金移動は事業割合を持たない（適用規則6） */}
+                      {groupOfCategory(row.categoryCode) === "TRF" ? (
+                        <span className="t-body-sm text-muted-foreground">—</span>
+                      ) : (
+                        <NumberInput
+                          aria-label={`${row.name} の事業割合`}
+                          value={row.bizRatio}
+                          max={100}
+                          onValueChange={(bizRatio) =>
+                            onPreviewChange?.(
+                              preview.map((r) =>
+                                r.rowIndex === row.rowIndex
+                                  ? editImportRowBizRatio(r, bizRatio)
+                                  : r,
+                              ),
+                            )
+                          }
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-8">
@@ -656,7 +721,7 @@ export function ImportView({
                   </TableRow>,
                   draft?.rowIndex === row.rowIndex ? (
                     <TableRow key={`${row.rowIndex}-draft`} last={i === preview.length - 1}>
-                      <TableCell colSpan={9} className="bg-muted">
+                      <TableCell colSpan={11} className="bg-muted">
                         <div className="flex flex-wrap items-end gap-16">
                           <Field
                             label="摘要のどこで当てるか"

@@ -214,16 +214,26 @@ export function CategorySelect({
   value,
   onChange,
   id,
+  /* **表の中では `<label>` を置けない**（列見出しは行ごとの名前にならない）。
+     行が何十も並ぶ画面では、読み上げが「費目」としか言わないと、どの行の
+     欄かが分からない。呼び出し側が行の名前を渡せるようにしてある */
+  "aria-label": ariaLabel,
 }: {
   type: EntryType;
   value: string;
   onChange: (code: string) => void;
   id?: string;
+  "aria-label"?: string;
 }) {
   const options = categoryOptionsFor(type);
 
   return (
-    <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+    <Select
+      id={id}
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {options.map((c) => (
         <option key={c.code} value={c.code}>
           {c.name}

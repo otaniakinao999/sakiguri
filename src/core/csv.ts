@@ -758,16 +758,62 @@ export function editImportRowCategory(
   row: ImportRow,
   categoryCode: string,
 ): ImportRow {
-  return {
+  return handEdited({
     ...row,
     categoryCode,
     costType: costTypeApplies(categoryCode)
       ? (row.costType ?? categoryOf(categoryCode).recommendedCostType ?? "variable")
       : null,
-    ruleId: null,
-    rulePattern: null,
-    guessedFrom: null,
-  };
+  });
+}
+
+/**
+ * 確認画面で固定／変動を手で直したときの行（CL-7 確認画面）。
+ *
+ * **費目が固定変動を持たないなら変えない。** 収入と資金移動には固定／変動が
+ * 無い（§3.1.2 適用規則6）。画面でも出さないが、ここでも落とす ――
+ * 画面の条件とここの条件が食い違うと、画面から入らない値が入る。
+ */
+export function editImportRowCostType(
+  row: ImportRow,
+  costType: CostType,
+): ImportRow {
+  if (!costTypeApplies(row.categoryCode)) return row;
+  return handEdited({ ...row, costType });
+}
+
+/**
+ * 確認画面で事業割合を手で直したときの行（CL-7 確認画面）。
+ *
+ * **0〜100 の整数に収める**（CLAUDE.md §2.1）。資金移動は事業割合を
+ * 持たないので変えない（適用規則6）。
+ */
+export function editImportRowBizRatio(
+  row: ImportRow,
+  bizRatio: number,
+): ImportRow {
+  if (groupOfCategory(row.categoryCode) === "TRF") return row;
+  const fitted = Math.min(100, Math.max(0, Math.round(bizRatio)));
+  return handEdited({ ...row, bizRatio: fitted });
+}
+
+/**
+ * **手で直した行は、ルールにも推定にも属さなくなる**（AC-57a・AC-57b）。
+ *
+ * `ruleId` と `guessedFrom` を外すことで2つが同時に起きる。
+ *
+ * 1. 確認画面の「決まり方」が「ルールで決まった」と言わなくなる（AC-57a）
+ * 2. 「このルールを使わない」で**決め直す対象から外れる**（AC-57b）
+ *
+ * **「手で直した」という印を別に持たせていない。** 印と `ruleId` の2つを
+ * 持つと、どちらが本当かを決める規則がもう1つ要る（CLAUDE.md §2.8）。
+ *
+ * **3つの編集が同じ規則を共有する。** 費目・固定変動・事業割合のどれを
+ * 直しても、その行の分類はもう機械が決めた値ではない ―― 片方だけ外すと、
+ * 「事業割合だけ手で直した行」がルールの決め直しで巻き戻る。
+ */
+function handEdited(row: ImportRow): ImportRow {
+  return { ...row, ruleId: null, rulePattern: null, guessedFrom: null };
 }
 
 /**
