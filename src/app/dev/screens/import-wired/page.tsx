@@ -201,7 +201,7 @@ export default function DevImportWiredPage() {
         rules: DEV_RULES,
       }),
       DEV_NAME_SOURCE,
-    ),
+    ).rows,
   );
 
   return (

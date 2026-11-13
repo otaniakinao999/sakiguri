@@ -193,17 +193,50 @@ function hits(
 }
 
 /**
+ * `applyNameSource` の結果（AC-69）。
+ *
+ * **件数を2つ返す。** 画面に1つの数字しか出せないと、どちらに寄せても
+ * 嘘になる（§2.12）。
+ *
+ * | 出す数 | 起きること |
+ * |---|---|
+ * | 当たった件数（61） | **画面で変わった行は54なので、数字と画面が合わない** |
+ * | 置き換えた件数（54） | **当たっている7行が、当たらなかったように見える** |
+ *
+ * 記帳代行では、「当たらなかった」は**別のところを探せ**、「当たったが
+ * 明細に名前が無い」は**探しても無い**である。区別が無いと、毎月その
+ * 件数ぶん無駄に探すことになる。
+ */
+export interface NameSourceResult {
+  /** 差し替えたあとの行。**件数も並びも渡したときのまま** */
+  rows: ImportRow[];
+  /** 摘要を店名に置き換えた行の数 */
+  replaced: number;
+  /**
+   * **相手は決まったが、明細に店名が無かった行の数。**
+   *
+   * その行は番号のまま残る。「当たらなかった」とは別物である ――
+   * 探しても店名は無い。
+   */
+  noName: number;
+}
+
+/**
  * 銀行明細の摘要を、デビット明細の店名に差し替える（FR-62・AC-69）。
  *
  * **行数を変えない。** 返すのは渡された行と同じ並び・同じ件数である。
  *
  * **出金の行だけに当てる。** デビット明細は利用の一覧で、向きを持たない。
  * 入金の行にも当てると、同額の返金や振込に店名が付く。
+ *
+ * **件数を2つ返す**（`NameSourceResult`）。数えるのは**この1回の
+ * 突き合わせそのもの**である ―― あとから結果の行を数え直すと、「当たった
+ * が店名が空だった行」は触っていない行と見分けが付かない（§2.8）。
  */
 export function applyNameSource(
   rows: readonly ImportRow[],
   source: readonly NameSourceEntry[],
-): ImportRow[] {
+): NameSourceResult {
   /** まだ使っていない出どころ */
   const left = source.map((entry) => ({ entry, used: false }));
   /** 行番号 → 差し替える店名 */
@@ -239,7 +272,7 @@ export function applyNameSource(
     }
   }
 
-  return rows.map((row) => {
+  const out = rows.map((row) => {
     const name = picked.get(row.rowIndex);
     if (name === undefined) return row;
 
@@ -257,4 +290,13 @@ export function applyNameSource(
     /* **原文は触らない**（FR-58）。書き換えると次回当たらなくなる */
     return { ...row, name, nameFrom: "source" as const };
   });
+
+  return {
+    rows: out,
+    /* **結果の行から数える。** ルールの置き換えとぶつかった行は
+       差し替えていないので、`picked` の数ではなく出来上がりを見る */
+    replaced: out.filter((row) => row.nameFrom === "source").length,
+    /* 相手は決まったが店名が空だった行。`settled` と `picked` の差 */
+    noName: [...settled].filter((rowIndex) => !picked.has(rowIndex)).length,
+  };
 }

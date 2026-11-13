@@ -93,7 +93,7 @@ function sourceOf(csv = DEBIT): NameSourceEntry[] {
 }
 
 function applied(bank = BANK, debit = DEBIT): ImportRow[] {
-  return applyNameSource(bankRows(bank), sourceOf(debit));
+  return applyNameSource(bankRows(bank), sourceOf(debit)).rows;
 }
 
 const bankAt = (date: string, amount: number) =>
@@ -198,7 +198,7 @@ describe("AC-69 デビット明細を読む", () => {
 describe("AC-69 行を増やさない", () => {
   it("渡した行と同じ件数・同じ並びで返る", () => {
     const before = bankRows();
-    const after = applyNameSource(before, sourceOf());
+    const after = applyNameSource(before, sourceOf()).rows;
 
     expect(after).toHaveLength(before.length);
     expect(after.map((r) => r.rowIndex)).toEqual(before.map((r) => r.rowIndex));
@@ -208,7 +208,7 @@ describe("AC-69 行を増やさない", () => {
 
   it("金額・日付・口座・収支は変わらない（摘要だけ差し替える）", () => {
     const before = bankRows();
-    const after = applyNameSource(before, sourceOf());
+    const after = applyNameSource(before, sourceOf()).rows;
 
     expect(after.map((r) => [r.date, r.amount, r.type, r.accountId])).toEqual(
       before.map((r) => [r.date, r.amount, r.type, r.accountId]),
@@ -257,7 +257,7 @@ describe("AC-69 当たった行と、当たらなかった行", () => {
 
   it("出どころが空なら何も変わらない", () => {
     const before = bankRows();
-    expect(applyNameSource(before, [])).toEqual(before);
+    expect(applyNameSource(before, []).rows).toEqual(before);
   });
 });
 
@@ -307,9 +307,16 @@ describe("AC-69 勝手に近いものへ当てない", () => {
    * 向きを見ない実装でも何も起きないので通る ――
    * CLAUDE.md §2.11 の3つ目の形（対象の行が0件）。
    */
-  it("入金の行には当てない（当てられる相手が残っていても）", () => {
-    const bank = ["日付,摘要,出金,入金", "2026/10/25,ﾌﾘｺﾐ ﾍﾝｷﾝ,,1200"].join("\n");
-    const debit = ["利用日,利用店名,利用金額", "2026/10/25,SEVEN,1200"].join("\n");
+  it("入金の行には当てない（実データの返金行で測る）", () => {
+    /* **実在の行である**（AC-69。2026-11 の実データ）。
+       `2026/11/07 取消＊デビット　４８６４２６ 入金 ¥290` ――
+       **デビットの番号を持ったまま入金として立っている返金行。**
+       摘要だけを見て当てる実装は、ここで同額の店名を付けてしまう */
+    const bank = [
+      "日付,摘要,出金,入金",
+      "2026/11/07,取消＊デビット　４８６４２６,,290",
+    ].join("\n");
+    const debit = ["利用日,利用店名,利用金額", "2026/11/07,SEVEN,290"].join("\n");
 
     /* **相手が居ることを先に確かめる。** 居なければこの検査は空振りする */
     expect(sourceOf(debit)).toHaveLength(1);
@@ -377,6 +384,49 @@ describe("AC-69 勝手に近いものへ当てない", () => {
     const got = applied(bank, debit);
     expect(got[0].name).toBe("デビット　１");
     expect(got[0].nameFrom).toBeNull();
+  });
+});
+
+/* ========================= 件数（AC-69） ========================= */
+
+/**
+ * **画面に出す件数を2つに分ける**（AC-69・§2.12）。
+ *
+ * 1つの数字にすると、どちらに寄せても嘘になる ―― 当たった件数（4）を
+ * 出すと画面で変わった行（3）と合わず、置き換えた件数（3）を出すと
+ * **当たっている1行が当たらなかったように見える。**
+ *
+ * **3つの形が同じデータに在る**（§2.11）。置き換えた3行・店名が空の1行・
+ * 相手がいない1行。**行だけを見ると後ろの2つは区別が付かない**ので、
+ * 突き合わせたその場で数える。
+ */
+describe("AC-69 件数を2つ返す", () => {
+  it("置き換えた件数と、明細に店名が無かった件数を分ける", () => {
+    const got = applyNameSource(bankRows(), sourceOf());
+
+    expect(got.replaced).toBe(3);
+    expect(got.noName).toBe(1);
+
+    /* **在ること。** 置き換えた行が3件、画面に出ている */
+    expect(got.rows.filter((r) => r.nameFrom === "source")).toHaveLength(3);
+
+    /* **後ろの2つは行だけでは見分けが付かない。** どちらも番号のまま */
+    const noName = got.rows.find((r) => r.date === "2026-10-24")!;
+    const noCandidate = got.rows.find((r) => r.date === "2026-10-23")!;
+    expect(noName.nameFrom).toBeNull();
+    expect(noCandidate.nameFrom).toBeNull();
+    expect(noName.name).toBe(noName.sourceName);
+    expect(noCandidate.name).toBe(noCandidate.sourceName);
+  });
+
+  it("出どころが空なら両方0", () => {
+    const got = applyNameSource(bankRows(), []);
+    expect({ replaced: got.replaced, noName: got.noName }).toEqual({
+      replaced: 0,
+      noName: 0,
+    });
+    /* **在ることを同じ実行で。** 行は減っていない */
+    expect(got.rows).toHaveLength(6);
   });
 });
 

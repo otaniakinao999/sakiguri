@@ -249,7 +249,7 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
     const rows = rowsOf([debitRule("デビット利用")], [], DEBIT_CSV);
     expect(rows[0].name).toBe("デビット利用");
 
-    const got = applyNameSource(rows, sourceOf("FIGMA"));
+    const got = applyNameSource(rows, sourceOf("FIGMA")).rows;
 
     /* **表示名は原文のまま** */
     expect(got[0].name).toBe("デビット　４１２６６９");
@@ -263,7 +263,7 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
 
   it("同じ名前を言っているときはぶつかりではない（どちらを採っても同じ）", () => {
     const rows = rowsOf([debitRule("FIGMA")], [], DEBIT_CSV);
-    const got = applyNameSource(rows, sourceOf("FIGMA"));
+    const got = applyNameSource(rows, sourceOf("FIGMA")).rows;
 
     expect(got[0].name).toBe("FIGMA");
     expect(got[0].nameConflict).toBeNull();
@@ -272,7 +272,7 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
 
   it("ルールが置き換えていなければ、明細の店名がそのまま入る", () => {
     const rows = rowsOf([debitRule(null)], [], DEBIT_CSV);
-    const got = applyNameSource(rows, sourceOf("FIGMA"));
+    const got = applyNameSource(rows, sourceOf("FIGMA")).rows;
 
     expect(got[0].name).toBe("FIGMA");
     expect(got[0].nameFrom).toBe("source");
@@ -281,7 +281,7 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
 
   it("ぶつかった行でも、原文と重複判定は変わらない", () => {
     const rows = rowsOf([debitRule("デビット利用")], [], DEBIT_CSV);
-    const got = applyNameSource(rows, sourceOf("FIGMA"));
+    const got = applyNameSource(rows, sourceOf("FIGMA")).rows;
 
     expect(got[0].sourceName).toBe("デビット　４１２６６９");
 
@@ -291,13 +291,13 @@ describe("AC-66 置き換えとデビット明細がぶつかったら、どち�
     const again = applyNameSource(
       rowsOf([debitRule("デビット利用")], saved, DEBIT_CSV),
       sourceOf("FIGMA"),
-    );
+    ).rows;
     expect(again[0].duplicate).toBe("registered");
   });
 
   it("ぶつかった行でルールを使わないことにすると、明細の店名に落ちる", () => {
     const rows = rowsOf([debitRule("デビット利用")], [], DEBIT_CSV);
-    const got = applyNameSource(rows, sourceOf("FIGMA"));
+    const got = applyNameSource(rows, sourceOf("FIGMA")).rows;
     expect(got[0].nameConflict).not.toBeNull();
 
     const after = redecideWithoutRule(got, "r1", []);

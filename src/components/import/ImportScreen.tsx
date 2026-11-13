@@ -29,6 +29,7 @@ import { Callout } from "@/components/sakiguri/Callout";
 import { Panel } from "@/components/sakiguri/Panel";
 import type { StepItem } from "@/components/sakiguri/Steps";
 import { balanceCheckMessage } from "@/lib/balance-check-message";
+import { nameSourceMessage } from "@/lib/name-source-message";
 import {
   pickImportAccount,
   readImportAccount,
@@ -241,7 +242,17 @@ export function ImportScreen() {
     });
     /* **摘要の差し替えは行を組み立てたあと**（FR-62・AC-69）。行数は
        変わらない ―― 両方を行として取り込むと同じ取引が二重に入る */
-    setPreview(nameSource ? applyNameSource(built, nameSource) : built);
+    if (!nameSource) {
+      setPreview(built);
+      return;
+    }
+    const named = applyNameSource(built, nameSource);
+    setPreview(named.rows);
+    /* **件数を2つ出す**（AC-69・§2.12）。「置き換えた件数」と「明細に
+       店名が無かった件数」を分ける ―― 1つの数字にすると、画面で変わった
+       行の数と合わないか、当たった行が当たらなかったように見えるかの
+       どちらかになる。文の組み立ては `nameSourceMessage` が持つ */
+    setNotice(nameSourceMessage(named));
   };
 
   /**
