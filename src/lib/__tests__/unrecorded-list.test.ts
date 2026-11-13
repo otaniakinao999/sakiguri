@@ -24,8 +24,11 @@
  * 利用のぶんだけ食い違う** ―― AC-72 の2つ目の条項と衝突している。
  *
  * ここでは**食い違いの額を固定する。** 「合っている」ことにも「無視して
- * よい」ことにもせず、**差がカードの引落待ちと一致すること**を測る。
- * 優先順位が決まったら、この検査が落ちる（2026-11-13 に申し送り。§2.9）。
+ * よい」ことにもせず、**差がカードの引落待ちと一致すること**を測る
+ * （AC-72b。2026-11-13 に条項の側が直り、これが満たしている形になった）。
+ *
+ * **画面に出す額が、実際の差と同じであることも測る**（`awaiting`）。
+ * 説明の文に別の計算を通すと、**合わない理由として合わない額が出る。**
  */
 
 import { describe, expect, it } from "vitest";
@@ -146,9 +149,17 @@ describe("AC-72 金額と一覧が同じ集合を指す", () => {
     expect(waiting).toBe(-12_000);
     expect(sum - waiting).toBe(dashboard.unrecorded.amount);
 
-    /* 生の差も残す。**0 ではない** ―― AC-72 の2つ目の条項は、カードが
-       絡むと満たせない（§3.3 の「これは仕様である」と衝突している） */
+    /* 生の差も残す。**0 ではない** ―― 一致は求めない（AC-72b）。
+       §3.3 が「これは仕様である」と書いている差である */
     expect(sum).toBe(-120_100);
     expect(dashboard.unrecorded.amount).toBe(-108_100);
+
+    /* **画面に出す額が、実際の差と同じであること**（AC-72b）。
+       注記は `awaiting` を出す。ここが差とずれると、**合わない理由として
+       合わない額**が出る */
+    expect(dashboard.unrecorded.awaiting).toEqual({ amount: -12_000, count: 1 });
+    expect(sum - dashboard.unrecorded.awaiting.amount).toBe(
+      dashboard.unrecorded.amount,
+    );
   });
 });

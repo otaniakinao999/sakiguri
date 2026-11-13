@@ -195,6 +195,55 @@ describe("AC-72 組が空なら出さない", () => {
   });
 });
 
+describe("AC-72b 一覧の合計と金額の差を画面で説明する", () => {
+  it("引落が未来のカード利用に引落日が出る（在ること・無いこと）", () => {
+    render(createElement(Harness, null, createElement(DashboardScreen)));
+
+    /* **在ること。** 10/08 のサブスクは引落が 11/10（今日は 10/18）。
+       この行が差の原因である */
+    expect(screen.getAllByText("引落 11/10").length).toBe(1);
+
+    /* **無いこと。** 9/08 のサブスクは引落 10/10 で、もう金額に入って
+       いる。**同じ名前の行が2つ出ている**ので、「カードの行すべてに
+       出す実装」とは区別が付く */
+    expect(screen.getAllByText("サブスク").length).toBe(2);
+    expect(screen.queryByText("引落 10/10")).toBeNull();
+  });
+
+  it("注記が、含まれていない額と件数を言う", () => {
+    render(createElement(Harness, null, createElement(DashboardScreen)));
+    const text = (document.body.textContent ?? "").replace(/\s+/g, "");
+
+    /* 一覧の合計 −¥120,100、注記の金額 −¥108,100、差 ¥12,000 */
+    expect(text).toContain("カードの利用−¥12,000（1件）は引落前なので");
+    expect(text).toContain("やることには出ています");
+  });
+
+  it("差が無ければ、その注記を出さない", () => {
+    /* **「差があります」と読める文を、差が無いときに出さない。**
+       `unrecordedAwaiting` を渡さない場合が既定（/dev/screens の固定値） */
+    render(
+      createElement(DashboardView, {
+        today: FIXTURE_TODAY,
+        balance: 1_000_000,
+        unrecorded: -50_000,
+        chart: { points: [], todayT: 0, defenseLine: 0, markers: [] },
+        lowPoint: null,
+        todos: [],
+        todoCount: 0,
+        accounts: [{ label: "○○銀行 普通", value: 1_000_000 }],
+        cards: [],
+        total: { label: "現預金 合計", value: 1_000_000 },
+      }),
+    );
+    const text = document.body.textContent ?? "";
+
+    /* **在ること。** 金額の注記そのものは出ている */
+    expect(text).toContain("含まれています");
+    expect(text).not.toContain("引落前なので");
+  });
+});
+
 describe("AC-73 どの残高に含まれているかを正しく言う", () => {
   it("口座の数に依存する言い方をしない", () => {
     render(createElement(Harness, null, createElement(DashboardScreen)));

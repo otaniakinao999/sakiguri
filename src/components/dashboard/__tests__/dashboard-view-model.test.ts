@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DASHBOARD_HORIZON_DAYS } from "@/lib/dashboard";
+import { DASHBOARD_HORIZON_DAYS, type Dashboard } from "@/lib/dashboard";
 
 import {
   buildFixtureModel,
@@ -220,7 +220,7 @@ describe("buildDashboardViewModel", () => {
       series: model.series,
       dashboard: {
         ...model.dashboard,
-        unrecorded: { amount: 123_000, count: 0 },
+        unrecorded: { amount: 123_000, count: 0, awaiting: { amount: 0, count: 0 } },
       },
       accounts: FIXTURE_ACCOUNTS,
       today: FIXTURE_TODAY,
@@ -228,6 +228,40 @@ describe("buildDashboardViewModel", () => {
       range: "90",
     });
     expect(none.unrecorded).toBeNull();
+  });
+
+  it("引落待ちが0件なら、差の注記を出さない（AC-72b）", () => {
+    const build = (unrecorded: Dashboard["unrecorded"]) =>
+      buildDashboardViewModel({
+        series: model.series,
+        dashboard: { ...model.dashboard, unrecorded },
+        accounts: FIXTURE_ACCOUNTS,
+        today: FIXTURE_TODAY,
+        reserveLine: FIXTURE_RESERVE_LINE,
+        range: "90",
+      });
+
+    /* **在ることを先に見る。** フィクスチャには引落待ちが1件ある
+       （10/08 のサブスク、引落 11/10）。ここが0件だと、下の「出さない」
+       はどんな実装でも通る（§2.11 の3つ目の形） */
+    expect(model.dashboard.unrecorded.awaiting.count).toBe(1);
+    expect(build(model.dashboard.unrecorded).unrecordedAwaiting).toEqual({
+      amount: -12_000,
+      count: 1,
+    });
+
+    /* 引落待ちが無いなら出さない ―― 「差があります」と読める文を、
+       差が無いときに出さない */
+    expect(
+      build({ amount: -1_000, count: 1, awaiting: { amount: 0, count: 0 } })
+        .unrecordedAwaiting,
+    ).toBeNull();
+
+    /* **金額そのものを出していないなら、説明する相手がいない**（AC-49b） */
+    expect(
+      build({ amount: 0, count: 0, awaiting: { amount: -12_000, count: 1 } })
+        .unrecordedAwaiting,
+    ).toBeNull();
   });
 
   it("1件以上なら金額を出す。件数は渡さない（AC-49d）", () => {

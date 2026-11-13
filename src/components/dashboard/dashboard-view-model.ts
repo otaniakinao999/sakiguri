@@ -27,6 +27,7 @@ import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
 import type { ForecastMarker, ForecastPoint } from "@/components/sakiguri/ForecastChart";
 import { buildForecastPoints, msOf } from "@/lib/forecast-points";
+import { awaitingSettlementOn } from "@/lib/unrecorded";
 import { formatMonthDay, formatMonthDayJa, formatYen } from "@/lib/format";
 import { DASHBOARD_HORIZON_DAYS, type Dashboard } from "@/lib/dashboard";
 
@@ -85,6 +86,11 @@ export interface DashboardViewModel {
   today: DateStr;
   balance: Yen;
   unrecorded: Yen | null;
+  /**
+   * **一覧には出るが、`unrecorded` には入っていないぶん**（AC-72b）。
+   * 0件なら null。
+   */
+  unrecordedAwaiting: { amount: Yen; count: number } | null;
   chart: {
     points: ForecastPoint[];
     todayT: number;
@@ -193,6 +199,15 @@ export function buildDashboardViewModel({
         type: plan.type,
       }),
       direction: formatTransferDirection(plan, names) ?? undefined,
+      /* **引落が未来のカード利用には引落日を添える**（AC-72b）。
+         この行が「うち未記録の予定」との差の原因である。
+
+         **向きと同じ欄に出すが、同じ行には出ない** ―― 振替は引落に
+         まとめない（CL-2）ので、`transfer` の行がここに来ることはない */
+      settlement: (() => {
+        const on = awaitingSettlementOn(plan, accounts, today);
+        return on === null ? undefined : `引落 ${formatMonthDay(on)}`;
+      })(),
       /* 今日の予定は「遅れている」ものではない（AC-72）。
          **発生日で見る。** 一覧に入るかどうかの基準と同じものを使う
          （`lib/dashboard` の `unfilled`） */
@@ -206,6 +221,12 @@ export function buildDashboardViewModel({
     balance: dashboard.current,
     /* AC-49b。0件なら金額を出さない */
     unrecorded: dashboard.unrecorded.count > 0 ? dashboard.unrecorded.amount : null,
+    /* AC-72b。0件なら注記も出さない（差が無いときに「差があります」と
+       読める文を出さない） */
+    unrecordedAwaiting:
+      dashboard.unrecorded.count > 0 && dashboard.unrecorded.awaiting.count > 0
+        ? dashboard.unrecorded.awaiting
+        : null,
     chart: { points, todayT: msOf(today), defenseLine: reserveLine, markers },
     lowPoint: warning ? { date: lowest.date, value: lowest.balance } : null,
     annotation,

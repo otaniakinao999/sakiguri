@@ -20,7 +20,12 @@
  * 両方が使うが、両方で数え直すと片方だけずれる（CLAUDE.md §2.8）。
  */
 
-import type { BalanceSeries } from "@/core/balance";
+import {
+  cardIdsOf,
+  depositIdsOf,
+  viewDelta,
+  type BalanceSeries,
+} from "@/core/balance";
 import { settleDateOf } from "@/core/cash";
 import { isCard } from "@/core/types";
 import type { Account, DateStr, ForecastInstance, Yen } from "@/core/types";
@@ -56,8 +61,9 @@ export const UNRECORDED_LABEL = "うち未記録の予定";
  * カード利用は、件数には入るが金額には入らない。これは仕様である」と
  * 定めている（AC-49d は一覧の件数を発生日で数えることを要求している）。
  * **したがって一覧の合計と金額は、そのカード利用のぶんだけ食い違う。**
- * ここは AC-72 の2つ目の条項と衝突しているので、優先順位を待っている
- * （2026-11-13 に申し送り。CLAUDE.md §2.9）。
+ * **一致させない**（AC-72b。2026-11-13 に条項の側を直した） ―― 一覧を
+ * 現金日に倒すと、引落が未来のカード利用が一覧から消え、それは消し込む
+ * 対象そのものである。**代わりに差を画面で説明する**（`awaiting`）。
  */
 export function isUnrecordedOn(date: DateStr, today: DateStr): boolean {
   return date <= today;
@@ -78,9 +84,24 @@ export interface Unrecorded {
    * **件数を出すのは画面上の1箇所だけ。**
    */
   count: number;
+  /**
+   * **引落が未来のカード利用**（AC-72b）。一覧には出るが `amount` には
+   * 入っていないぶん。**符号は一覧の行と同じ**（費用なら負）。
+   *
+   * 「うち未記録の予定」と、飛んだ先の一覧の合計は**このぶんだけ食い違う。**
+   * 一致させずに、差の理由と額を画面に出す ―― 足し算が合わない理由が
+   * その場で読めないと、利用者はどちらが正しいか判断できない。
+   *
+   * 0件なら `{ amount: 0, count: 0 }`。
+   */
+  awaiting: { amount: Yen; count: number };
 }
 
-export const NONE: Unrecorded = { amount: 0, count: 0 };
+export const NONE: Unrecorded = {
+  amount: 0,
+  count: 0,
+  awaiting: { amount: 0, count: 0 },
+};
 
 /**
  * 予定インスタンスの現金が動く日（CL-2）。
@@ -95,6 +116,29 @@ function cashDateOf(
   const account = byId.get(plan.accountId);
   if (!account || !isCard(account) || plan.type === "transfer") return plan.date;
   return settleDateOf(account, plan.date);
+}
+
+/**
+ * **その予定の引落日。ただし未来のときだけ**（AC-72b）。今日以前なら null。
+ *
+ * この日が未来の行は、**一覧には出るが「うち未記録の予定」の金額には
+ * 入っていない。** 差の原因そのものなので、行にこの日を添える。
+ *
+ * **判定は `cashDateOf` を借りる**（§2.8）。金額が何を見ているかと、
+ * 行に何を出すかを別々に書くと、片方だけ直したときに**差の説明が
+ * 差と合わなくなる。**
+ */
+export function awaitingSettlementOn(
+  plan: ForecastInstance,
+  accounts: readonly Account[] | ReadonlyMap<string, Account>,
+  today: DateStr,
+): DateStr | null {
+  const byId =
+    accounts instanceof Map
+      ? (accounts as Map<string, Account>)
+      : new Map((accounts as readonly Account[]).map((a) => [a.id, a]));
+  const date = cashDateOf(plan, byId);
+  return date > today ? date : null;
 }
 
 /**
@@ -121,5 +165,29 @@ export function unrecordedInBalance(
     isUnrecordedOn(cashDateOf(plan, byId), today),
   ).length;
 
-  return { amount: todayRow.proj - todayRow.act, count };
+  /* **一覧には出るが金額には入っていないぶん**（AC-72b）。発生日は今日
+     以前（＝一覧に出る）で、現金が動く日が未来のもの。
+
+     **符号は一覧の行と同じ引き方にする**（`viewDelta`。AC-58b）。
+     ここで `amount` に符号を付け直すと、画面の行と注記で別々の規則が
+     動く（§2.8） */
+  const deposits = new Set(depositIdsOf(series));
+  const viewed = [...depositIdsOf(series), ...cardIdsOf(series)];
+  const waiting = series.unmatchedForecast.filter(
+    (plan) =>
+      isUnrecordedOn(plan.date, today) &&
+      awaitingSettlementOn(plan, byId, today) !== null,
+  );
+
+  return {
+    amount: todayRow.proj - todayRow.act,
+    count,
+    awaiting: {
+      amount: waiting.reduce(
+        (sum, plan) => sum + viewDelta(plan, viewed, deposits),
+        0,
+      ),
+      count: waiting.length,
+    },
+  };
 }

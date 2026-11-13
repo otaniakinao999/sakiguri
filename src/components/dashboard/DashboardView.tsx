@@ -51,6 +51,15 @@ export interface DashboardTodo {
   /** 資金移動の向き（FR-63・AC-70）。向きを持たない行では undefined */
   direction?: string;
   /**
+   * **引落が未来のカード利用の引落日**（AC-72b）。例：引落 11/10。
+   *
+   * この行は一覧に出ているが、「うち未記録の予定」の金額には入っていない。
+   * **どの行が差の原因かを読めるようにする。**
+   *
+   * 向きと同じ欄に出すが、同じ行には出ない（振替は引落にまとめない）。
+   */
+  settlement?: string;
+  /**
    * 今日の予定か（AC-72）。
    *
    * **「遅れている」行と同じ扱いにしない。** 今日の予定は期日を過ぎて
@@ -92,6 +101,11 @@ export interface DashboardViewProps {
   balance: Yen;
   /** 消し込みが済んでいれば null。0 を渡さない（AC-49b） */
   unrecorded: Yen | null;
+  /**
+   * **一覧には出るが `unrecorded` には入っていないぶん**（AC-72b）。
+   * 0件なら null で、注記も出ない。
+   */
+  unrecordedAwaiting?: { amount: Yen; count: number } | null;
 
   chart: {
     points: ForecastPoint[];
@@ -184,6 +198,7 @@ export function DashboardView({
   today,
   balance,
   unrecorded,
+  unrecordedAwaiting = null,
   chart,
   lowPoint,
   annotation = null,
@@ -324,8 +339,10 @@ export function DashboardView({
                         key={t.id}
                         date={t.date}
                         title={t.title}
-                        /* 資金移動の向き（FR-63・AC-70） */
-                        detail={t.direction}
+                        /* 資金移動の向き（FR-63・AC-70）と、引落が未来の
+                           カード利用の引落日（AC-72b）。**同じ行には
+                           両方は来ない**（振替は引落にまとめない。CL-2） */
+                        detail={t.direction ?? t.settlement}
                         amount={t.display.value}
                         amountType={t.display.type}
                         signed={t.display.signed}
@@ -387,6 +404,20 @@ export function DashboardView({
               {total
                 ? ` は、その予定に設定した口座の残高と、${total.label}に含まれています。`
                 : " は、その予定に設定した口座の残高に含まれています。"}
+            </p>
+          )}
+
+          {/* AC-72b。**一覧の合計とこの額は一致しない。** 一覧は発生日、
+              この額は現金が動く日で見ており、引落が未来のカード利用は
+              一覧に出てここには入らない（§3.3「これは仕様である」）。
+              **足し算が合わない理由をその場で読めるようにする** ――
+              どの行が原因かは、やることの行に出した引落日で辿れる */}
+          {unrecorded !== null && unrecordedAwaiting !== null && (
+            <p className="t-body-sm text-muted-foreground">
+              カードの利用{" "}
+              <span className="num">{formatSignedYen(unrecordedAwaiting.amount)}</span>
+              （{unrecordedAwaiting.count}件）は引落前なので、この額には
+              入っていません。やることには出ています。
             </p>
           )}
         </Panel>

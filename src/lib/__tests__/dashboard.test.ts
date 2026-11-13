@@ -404,7 +404,12 @@ describe("AC-49 画面に出る残高が1つの系列から来ている", () => 
     const got = backlog();
 
     expect(got.current).toBe(1_395_000);
-    expect(got.unrecorded).toEqual({ amount: -100_000, count: 1 });
+    expect(got.unrecorded).toEqual({
+      amount: -100_000,
+      count: 1,
+      /* 引落が未来のカード利用は無い（AC-72b） */
+      awaiting: { amount: 0, count: 0 },
+    });
   });
 
   it("消し込みが済んでいれば内訳を出さない", () => {
@@ -427,7 +432,7 @@ describe("AC-49 画面に出る残高が1つの系列から来ている", () => 
       ],
     });
 
-    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    expect(got.unrecorded).toEqual({ amount: 0, count: 0, awaiting: { amount: 0, count: 0 } });
     expect(got.current).toBe(got.total);
   });
 });

@@ -72,7 +72,7 @@ describe("残高ヘッダーの数字（SC-01）", () => {
       in30: 0,
       in90: 0,
       cardDue: 0,
-      unrecorded: { amount: 0, count: 0 },
+      unrecorded: { amount: 0, count: 0, awaiting: { amount: 0, count: 0 } },
     });
   });
 
@@ -85,7 +85,7 @@ describe("残高ヘッダーの数字（SC-01）", () => {
       in90: 1_000_000,
       cardDue: 0,
       /* 未消し込みの予定が無いので内訳も出ない */
-      unrecorded: { amount: 0, count: 0 },
+      unrecorded: { amount: 0, count: 0, awaiting: { amount: 0, count: 0 } },
     });
   });
 
@@ -202,7 +202,11 @@ describe("AC-49 残高はすべて予測系列から取る", () => {
     const got = computeBalanceSummary(withBacklog(), TODAY);
 
     /* 予測 875,000 − 実績 995,000 = −120,000。残高を押し下げている */
-    expect(got.unrecorded).toEqual({ amount: -120_000, count: 1 });
+    expect(got.unrecorded).toEqual({
+      amount: -120_000,
+      count: 1,
+      awaiting: { amount: 0, count: 0 },
+    });
   });
 
   it("未消し込みが無ければ出さない", () => {
@@ -226,7 +230,7 @@ describe("AC-49 残高はすべて予測系列から取る", () => {
 
     const got = computeBalanceSummary(settled, TODAY);
 
-    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    expect(got.unrecorded).toEqual({ amount: 0, count: 0, awaiting: { amount: 0, count: 0 } });
     /* 消し込みが済んでいれば2つの系列は一致する */
     expect(got.current).toBe(880_000);
   });
@@ -242,7 +246,14 @@ describe("AC-49 残高はすべて予測系列から取る", () => {
 
     const got = computeBalanceSummary(onCard, TODAY);
 
-    expect(got.unrecorded).toEqual({ amount: 0, count: 0 });
+    /* **一覧には出るが金額には入らない**（AC-72b）。この行こそが
+       「一覧の合計と注記の金額が食い違う」原因である。金額が0なのに
+       一覧に1件あることを、同じ実行で測る */
+    expect(got.unrecorded).toEqual({
+      amount: 0,
+      count: 0,
+      awaiting: { amount: -120_000, count: 1 },
+    });
     expect(got.current).toBe(1_000_000);
   });
 });
