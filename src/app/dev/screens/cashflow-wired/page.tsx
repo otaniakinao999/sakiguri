@@ -34,6 +34,8 @@ import { PERIOD_PRESETS } from "@/lib/period";
 export default function DevCashflowWiredPage() {
   const [grain, setGrain] = useState<"daily" | "monthly">("daily");
   const [accountScope, setAccountScope] = useState<string>("all");
+  /* 出納帳と合わせる（FR-66・AC-75）。本番と同じ形で切り替える */
+  const [dailyActualOnly, setDailyActualOnly] = useState(false);
   const scope = accountScope === "all" ? undefined : new Set([accountScope]);
   const fixture = buildCashflowFixture(FIXTURE_TODAY, scope);
   const view = buildCashflowViewModel({
@@ -41,6 +43,7 @@ export default function DevCashflowWiredPage() {
     monthly: fixture.monthly,
     accounts: FIXTURE_ACCOUNTS,
     accountId: accountScope === "all" ? null : accountScope,
+    dailySource: dailyActualOnly ? "actual" : "projected",
     view: fixture.view,
     from: fixture.from,
     to: fixture.to,
@@ -83,6 +86,7 @@ export default function DevCashflowWiredPage() {
           months={view.months}
           monthsNote={view.monthsNote}
           accountDaily={view.accountDaily}
+          onDailyActualOnlyChange={setDailyActualOnly}
           ledger={view.ledger}
           ledgerMonths={view.ledgerMonths}
           ledgerTotal={formatLedgerTotal(view.total)}

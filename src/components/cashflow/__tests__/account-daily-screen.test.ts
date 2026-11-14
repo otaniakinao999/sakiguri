@@ -79,7 +79,8 @@ function draw() {
 /** 「口座の日ごとの増減と残高」のパネル */
 function dailyPanel(container: HTMLElement): HTMLElement {
   const heading = [...container.querySelectorAll("h1,h2,h3")].find((h) =>
-    h.textContent?.includes("口座の日ごとの増減と残高"),
+    /* 語は切り替えで変わる（AC-75）ので、前半だけで探す */
+    h.textContent?.includes("口座の日ごとの増減"),
   );
   expect(heading).toBeTruthy();
   return heading!.closest("section") ?? (heading!.parentElement as HTMLElement);
@@ -186,11 +187,13 @@ describe("AC-71 日ごとの増減と残高が画面に出る（FR-64）", () =>
 describe("AC-71 増減の合計が残高の動きと合わないとき", () => {
   const daily = (gap: number): CashflowDaily => ({
     accountName: "現金",
+    labels: { running: "残高", opening: "期首残高", closing: "期末残高" },
+    actualOnly: false,
     opening: 52_000,
     closing: 79_000,
     total: 27_000 + gap,
     gap,
-    rows: [{ date: "10/14", delta: 27_000 + gap, balance: 79_000, note: "1件" }],
+    rows: [{ date: "10/14", delta: 27_000 + gap, running: 79_000, note: "1件" }],
   });
 
   const tabs = { defaultValue: "all", options: [{ value: "all", label: "すべて" }] };
@@ -226,5 +229,91 @@ describe("AC-71 増減の合計が残高の動きと合わないとき", () => {
     const text = dailyPanel(container).textContent ?? "";
     expect(text).not.toContain("ずれています");
     expect(text).toContain("＝ 期末残高");
+  });
+});
+
+/* ============ 出納帳と合わせる（FR-66・AC-75） ============ */
+
+/**
+ * **退化させない**（§2.11 の4つ目の形）。未記録の予定が0件の口座で測ると、
+ * 切り替えても結果が同じで、**実装していなくても通る。**
+ *
+ * ○○銀行（a1）には予定も実績もある ―― 現金（a0）は実績2件だけなので
+ * **この条項には使えない。** 「予定が在ること」を先に測る。
+ */
+describe("AC-75 出納帳と合わせる（実績だけで数える）", () => {
+  /** 出納帳と合わせるの切り替え */
+  function toggle() {
+    return screen.getByLabelText("出納帳と合わせる") as HTMLInputElement;
+  }
+
+  it("口座を選ぶと切り替えが出る。既定は入っていない", () => {
+    const { container } = draw();
+
+    /* 合計のときは表そのものが無いので、切り替えも出ない */
+    expect(screen.queryByLabelText("出納帳と合わせる")).toBeNull();
+
+    choose("a1");
+    expect(toggle()).toBeTruthy();
+    /* **既定は入っていない**（AC-75）。既定を変えると、ダッシュボードの
+       残高とこの表が既定どうしで食い違う */
+    expect(toggle().getAttribute("data-state")).toBe("unchecked");
+    expect(dailyPanel(container).textContent).toContain("残高");
+  });
+
+  it("入れると予定の行が消え、語が「実績の累計」に変わる", () => {
+    const { container } = draw();
+    choose("a1");
+
+    /* **在ることを先に測る。** 予定の行があるから、切り替えに意味がある */
+    const before = dailyPanel(container);
+    expect(before.textContent).toContain("予定");
+    const beforeRows = before.querySelectorAll("tbody tr").length;
+
+    fireEvent.click(toggle());
+
+    const after = dailyPanel(container);
+    const text = after.textContent ?? "";
+
+    /* 行が減る（予定の行が消える） */
+    expect(after.querySelectorAll("tbody tr").length).toBeLessThan(beforeRows);
+
+    /* **「残高」と呼ばない**（AC-75）。実績だけの累計は残高ではない */
+    expect(text).toContain("実績の累計");
+    expect(text).toContain("期首の累計");
+    expect(text).not.toContain("残高");
+
+    /* 見出しも変わる */
+    expect(
+      screen.getByText("口座の日ごとの増減と実績の累計"),
+    ).toBeTruthy();
+  });
+
+  it("**必ず合う式を出さない**（AC-75）", () => {
+    const { container } = draw();
+    choose("a1");
+
+    /* **在ること。** 予測のときは留め具の式を出す（AC-71） */
+    expect(dailyPanel(container).textContent).toContain("＝");
+
+    fireEvent.click(toggle());
+
+    const text = dailyPanel(container).textContent ?? "";
+    /* 実績だけのときは累計を行から積んでいるので、式は必ず合う ――
+       確かめになっていないものを「合っている」と読ませない */
+    expect(text).not.toContain("＝");
+    expect(text).toContain("確かめにはなりません");
+    expect(text).toContain("出納帳と1行ずつ");
+  });
+
+  it("戻すと元の語に戻る", () => {
+    const { container } = draw();
+    choose("a1");
+    fireEvent.click(toggle());
+    fireEvent.click(toggle());
+
+    const text = dailyPanel(container).textContent ?? "";
+    expect(text).toContain("期首残高");
+    expect(text).not.toContain("実績の累計");
   });
 });

@@ -131,7 +131,7 @@ describe("AC-71 日ごとの増減と残高", () => {
   });
 
   it("その日の残高が出る（期首からの積み上げ）", () => {
-    const byDate = new Map(got.rows.map((r) => [r.date, r.balance]));
+    const byDate = new Map(got.rows.map((r) => [r.date, r.running]));
     expect(got.opening).toBe(52_000);
     expect(byDate.get("2026-10-03")).toBe(132_000);
     expect(byDate.get("2026-10-14")).toBe(182_000);
@@ -146,7 +146,7 @@ describe("AC-71 日ごとの増減と残高", () => {
     const row = got.rows.find((r) => r.date === "2026-10-28")!;
     expect(row.delta).toBe(0);
     expect(row.count).toBe(1);
-    expect(row.balance).toBe(155_500);
+    expect(row.running).toBe(155_500);
   });
 
   it("ほかの口座の行は出ない", () => {
@@ -273,5 +273,203 @@ describe("AC-71 まだ実績が入っていない予定を数える", () => {
 
     /* 予定を入れても留め具は保たれる */
     expect(got.gap).toBe(0);
+  });
+});
+
+/* ============ 出納帳と合わせる（FR-66・AC-75） ============ */
+
+/**
+ * **実績だけで数える切り替え。** 出納帳には予定の行が無いので、1行ずつ
+ * 突き合わせるにはこちらが要る。
+ *
+ * ## 退化させない（§2.11 の4つ目の形）
+ *
+ * **未記録の予定が0件だと、切り替えても結果が同じになる** ―― 切り替えを
+ * 実装していなくても通る。だから**この一式には予定を入れてある**し、
+ * 「予定と実績で結果が違うこと」を**先に測る。**
+ *
+ * | 日 | 何 | 予測 | 実績だけ |
+ * |---|---|---|---|
+ * | 10/03 | 現金売上（実績） | +80,000 | +80,000 |
+ * | 10/10 | 通信費の予定 | −5,000 | **出ない** |
+ * | 10/18 | コピー用紙（実績） | −1,200 | −1,200 |
+ * | 10/25 | 家賃の予定 | −7,000 | **出ない** |
+ */
+describe("AC-75 実績だけで数える", () => {
+  const plan = (
+    id: string,
+    date: DateStr,
+    amount: number,
+  ) => ({
+    key: `r:${id}:${date}`,
+    date,
+    name: `予定${id}`,
+    type: "expense" as const,
+    costType: "fixed" as const,
+    categoryCode: "EXP-03",
+    amount,
+    bizRatio: 100,
+    accountId: CASH,
+    src: "recurring" as const,
+    srcId: id,
+  });
+
+  const withPlans = buildBalanceSeries(
+    {
+      accounts: ACCOUNTS,
+      asOf: ASOF,
+      forecast: [plan("p1", "2026-10-10", 5_000), plan("p2", "2026-10-25", 7_000)],
+      actuals: [
+        actual({
+          id: "a",
+          date: "2026-10-03",
+          name: "現金売上",
+          type: "income",
+          costType: null,
+          categoryCode: "INC-01",
+          amount: 80_000,
+        }),
+        actual({ id: "c", date: "2026-10-18", name: "コピー用紙", amount: 1_200 }),
+      ],
+    },
+    END,
+    END,
+  );
+
+  const of = (source: "projected" | "actual", from = ASOF) =>
+    buildAccountDaily({
+      series: withPlans,
+      accounts: ACCOUNTS,
+      accountId: CASH,
+      from,
+      to: END,
+      source,
+    });
+
+  it("測る対象がある（予定が在り、予測と実績で結果が違う）", () => {
+    const projected = of("projected");
+    const actualOnly = of("actual");
+
+    /* **予定が在ること。** 0件だと、下のどの条項も何も確かめない */
+    expect(projected.rows.some((r) => r.planCount > 0)).toBe(true);
+
+    /* **結果が違うこと。** 同じなら、切り替えを捨てる実装でも通る */
+    expect(actualOnly.rows.length).toBeLessThan(projected.rows.length);
+    expect(actualOnly.closing).not.toBe(projected.closing);
+  });
+
+  it("行は実績だけになる", () => {
+    const got = of("actual");
+    expect(got.rows.map((r) => r.date)).toEqual(["2026-10-03", "2026-10-18"]);
+    /* 予定の日は出ない */
+    expect(got.rows.some((r) => r.date === "2026-10-10")).toBe(false);
+    /* 予定の件数は常に0 */
+    expect(got.rows.every((r) => r.planCount === 0)).toBe(true);
+  });
+
+  /**
+   * **カードの引落は予定ではない**（2026-11-15 に実機で見つけた）。
+   *
+   * 実績系列にも引落の行は在る（基準日の未払や、記録した利用が
+   * 引き落とされる日）。`src` が `actual` でないという理由で数えると、
+   * **出納帳に在る行に「予定1件」と出る。**
+   *
+   * **カードの未払が0だと、この条項は空振りする**（引落の行が立たない）。
+   * だから `withCard` は基準日の未払を持たせてある。
+   */
+  describe("カードの引落が在るとき", () => {
+    const CARD_OPENING = 30_000;
+    const withCardAccounts: Account[] = ACCOUNTS.map((a) =>
+      a.id === CARD ? { ...a, balance: CARD_OPENING } : a,
+    );
+    const withCard = buildBalanceSeries(
+      {
+        accounts: withCardAccounts,
+        asOf: ASOF,
+        forecast: [plan("p3", "2026-10-05", 4_000)],
+        actuals: [
+          actual({
+            id: "h",
+            date: "2026-10-20",
+            name: "家賃",
+            amount: 95_000,
+            accountId: BANK,
+          }),
+        ],
+      },
+      END,
+      END,
+    );
+    const bank = (source: "projected" | "actual") =>
+      buildAccountDaily({
+        series: withCard,
+        accounts: withCardAccounts,
+        accountId: BANK,
+        from: ASOF,
+        to: END,
+        source,
+      });
+
+    it("引落の行が実績の側にもある（空振りしていない）", () => {
+      /* **在ることを先に測る。** 引落が0件だと、下は何も確かめない */
+      expect(withCard.actualCash.some((e) => e.src === "settle")).toBe(true);
+      const settleDate = withCard.actualCash.find((e) => e.src === "settle")!.date;
+      expect(bank("actual").rows.map((r) => r.date)).toContain(settleDate);
+    });
+
+    it("引落を「予定」と数えない", () => {
+      expect(bank("actual").rows.every((r) => r.planCount === 0)).toBe(true);
+
+      /* **予測の側では予定を数える**（同じ実行で対にして測る） ――
+         どちらも0にする実装と区別が付かなくなる */
+      expect(bank("projected").rows.some((r) => r.planCount > 0)).toBe(true);
+    });
+  });
+
+  it("累計も実績だけから積む", () => {
+    const got = of("actual");
+    expect(got.opening).toBe(52_000);
+    expect(got.rows.map((r) => r.running)).toEqual([132_000, 130_800]);
+    expect(got.total).toBe(78_800);
+    expect(got.closing).toBe(130_800);
+  });
+
+  it("予測は変わらない（既定は予測のまま）", () => {
+    const explicit = of("projected");
+    const byDefault = buildAccountDaily({
+      series: withPlans,
+      accounts: ACCOUNTS,
+      accountId: CASH,
+      from: ASOF,
+      to: END,
+    });
+
+    expect(byDefault).toEqual(explicit);
+    expect(byDefault.source).toBe("projected");
+    /* 予定を含むので、実績だけのときと違う */
+    expect(byDefault.closing).toBe(118_800);
+  });
+
+  it("期首も実績だけから積む（途中から見たとき）", () => {
+    /* 10/15 から見ると、期首は 10/03 の実績までの累計。
+       **予定（10/10 −5,000）は入らない** ―― 入ると 127,000 になる */
+    const got = of("actual", "2026-10-15");
+    expect(got.opening).toBe(132_000);
+    expect(got.rows.map((r) => r.date)).toEqual(["2026-10-18"]);
+
+    /* 予測のほうは予定を含む（同じ実行で対にして測る） */
+    expect(of("projected", "2026-10-15").opening).toBe(127_000);
+  });
+
+  it("自分が何から作られたかを名乗る（画面の語はここから引く）", () => {
+    expect(of("actual").source).toBe("actual");
+    expect(of("projected").source).toBe("projected");
+  });
+
+  it("**gap は必ず0になる。留め具になっていない**（AC-75）", () => {
+    /* 累計を行から積んでいるので、「期末 − 期首」は増減の合計と一致する
+       しかない（§2.11 の4つ目の形）。**だから画面にも出さない** */
+    expect(of("actual").gap).toBe(0);
+    expect(of("actual", "2026-10-15").gap).toBe(0);
   });
 });

@@ -84,6 +84,13 @@ export function CashflowScreen() {
    */
   const [accountScope, setAccountScope] = useState<string>("all");
   /**
+   * **出納帳と合わせる**（FR-66・AC-75）。日別の表を実績だけで数える。
+   *
+   * **既定は入っていない状態。** 既定を変えると、ダッシュボードの残高と
+   * この表が既定どうしで食い違う。画面の状態なので保存しない。
+   */
+  const [dailyActualOnly, setDailyActualOnly] = useState(false);
+  /**
    * 編集中の実績（FR-41）。
    *
    * 入出金予定表からも実績を直せるようにする。画面遷移させないのは、
@@ -170,6 +177,8 @@ export function CashflowScreen() {
       accounts: data.accounts,
       /* 日別は1口座ぶん（FR-64）。合計を見ているときは出さない */
       accountId: accountScope === "all" ? null : accountScope,
+      /* 出納帳と合わせる（FR-66・AC-75） */
+      dailySource: dailyActualOnly ? "actual" : "projected",
       view,
       from: rows[0]?.date ?? today,
       to: rows[rows.length - 1]?.date ?? today,
@@ -186,6 +195,7 @@ export function CashflowScreen() {
     reserveLine,
     data.accounts,
     accountScope,
+    dailyActualOnly,
     scope,
   ]);
 
@@ -257,6 +267,7 @@ export function CashflowScreen() {
       months={model.months}
       monthsNote={model.monthsNote}
       accountDaily={model.accountDaily}
+      onDailyActualOnlyChange={setDailyActualOnly}
       ledger={model.ledger}
       ledgerMonths={model.ledgerMonths}
       ledgerTotal={formatLedgerTotal(model.total)}

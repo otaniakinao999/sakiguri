@@ -8,7 +8,10 @@
  * 同じ形（dashboard-view-model.ts）。React を import しない。
  */
 
-import { buildAccountDaily } from "@/core/account-daily";
+import {
+  buildAccountDaily,
+  type AccountDailySource,
+} from "@/core/account-daily";
 import type { BalanceSeries, OneSidedReason } from "@/core/balance";
 import type { MonthlyCashflowRow } from "@/core/monthly";
 import {
@@ -74,6 +77,13 @@ export interface CashflowViewModelInput {
    * 出さない（2口座を足した「日ごとの残高」は出納帳と突き合わない）。
    */
   accountId: string | null;
+  /**
+   * 日別を**実績だけで数えるか**（FR-66・AC-75）。既定は予測系列。
+   *
+   * **既定を変えない** ―― ダッシュボードの残高と日別の表が既定どうしで
+   * 食い違う。
+   */
+  dailySource?: AccountDailySource;
   /** 期間で絞ったあとの明細（lib/ledger の出力） */
   view: LedgerView;
   /** 表示する期間。グラフの横幅もこれに従う */
@@ -154,6 +164,7 @@ export function buildCashflowViewModel({
   monthly,
   accounts,
   accountId,
+  dailySource = "projected",
   view,
   from,
   to,
@@ -264,7 +275,7 @@ export function buildCashflowViewModel({
    * 合計が「期末 − 期首」と合わなくなり、留め具が意味を失う。
    * 期間はグラフと同じ `from` / `to` に揃える。
    */
-  const accountDaily = buildDaily(series, accounts, accountId, from, to);
+  const accountDaily = buildDaily(series, accounts, accountId, from, to, dailySource);
 
   return {
     stats,
@@ -294,20 +305,46 @@ export function buildCashflowViewModel({
  * 未記録の予定がある日から先は出納帳と食い違う。その理由が読めるように
  * しておく。
  */
+/**
+ * 累計の列と期首・期末の語（AC-75）。
+ *
+ * **「残高」と呼ぶのは予測系列のときだけである。** 実績だけで数えた
+ * ものを残高と呼ぶと、同じ日について画面に2つの残高が出る（AC-49c）。
+ *
+ * **語の選び方はここ1箇所。** 画面が `source` を見て選ぶ形にすると、
+ * 表の見出し・期首の行・式の文で**別々に選ぶことになる**（§2.8）。
+ */
+const DAILY_LABELS: Record<
+  AccountDailySource,
+  { running: string; opening: string; closing: string }
+> = {
+  projected: { running: "残高", opening: "期首残高", closing: "期末残高" },
+  actual: {
+    running: "実績の累計",
+    opening: "期首の累計",
+    closing: "期末の累計",
+  },
+};
+
 function buildDaily(
   series: BalanceSeries,
   accounts: readonly Account[],
   accountId: string | null,
   from: DateStr,
   to: DateStr,
+  source: AccountDailySource,
 ): CashflowDaily | null {
   if (accountId === null) return null;
   const account = accounts.find((a) => a.id === accountId);
   if (!account) return null;
 
-  const daily = buildAccountDaily({ series, accounts, accountId, from, to });
+  const daily = buildAccountDaily({ series, accounts, accountId, from, to, source });
   return {
     accountName: account.name,
+    /* **`daily.source` から引く。** 呼び出し側の引数ではなく、作った
+       ものが名乗る系列を見る ―― 渡し間違えると語だけ正しくなる */
+    labels: DAILY_LABELS[daily.source],
+    actualOnly: daily.source === "actual",
     opening: daily.opening,
     closing: daily.closing,
     total: daily.total,
@@ -315,7 +352,7 @@ function buildDaily(
     rows: daily.rows.map((row) => ({
       date: formatMonthDay(row.date),
       delta: row.delta,
-      balance: row.balance,
+      running: row.running,
       note:
         row.planCount === 0
           ? `${row.count}件`
