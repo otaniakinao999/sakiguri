@@ -17,7 +17,8 @@ import { touchesAccount } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
 import { amountView } from "@/components/sakiguri/amount-view";
 import { categoryTagFor } from "@/components/sakiguri/CategoryTag";
-import { ACCOUNT_LABEL, applyActualPatch } from "@/components/entry/ActualForm";
+import { applyActualPatch } from "@/components/entry/ActualForm";
+import { ACCOUNT_LABEL } from "@/lib/account-label";
 import {
   buildEntryActualRows,
   entryAmountScope,

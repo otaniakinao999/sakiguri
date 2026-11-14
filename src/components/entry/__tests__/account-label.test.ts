@@ -18,7 +18,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ACCOUNT_LABEL, ActualForm } from "@/components/entry/ActualForm";
+import { ActualForm } from "@/components/entry/ActualForm";
+import { EntryFieldCells } from "@/components/settings/EntryFields";
+import { ACCOUNT_LABEL, TO_ACCOUNT_LABEL } from "@/lib/account-label";
 import type { Account, Actual, EntryType } from "@/core/types";
 
 afterEach(cleanup);
@@ -84,5 +86,76 @@ describe("口座欄のラベル（AC-58e）", () => {
     draw("income");
     expect(screen.getByText("入金先")).toBeTruthy();
     expect(screen.queryByText("振替先")).toBeNull();
+  });
+});
+
+/* ============ 予定の設定（EntryFields。v1.54 で広げた） ============ */
+
+/**
+ * **表なので、見える語は列見出しのまま**（全行で1つ。並べ替えのキーでも
+ * ある）。行ごとに変わるのは**欄の読み上げ名**である。
+ *
+ * **実績編集と同じ対応を使っていることを測る。** `ACCOUNT_LABEL` から
+ * 引いているので、片方だけ直すと必ず落ちる（§2.8）。
+ */
+function drawCells(type: EntryType) {
+  render(
+    createElement(
+      "table",
+      null,
+      createElement(
+        "tbody",
+        null,
+        createElement(
+          "tr",
+          null,
+          createElement(EntryFieldCells, {
+            value: {
+              type,
+              costType: type === "expense" ? ("fixed" as const) : null,
+              categoryCode: type === "expense" ? "EXP-01" : "TRF-08",
+              amount: 10_000,
+              bizRatio: 0,
+              accountId: "bank",
+              toAccountId: type === "transfer" ? "cash" : undefined,
+            },
+            accounts,
+            onChange: () => {},
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+describe("予定の設定の口座欄（AC-58e）", () => {
+  for (const type of ["expense", "income", "transfer"] as const) {
+    it(`${type} の欄は「${ACCOUNT_LABEL[type]}」で読み上げられる`, () => {
+      drawCells(type);
+
+      /* 在ること */
+      expect(screen.getByLabelText(ACCOUNT_LABEL[type])).toBeTruthy();
+
+      /* 同じ実行で、ほかの2つが出ていないこと ―― 3つとも同時に出す
+         実装と区別する */
+      for (const other of ALL.filter((l) => l !== ACCOUNT_LABEL[type])) {
+        expect(screen.queryByLabelText(other)).toBeNull();
+      }
+
+      /* **「口座」のままになっていないこと。** これが v1.54 以前の形 */
+      expect(screen.queryByLabelText("口座")).toBeNull();
+    });
+  }
+
+  it("振替は「振替元」と「振替先」が対になる", () => {
+    drawCells("transfer");
+    expect(screen.getByLabelText(ACCOUNT_LABEL.transfer)).toBeTruthy();
+    expect(screen.getByLabelText(TO_ACCOUNT_LABEL)).toBeTruthy();
+  });
+
+  it("収入では振替先の欄が出ない", () => {
+    drawCells("income");
+    expect(screen.getByLabelText(ACCOUNT_LABEL.income)).toBeTruthy();
+    expect(screen.queryByLabelText(TO_ACCOUNT_LABEL)).toBeNull();
   });
 });

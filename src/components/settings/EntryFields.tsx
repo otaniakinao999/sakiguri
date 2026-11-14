@@ -11,6 +11,7 @@ import { costTypeApplies, fitCostType, fitToType } from "@/core/categories";
 import { isCard } from "@/core/types";
 import type { Account, CostType, EntryType } from "@/core/types";
 import { CategorySelect, NumberInput, Select } from "@/components/ui/inputs";
+import { ACCOUNT_LABEL, TO_ACCOUNT_LABEL } from "@/lib/account-label";
 
 export interface EntryFieldsValue {
   type: EntryType;
@@ -95,8 +96,17 @@ export function EntryFieldCells({
         />
       </td>
       <td className={CELL}>
+        {/* **読み上げ名は収支で変わる**（FR-52・AC-58e。v1.54 で予定の設定
+            にも広げた）。支出「支払元」／収入「入金先」／振替「振替元」。
+
+            **見える語は列見出しのままである。** ここは表で、列見出しは
+            全行で1つ（並べ替えのキーでもある）ので、行ごとに違う語を
+            見出しに出せない。変わるのは欄の読み上げ名である。
+
+            **対応は `lib/account-label` の1箇所から引く** ―― 実績編集と
+            同じ表を2つ書くと、収支が増えたときに片方だけ古くなる（§2.8） */}
         <Select
-          aria-label="口座"
+          aria-label={ACCOUNT_LABEL[value.type]}
           value={value.accountId}
           onChange={(e) => onChange({ accountId: e.target.value })}
         >
@@ -111,11 +121,11 @@ export function EntryFieldCells({
         </Select>
         {value.type === "transfer" && (
           <Select
-            aria-label="振替先"
+            aria-label={TO_ACCOUNT_LABEL}
             value={value.toAccountId ?? ""}
             onChange={(e) => onChange({ toAccountId: e.target.value })}
           >
-            <option value="">振替先を選ぶ</option>
+            <option value="">{TO_ACCOUNT_LABEL}を選ぶ</option>
             {/* カードは振替先にしない（合計の計算に入らないため） */}
             {accounts
               .filter((a) => a.id !== value.accountId && !isCard(a))

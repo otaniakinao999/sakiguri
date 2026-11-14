@@ -18,6 +18,7 @@ import { isCard } from "@/core/types";
 import type { Account, Actual, EntryType } from "@/core/types";
 import { Button } from "@/components/ui/legacy/Button";
 import { costTypeApplies, fitCostType, fitToType } from "@/core/categories";
+import { ACCOUNT_LABEL, TO_ACCOUNT_LABEL } from "@/lib/account-label";
 import {
   CategorySelect,
   DateInput,
@@ -53,33 +54,6 @@ export function applyActualPatch(
   return next;
 }
 
-/**
- * 口座の欄のラベル（FR-52・AC-58e）。
- *
- * | 収支 | ラベル |
- * |---|---|
- * | 支出 | 支払元 |
- * | 収入 | 入金先 |
- * | 振替 | 振替元 |
- *
- * **「支払方法」では収入で意味が通らない。** ファクタリングの入金に
- * 「支払方法」と出ていた。振替のときは下の「振替先」と対になるよう
- * 「振替元」にする ―― 「支払方法」と「振替先」は対になっていなかった。
- *
- * **`Record` で持つ。** 収支が増えたときに、ここの漏れが型で落ちる
- * （CLAUDE.md §2.8 の「列挙は集合と突き合わせる」）。
- *
- * **カードは支出のときだけ候補に出る**（下の `filter`）ので、支出の
- * ラベルは「支払元」で足りる。
- *
- * 予定の設定（`EntryFields`）の同じ欄は「口座」のままである。FR-52 が
- * 実績編集に限って定めている。
- */
-export const ACCOUNT_LABEL: Record<EntryType, string> = {
-  expense: "支払元",
-  income: "入金先",
-  transfer: "振替元",
-};
 
 /** 登録・保存できる状態か。 */
 /**
@@ -216,7 +190,7 @@ export function ActualForm({
           )}
         </Field>
         {value.type === "transfer" && (
-          <Field label="振替先">
+          <Field label={TO_ACCOUNT_LABEL}>
             {(id) => (
               <Select
                 id={id}
