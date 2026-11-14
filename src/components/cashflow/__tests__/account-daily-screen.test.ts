@@ -137,6 +137,22 @@ describe("AC-71 日ごとの増減と残高が画面に出る（FR-64）", () =>
     expect(text).not.toContain("ずれています");
   });
 
+  it("注記が、従う絞り込みと従わない絞り込みを取り違えない（AC-71）", () => {
+    const { container } = draw();
+    choose("a0");
+    const panel = dailyPanel(container);
+    const text = (panel.textContent ?? "").replace(/\s+/g, "");
+
+    /* **在ること。** 選んだ口座に従っていることが文に出ている */
+    expect(text).toContain("現金。この表は選んだ口座と期間に従います");
+    expect(text).toContain("下の区分・種別の絞り込みには従いません");
+
+    /* **無いこと。** 「上の絞り込み」は画面と逆を指す ―― 利用者から見て
+       表より上にあるのは口座の選択で、そちらには従っている
+       （2026-11-13 に実機で発見。AC-73 と同じ型） */
+    expect(text).not.toContain("上の絞り込み");
+  });
+
   it("口座を変えると中身が変わる（ほかの口座の行が出ない）", () => {
     const { container } = draw();
     choose("a2");
