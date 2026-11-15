@@ -3,7 +3,15 @@
  *
  * 一次情報：supabase/loadtest/README.md
  *
- *     pnpm loadtest:account
+ *     pnpm loadtest:account            1つ目
+ *     pnpm loadtest:account --second   2つ目
+ *
+ * ## なぜ2つ要るか
+ *
+ * **1つだと「他人の行が見えない」を測れない**（CLAUDE.md §2.11）。
+ * 自分の行しか無い環境では、RLS が効いていても効いていなくても同じ
+ * 結果になる ―― 見えない相手が居ないからである。共有（`grants`）の
+ * 検査には2人分のデータが要る。
  *
  * **このアカウントは消さない。** 使い捨てにすると、測るたびに人の手で
  * 作り直すことになる。`teardown` は行だけを消してアカウントは残す。
@@ -93,16 +101,30 @@ async function trySignIn(
   return null;
 }
 
+/** どちらの枠か。`--second` で2つ目 */
+const SECOND = process.argv.includes("--second");
+const EMAIL_KEY = SECOND ? "LOADTEST2_EMAIL" : "LOADTEST_EMAIL";
+const PASSWORD_KEY = SECOND ? "LOADTEST2_PASSWORD" : "LOADTEST_PASSWORD";
+
 async function main(): Promise<void> {
   const url = env("NEXT_PUBLIC_SUPABASE_URL");
   const anonKey = env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
-  const email = env("LOADTEST_EMAIL");
+  const email = env(EMAIL_KEY);
+
+  /* **2つが同じアドレスだと、共有の検査が全部通る**（§2.11）。
+     作る時点で止める ―― 作ってから気づくと、1つ目を壊している */
+  if (SECOND && email === process.env.LOADTEST_EMAIL) {
+    fail(
+      `LOADTEST2_EMAIL が1つ目と同じです: ${email}\n` +
+        `  別のアドレスにしてください（例 ...+loadtest2@...）`,
+    );
+  }
 
   /* **メールアドレスの番人。** 実データのアカウントで走らせない。
      投入・削除SQL と同じ条件（supabase/loadtest/README.md） */
   if (!email.includes("+loadtest")) {
     fail(
-      `LOADTEST_EMAIL が負荷試験用ではありません: ${email}\n` +
+      `${EMAIL_KEY} が負荷試験用ではありません: ${email}\n` +
         `  '+loadtest' を含むアドレスにしてください`,
     );
   }
@@ -111,10 +133,10 @@ async function main(): Promise<void> {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  console.log(`負荷試験アカウント: ${email}`);
+  console.log(`負荷試験アカウント${SECOND ? "（2つ目）" : "（1つ目）"}: ${email}`);
 
   /* ---------- 1. すでにあるか。あれば何もしない ---------- */
-  const stored = process.env.LOADTEST_PASSWORD;
+  const stored = process.env[PASSWORD_KEY];
   if (stored && !PLACEHOLDERS.includes(stored)) {
     const error = await trySignIn(supabase, email, stored);
     if (error === null) {
@@ -164,8 +186,8 @@ async function main(): Promise<void> {
   );
 
   /* 作れた時点で保存する。確認待ちでも、確認後に使うのはこの値 */
-  writeEnv("LOADTEST_PASSWORD", password);
-  console.log(".env.local の LOADTEST_PASSWORD に書きました。");
+  writeEnv(PASSWORD_KEY, password);
+  console.log(`.env.local の ${PASSWORD_KEY} に書きました。`);
 
   /* ---------- 3. サインインできるかを確かめる ---------- */
   const error = await trySignIn(supabase, email, password);

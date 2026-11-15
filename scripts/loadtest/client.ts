@@ -42,15 +42,58 @@ export interface LoadtestSession {
 }
 
 /**
+ * 負荷試験アカウントは2つある。
+ *
+ * **1つだと「他人の行が見えない」を測れない**（CLAUDE.md §2.11）。
+ * 自分の行しか無い環境では、RLS が効いていても効いていなくても
+ * 同じ結果になる ―― 見えない相手が居ないからである。
+ */
+export type LoadtestWhich = 1 | 2;
+
+const SLOT: Record<LoadtestWhich, { email: string; password: string }> = {
+  1: { email: "LOADTEST_EMAIL", password: "LOADTEST_PASSWORD" },
+  2: { email: "LOADTEST2_EMAIL", password: "LOADTEST2_PASSWORD" },
+};
+
+/**
+ * 2つのアドレスが別物であることを確かめる。
+ *
+ * **同じだと、共有の検査が全部「通る」。** 他人の行が見えないことも、
+ * 失効したら見えなくなることも、**相手が自分なら自動的に成り立つ**
+ * （§2.11 の3つ目の形 ―― 対象の行が0件のとき、その条項は必ず通る）。
+ */
+export function assertTwoAccounts(): { first: string; second: string } {
+  const first = env("LOADTEST_EMAIL");
+  const second = env("LOADTEST2_EMAIL");
+  if (first === second) {
+    fail(
+      `LOADTEST_EMAIL と LOADTEST2_EMAIL が同じです: ${first}\n` +
+        `  **これでは他人の行が1件も無いので、共有の検査が全部通ります。**\n` +
+        `  pnpm loadtest:account --second で2つ目を作ってください`,
+    );
+  }
+  return { first, second };
+}
+
+/**
  * 負荷試験アカウントでサインインする。
  *
- * **`+loadtest` を含まないアカウントでは止まる。** 実データのアカウントで
- * 投入や削除を走らせない（supabase/loadtest/README.md と同じ条件）。
+ * **番人は2つある。**
+ *
+ * 1. **`+loadtest` を含まないアカウントでは止まる。** 実データの
+ *    アカウントで投入や削除を走らせない（supabase/loadtest/README.md）
+ * 2. **`.env.local` のアドレスと完全に一致すること。** 1 だけだと
+ *    **別の `+loadtest` アカウントでも通る**（2026-11-15 に気づいた）。
+ *    アカウントが2つになると、この緩さは「1つ目のつもりで2つ目に
+ *    入っていた」も通すので、**どちらの枠か**まで見る
  */
-export async function signInAsLoadtest(): Promise<LoadtestSession> {
-  const email = env("LOADTEST_EMAIL");
+export async function signInAsLoadtest(
+  which: LoadtestWhich = 1,
+): Promise<LoadtestSession> {
+  const slot = SLOT[which];
+  const email = env(slot.email);
   if (!email.includes("+loadtest")) {
-    fail(`LOADTEST_EMAIL が負荷試験用ではありません: ${email}`);
+    fail(`${slot.email} が負荷試験用ではありません: ${email}`);
   }
 
   const supabase = createClient(
@@ -61,20 +104,28 @@ export async function signInAsLoadtest(): Promise<LoadtestSession> {
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
-    password: env("LOADTEST_PASSWORD"),
+    password: env(slot.password),
   });
 
   if (error) {
     fail(
-      `サインインできません\n` +
+      `${slot.email} でサインインできません\n` +
         `  auth.signInWithPassword: ${error.code ?? "(code 無し)"} ${error.message}\n\n` +
-        `  pnpm loadtest:account を流してください`,
+        `  pnpm loadtest:account${which === 2 ? " --second" : ""} を流してください`,
     );
   }
 
   const signedInAs = data.session?.user.email ?? "(不明)";
   if (!signedInAs.includes("+loadtest")) {
     fail(`サインインしたアカウントが負荷試験用ではありません: ${signedInAs}`);
+  }
+  /* **完全一致。** 「+loadtest を含む」だけでは、枠を取り違えても通る */
+  if (signedInAs !== email) {
+    fail(
+      `入ったアカウントが ${slot.email} と違います\n` +
+        `  ${slot.email} ${email}\n` +
+        `  サインイン      ${signedInAs}`,
+    );
   }
 
   return { supabase, userId: data.session!.user.id, email: signedInAs };

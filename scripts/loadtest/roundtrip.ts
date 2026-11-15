@@ -41,12 +41,7 @@
  * アカウントを弾くメールの検査（`client.ts`）。
  */
 
-import {
-  arg,
-  fail,
-  signInAsLoadtest,
-  type LoadtestSession,
-} from "./client.ts";
+import { arg, fail, signInAsLoadtest, type LoadtestSession } from "./client.ts";
 import { emptyAppData } from "../../src/lib/app-data.ts";
 import { diffAppData } from "../../src/lib/supabase/diff.ts";
 import { loadAppData, saveDiff } from "../../src/lib/supabase/storage.ts";
@@ -173,24 +168,9 @@ function report(checks: Check[]): void {
 
 /* ---------- 番人の確認（書く前に一度だけ） ---------- */
 
-/**
- * 入ったセッションが本当に負荷試験アカウントか。
- *
- * `client.ts` は「`+loadtest` を含むか」しか見ない。**別の
- * `+loadtest` アカウントに入っていても通る**ので、`.env.local` の
- * アドレスと**完全に一致する**ことをここで見る。
- */
-function assertIdentity({ email }: LoadtestSession): void {
-  const expected = process.env.LOADTEST_EMAIL;
-  if (email !== expected) {
-    fail(
-      `入ったアカウントが LOADTEST_EMAIL と違います\n` +
-        `  LOADTEST_EMAIL ${expected}\n` +
-        `  サインイン      ${email}`,
-    );
-  }
-  console.log(`サインイン ${email}`);
-}
+/* **アカウントの同一性の検査は `client.ts` に移した。** 枠が2つに
+   なったので、「どちらの枠に入ったか」まで見る必要がある。ここに
+   残すと、2つ目を使う検査が同じ判定を書き直すことになる（§2.8）。 */
 
 /**
  * RLS が効いているか。**他人の行が1行でも見えたら止める。**
@@ -229,7 +209,7 @@ async function checkRls(
 
 async function main(): Promise<void> {
   const session = await signInAsLoadtest();
-  assertIdentity(session);
+  console.log(`サインイン ${session.email}`);
 
   /* **書く前。** 他人の行が見えたらここで止める。ただし空だと空振りなので、
      書いたあとにもう一度見る（§2.11「在ることを先に見る」） */

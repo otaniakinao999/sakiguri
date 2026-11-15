@@ -1,7 +1,8 @@
 /**
  * 負荷試験データの削除
  *
- *     pnpm loadtest:teardown
+ *     pnpm loadtest:teardown            1つ目
+ *     pnpm loadtest:teardown --second   2つ目
  *
  * **行だけを消す。アカウントは消さない。** 使い捨てにすると測るたびに
  * 人の手で作り直すことになる。v1.5 の24,000件でも同じアカウントを使う。
@@ -62,7 +63,10 @@ if (ordered !== keyed) {
 }
 
 async function main(): Promise<void> {
-  const { supabase, userId, email } = await signInAsLoadtest();
+  /* **枠を指定する。** 2つ目のアカウントの行も消せないと、共有の検査の
+     あとに片方だけ残る（残ると次の検査の前提が変わる） */
+  const which = process.argv.includes("--second") ? 2 : 1;
+  const { supabase, userId, email } = await signInAsLoadtest(which);
   console.log(`削除先 ${email}`);
   console.log("");
 
