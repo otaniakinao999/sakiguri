@@ -13,8 +13,13 @@
 import type { Actual, ImportRule, OneoffItem, Overrides, RecurringItem } from "@/core/types";
 import type { Account } from "@/core/types";
 
-import type { AppData } from "../app-data";
-import { settingsPayload } from "./rows";
+/* **拡張子を外さないこと。外すと scripts/loadtest/roundtrip.ts が動かなく
+   なる。** このファイルは plain Node から直接 import される ―― AC-64 の
+   `source_name` と AC-66 の `replace_name` が本番の保存経路を通って往復
+   することを、**写し取らずに**測るため（CLAUDE.md §2.8）。同じ理由の
+   注記が `fetch-all.ts` にもある。`pnpm check:node-import` が検査する。 */
+import type { AppData } from "../app-data.ts";
+import { settingsPayload } from "./rows.ts";
 
 /** 何を upsert し、何を delete するか。 */
 export interface TableDiff<T> {

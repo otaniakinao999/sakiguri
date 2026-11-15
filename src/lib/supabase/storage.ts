@@ -14,10 +14,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { AppData } from "../app-data";
-import { emptyAppData } from "../app-data";
-import type { DataDiff } from "./diff";
-import { fetchAll } from "./fetch-all";
+/* **拡張子を外さないこと。外すと scripts/loadtest/roundtrip.ts が動かなく
+   なる。** このファイルは plain Node から直接 import される ―― AC-64 の
+   `source_name` と AC-66 の `replace_name` が本番の保存経路を通って往復
+   することを、**写し取らずに**測るため（CLAUDE.md §2.8）。同じ理由の
+   注記が `fetch-all.ts` にもある。`pnpm check:node-import` が検査する。 */
+import type { AppData } from "../app-data.ts";
+import { emptyAppData } from "../app-data.ts";
+import type { DataDiff } from "./diff.ts";
+import { fetchAll } from "./fetch-all.ts";
 import {
   fromAccount,
   fromActual,
@@ -40,7 +45,7 @@ import {
   type OverrideRow,
   type RecurringRow,
   type SettingsRow,
-} from "./rows";
+} from "./rows.ts";
 
 /**
  * 保存済みのデータを読む（FR-47）。

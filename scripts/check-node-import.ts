@@ -46,6 +46,18 @@ const MODULES: { path: string; exports: string[] }[] = [
     exports: ["SELECT_COLUMNS", "SETTINGS_COLUMNS", "toRecurring", "toOneoff", "toOverrides"],
   },
   {
+    path: "src/lib/supabase/storage.ts",
+    exports: ["loadAppData", "saveDiff"],
+  },
+  {
+    path: "src/lib/supabase/diff.ts",
+    exports: ["diffAppData"],
+  },
+  {
+    path: "src/lib/app-data.ts",
+    exports: ["emptyAppData", "isEmpty"],
+  },
+  {
     path: "src/core/forecast.ts",
     exports: ["recurringKey", "oneoffKey", "planKeySource", "buildForecast"],
   },

@@ -25,10 +25,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
    PAGE_SIZE と SELECT_COLUMNS を本番と同じ値で使うため）。Node の ESM は
    拡張子を省略できない。写し取る形にすると、片方を直したときにもう片方が
    古いまま残る（CLAUDE.md §2.8）。
-   **このリポジトリで拡張子付きの import はここだけ。** 統一しようとして
-   外すと、気づくのは次に測定を流すとき（数ヶ月後）になる。だから
-   `pnpm check:node-import` が plain Node で読めることを検査していて、
-   外すとゲートで落ちる。tsconfig の allowImportingTsExtensions で許可。 */
+   **拡張子付きの import はこのファイルと `rows.ts` を読む側だけ**
+   （`storage.ts`・`diff.ts`。2026-11-15 に AC-64・AC-66 の往復を本番の
+   保存経路で測るために足した）。統一しようとして外すと、気づくのは次に
+   測定を流すとき（数ヶ月後）になる。だから `pnpm check:node-import` が
+   plain Node で読めることを検査していて、外すとゲートで落ちる。
+   tsconfig の allowImportingTsExtensions で許可。 */
 import { SELECT_COLUMNS, type FetchTable } from "./rows.ts";
 
 /**
