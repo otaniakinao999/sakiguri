@@ -65,11 +65,19 @@ import {
 export async function loadAppData(
   supabase: SupabaseClient,
   fallbackAsOf: string,
+  ownerId: string,
 ): Promise<AppData> {
-  /* 段階1：基準日を確定させる。以降の絞り込みの基準になる */
+  /* 段階1：基準日を確定させる。以降の絞り込みの基準になる。
+
+     **`ownerId` で絞る。** 共有（FR-23・FR-31）を入れると、RLS は
+     「自分の行」と「渡された帳の行」の**両方**を返す。`maybeSingle` は
+     2行返った時点で失敗するので、ここを絞らないと**客は画面を開けない。**
+     絞り忘れが「混ざる」ではなく「落ちる」側に出るのは、この1箇所だけ
+     である（AC-82） */
   const settings = await supabase
     .from("settings")
     .select(SETTINGS_COLUMNS)
+    .eq("user_id", ownerId)
     .maybeSingle();
   if (settings.error) throw new Error(settings.error.message);
 
@@ -83,13 +91,13 @@ export async function loadAppData(
      accounts と recurring_items はもともと件数が小さい */
   const [accounts, recurring, oneoffs, actuals, overrides, rules] =
     await Promise.all([
-      fetchAll<AccountRow>(supabase, "accounts"),
-      fetchAll<RecurringRow>(supabase, "recurring_items"),
-      fetchAll<OneoffRow>(supabase, "oneoff_items", { since }),
-      fetchAll<ActualRow>(supabase, "actuals", { since }),
+      fetchAll<AccountRow>(supabase, "accounts", { ownerId }),
+      fetchAll<RecurringRow>(supabase, "recurring_items", { ownerId }),
+      fetchAll<OneoffRow>(supabase, "oneoff_items", { since, ownerId }),
+      fetchAll<ActualRow>(supabase, "actuals", { since, ownerId }),
       /* overrides の主キーは plan_key。id 列を持たない */
-      fetchAll<OverrideRow>(supabase, "overrides", { idColumn: "plan_key" }),
-      fetchRules(supabase),
+      fetchAll<OverrideRow>(supabase, "overrides", { idColumn: "plan_key", ownerId }),
+      fetchRules(supabase, ownerId),
     ]);
 
   return {
@@ -130,7 +138,10 @@ function isMissingTable(error: { code?: string }): boolean {
  * 失敗する**（画面に「保存できませんでした」が出る）。黙って消えるよりは
  * よいが、**適用を先に行うこと。**
  */
-async function fetchRules(supabase: SupabaseClient): Promise<AppData["rules"]> {
+async function fetchRules(
+  supabase: SupabaseClient,
+  ownerId: string,
+): Promise<AppData["rules"]> {
   /* 先に1件も取らない問い合わせで、テーブルの有無だけを見る */
   const probe = await supabase
     .from("import_rules")
@@ -139,7 +150,7 @@ async function fetchRules(supabase: SupabaseClient): Promise<AppData["rules"]> {
     if (isMissingTable(probe.error)) return [];
     throw new Error(probe.error.message);
   }
-  const rows = await fetchAll<ImportRuleRow>(supabase, "import_rules");
+  const rows = await fetchAll<ImportRuleRow>(supabase, "import_rules", { ownerId });
   return rows.map(toImportRule);
 }
 

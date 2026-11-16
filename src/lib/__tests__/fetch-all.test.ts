@@ -16,16 +16,21 @@ import { SELECT_COLUMNS, SETTINGS_COLUMNS } from "../supabase/rows";
  * 上限・順序・総件数の食い違いを自由に作れるようにするため。
  */
 
+/** 既定の持ち主。`makeRows` が既定で作る行と同じ */
+const OWNER = "me";
+
 interface Row {
   id: string;
   date: string;
+  user_id: string;
 }
 
-/** `date` 昇順・`id` 昇順に並んだ行を作る */
-function makeRows(count: number): Row[] {
+/** `date` 昇順・`id` 昇順に並んだ行を作る。持ち主は交互 */
+function makeRows(count: number, owners = ["me"]): Row[] {
   return Array.from({ length: count }, (_, i) => ({
     id: String(i).padStart(6, "0"),
     date: `2026-${String((i % 12) + 1).padStart(2, "0")}-01`,
+    user_id: owners[i % owners.length],
   }));
 }
 
@@ -56,6 +61,7 @@ function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
   const client = {
     from() {
       let gte: { column: string; value: string } | null = null;
+      let eq: { column: string; value: string } | null = null;
       let range: { from: number; to: number } = { from: 0, to: maxRows - 1 };
       const ordered: string[] = [];
 
@@ -66,6 +72,10 @@ function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
         },
         gte(column: string, value: string) {
           gte = { column, value };
+          return builder;
+        },
+        eq(column: string, value: string) {
+          eq = { column, value };
           return builder;
         },
         order(column: string) {
@@ -80,6 +90,12 @@ function fakeSupabase(all: Row[], opts: FakeOptions = {}) {
           calls.push({ ...range, ordered: [...ordered] });
 
           let rows = all;
+          if (eq) {
+            const e = eq as { column: string; value: string };
+            rows = rows.filter(
+              (r) => (r as unknown as Record<string, string>)[e.column] === e.value,
+            );
+          }
           if (gte) {
             const g = gte as { column: string; value: string };
             rows = rows.filter(
@@ -117,7 +133,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
   it("上限ちょうどなら1回で終わる", async () => {
     const { client, calls } = fakeSupabase(makeRows(PAGE_SIZE));
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     expect(got).toHaveLength(PAGE_SIZE);
     expect(calls).toHaveLength(1);
@@ -126,7 +142,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
   it("上限を超えたら分割して全件を取る", async () => {
     const { client, calls } = fakeSupabase(makeRows(2_500));
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     expect(got).toHaveLength(2_500);
     expect(calls.length).toBeGreaterThan(1);
@@ -136,7 +152,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
     const all = makeRows(2_500);
     const { client } = fakeSupabase(all);
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
     const ids = got.map((r) => r.id);
 
     expect(new Set(ids).size).toBe(2_500);
@@ -146,7 +162,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
   it("実績10万件でも全件を取る", async () => {
     const { client } = fakeSupabase(makeRows(100_000));
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     expect(got).toHaveLength(100_000);
     expect(new Set(got.map((r) => r.id)).size).toBe(100_000);
@@ -156,7 +172,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
     /* Max rows を下げてある、あるいは既定が変わった場合 */
     const { client } = fakeSupabase(makeRows(2_500), { maxRows: 100 });
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     expect(got).toHaveLength(2_500);
   });
@@ -164,7 +180,7 @@ describe("AC-34 上限を超えても全件を取る", () => {
   it("0件なら空で返る", async () => {
     const { client } = fakeSupabase([]);
 
-    expect(await fetchAll<Row>(client, "actuals")).toEqual([]);
+    expect(await fetchAll<Row>(client, "actuals", { ownerId: OWNER })).toEqual([]);
   });
 });
 
@@ -175,6 +191,7 @@ describe("AC-34 順序を固定する", () => {
     const { client, calls } = fakeSupabase(makeRows(10));
 
     await fetchAll<Row>(client, "actuals", {
+      ownerId: OWNER,
       since: { column: "date", value: "2026-01-01" },
     });
 
@@ -184,7 +201,7 @@ describe("AC-34 順序を固定する", () => {
   it("日付を持たないテーブルでも id で並べる", async () => {
     const { client, calls } = fakeSupabase(makeRows(10));
 
-    await fetchAll<Row>(client, "accounts");
+    await fetchAll<Row>(client, "accounts", { ownerId: OWNER });
 
     expect(calls[0].ordered).toEqual(["id"]);
   });
@@ -194,7 +211,7 @@ describe("AC-34 順序を固定する", () => {
        order("id") が `column overrides.id does not exist` で落ちる */
     const { client, calls } = fakeSupabase(makeRows(10));
 
-    return fetchAll<Row>(client, "overrides", { idColumn: "plan_key" }).then(
+    return fetchAll<Row>(client, "overrides", { ownerId: OWNER, idColumn: "plan_key" }).then(
       () => {
         expect(calls[0].ordered).toEqual(["plan_key"]);
       },
@@ -211,7 +228,7 @@ describe("AC-34 順序を固定する", () => {
   it("順序が崩れると、件数が合っていても中身が壊れる", async () => {
     const { client } = fakeSupabase(makeRows(2_500), { ignoreOrder: true });
 
-    const got = await fetchAll<Row>(client, "actuals");
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     /* 例外は飛ばない。件数は合っている */
     expect(got).toHaveLength(2_500);
@@ -225,13 +242,14 @@ describe("AC-34 順序を固定する", () => {
 describe("基準日以降に絞る（§5.1）", () => {
   it("基準日より前の行を読まない", async () => {
     const all: Row[] = [
-      { id: "a", date: "2025-12-31" },
-      { id: "b", date: "2026-01-01" },
-      { id: "c", date: "2026-06-01" },
+      { id: "a", date: "2025-12-31", user_id: OWNER },
+      { id: "b", date: "2026-01-01", user_id: OWNER },
+      { id: "c", date: "2026-06-01", user_id: OWNER },
     ];
     const { client } = fakeSupabase(all);
 
     const got = await fetchAll<Row>(client, "actuals", {
+      ownerId: OWNER,
       since: { column: "date", value: "2026-01-01" },
     });
 
@@ -246,7 +264,7 @@ describe("AC-35 切り捨てを検知する", () => {
     /* サーバーが「3000件ある」と言いながら1000件しか返さない状態 */
     const { client } = fakeSupabase(makeRows(1_000), { reportedCount: 3_000 });
 
-    await expect(fetchAll<Row>(client, "actuals")).rejects.toThrow(
+    await expect(fetchAll<Row>(client, "actuals", { ownerId: OWNER })).rejects.toThrow(
       IncompleteLoadError,
     );
   });
@@ -254,7 +272,7 @@ describe("AC-35 切り捨てを検知する", () => {
   it("例外は件数を持つ。イベントに残すため", async () => {
     const { client } = fakeSupabase(makeRows(1_000), { reportedCount: 3_000 });
 
-    const error = await fetchAll<Row>(client, "actuals").catch((e) => e);
+    const error = await fetchAll<Row>(client, "actuals", { ownerId: OWNER }).catch((e) => e);
 
     expect(error).toBeInstanceOf(IncompleteLoadError);
     expect(error.table).toBe("actuals");
@@ -265,13 +283,13 @@ describe("AC-35 切り捨てを検知する", () => {
   it("件数が合っていれば例外にしない", async () => {
     const { client } = fakeSupabase(makeRows(1_500));
 
-    await expect(fetchAll<Row>(client, "actuals")).resolves.toHaveLength(1_500);
+    await expect(fetchAll<Row>(client, "actuals", { ownerId: OWNER })).resolves.toHaveLength(1_500);
   });
 
   it("サーバーのエラーはそのまま投げる", async () => {
     const { client } = fakeSupabase(makeRows(10), { error: "boom" });
 
-    await expect(fetchAll<Row>(client, "actuals")).rejects.toThrow("boom");
+    await expect(fetchAll<Row>(client, "actuals", { ownerId: OWNER })).rejects.toThrow("boom");
   });
 });
 
@@ -305,10 +323,53 @@ describe("取得する列", () => {
   it("fetchAll は `*` ではなくテーブルの列を渡す", async () => {
     const { client, selects } = fakeSupabase(makeRows(10));
 
-    await fetchAll<Row>(client, "actuals");
+    await fetchAll<Row>(client, "actuals", { ownerId: OWNER });
 
     expect(selects.length).toBeGreaterThan(0);
     expect(selects).not.toContain("*");
     for (const s of selects) expect(s).toBe(SELECT_COLUMNS.actuals);
+  });
+});
+
+/* ========================= 帳の絞り込み ========================= */
+
+/**
+ * AC-82。共有を入れると RLS は「自分の行」と「渡された帳の行」の**両方**を
+ * 返す。どの帳を見るかは呼ぶ側が決める。
+ *
+ * **「絞れている」だけを測らない**（CLAUDE.md §2.11）。同じ実行で、
+ * 絞らなければ他人の行が返ってくることを先に見る ―― それを見ないと、
+ * 偽物が最初から1人分しか持っていない場合と区別が付かない。
+ */
+describe("AC-82 いま見ている帳に絞る", () => {
+  /* **2人分を置いたうえで、2回引いて結果が割れることを見る**（§2.11）。
+     絞りが効いていなければ、どちらも10件になって両方落ちる。片方だけを
+     測ると、偽物が最初から1人分しか持っていない場合と区別が付かない */
+  it("自分の帳を引くと自分の行だけ", async () => {
+    const { client } = fakeSupabase(makeRows(10, ["me", "other"]));
+
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: "me" });
+
+    expect(got).toHaveLength(5);
+    expect(got.every((r) => r.user_id === "me")).toBe(true);
+  });
+
+  it("渡された帳を引くとそちらの行だけ（同じデータで割れる）", async () => {
+    const { client } = fakeSupabase(makeRows(10, ["me", "other"]));
+
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: "other" });
+
+    expect(got).toHaveLength(5);
+    expect(got.every((r) => r.user_id === "other")).toBe(true);
+  });
+
+  it("件数の検知も絞り込み後で合う（部分データで進ませない）", async () => {
+    /* 総件数は絞り込み後の値が返る。ここが絞り込み前の値だと、
+       全件取っても足りないと判定されて例外になる（AC-35） */
+    const { client } = fakeSupabase(makeRows(2_500, ["me", "other"]));
+
+    const got = await fetchAll<Row>(client, "actuals", { ownerId: "other" });
+
+    expect(got).toHaveLength(1_250);
   });
 });

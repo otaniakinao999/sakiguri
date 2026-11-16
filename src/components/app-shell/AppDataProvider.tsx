@@ -192,7 +192,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const loaded = await loadAppData(getSupabase(), today);
+        /* **いまは自分の帳だけ。** 共有（FR-23・FR-31）を入れると RLS は
+           渡された帳の行も返すので、どの帳を見るかは必ず呼ぶ側が決める
+           （AC-82）。客が持ち主の帳へ切り替える経路はまだ仕様が無い */
+        const loaded = await loadAppData(getSupabase(), today, userId);
         if (cancelled) return;
         setDataState(loaded);
         savedRef.current = loaded;

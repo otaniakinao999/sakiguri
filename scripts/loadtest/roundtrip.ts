@@ -242,7 +242,7 @@ async function main(): Promise<void> {
   console.log("saveDiff 完了");
 
   /* ---------- 読む。**本番の読み込み経路をそのまま通す** ---------- */
-  const back = await loadAppData(session.supabase, AS_OF);
+  const back = await loadAppData(session.supabase, AS_OF, session.userId);
   console.log("loadAppData 完了");
   console.log("");
 

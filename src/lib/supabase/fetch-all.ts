@@ -67,6 +67,22 @@ export interface FetchAllOptions {
   /** この日以降の行だけを取る。日付を持つテーブルにだけ指定する */
   since?: { column: string; value: string };
   /**
+   * **この持ち主の行だけを取る**（FR-23・FR-31・AC-82）。
+   *
+   * 共有を入れると、RLS は「自分の行」と「渡された帳の行」の**両方**を
+   * 返す。全画面が `loadAppData` の1本で取るので、絞らないと**残高・
+   * 年月別収支・月次の全部に2人分が混ざる。**
+   *
+   * **漏れは「見える」だけでなく「合わなくなる」。** RLS は誰が読めるかを
+   * 決めるもので、**いまどの帳を見ているかは決めない。** そちらは必ず
+   * 呼ぶ側が指定する。
+   *
+   * **必須にしてある**（CLAUDE.md §2.8）。読む場所は6箇所あり、手で
+   * 並べると1つだけ渡し忘れる ―― そしてそれは**他人の行が混ざる**という
+   * 形で出るので、画面を見ても気づけない。型で落ちるようにした。
+   */
+  ownerId: string;
+  /**
    * 一意に並べ替えられる列。既定は `id`。
    *
    * `overrides` は主キーが `plan_key` で `id` 列を持たない。同順の行が
@@ -90,7 +106,7 @@ export interface FetchAllOptions {
 export async function fetchAll<Row>(
   supabase: SupabaseClient,
   table: FetchTable,
-  { since, idColumn = "id" }: FetchAllOptions = {},
+  { since, idColumn = "id", ownerId }: FetchAllOptions,
 ): Promise<Row[]> {
   const rows: Row[] = [];
   let total: number | null = null;
@@ -111,6 +127,9 @@ export async function fetchAll<Row>(
       .select(SELECT_COLUMNS[table], { count: "exact" })
       .range(offset, offset + PAGE_SIZE - 1);
 
+    /* **いま見ている帳に絞る**（AC-82）。RLS は渡された帳の行も返すので、
+       ここで絞らないと2人分が混ざる */
+    query = query.eq("user_id", ownerId);
     if (since) query = query.gte(since.column, since.value);
     /* 順序の固定。分割取得の前提条件（§5.1.2） */
     if (since) query = query.order(since.column, { ascending: true });
