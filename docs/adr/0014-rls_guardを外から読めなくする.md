@@ -35,7 +35,7 @@ revoke all on public.rls_guard from authenticated;
 
 **検知の仕組みが、検知したい事故の手がかりを漏らしていた。** 守るために作ったものが攻撃面を増やしていては本末転倒になる。
 
-影響が小さいことも確かめた。壊れるのは `scripts/verify-rls.mjs` の1箇所だけで、そこは「読めないこと」を確認する形に書き換えてある。ロールバックは1行で済む。
+影響が小さいことも確かめた。壊れるのは検証スクリプトの1箇所だけで、そこは「読めないこと」を確認する形に書き換えてある（**2026-11-16 に `scripts/verify-rls.mjs` から `scripts/loadtest/sharing.ts` へ移した**。畳んだ理由は ADR-0045）。ロールバックは1行で済む。
 
 ## 却下した選択肢
 
@@ -49,9 +49,9 @@ revoke all on public.rls_guard from authenticated;
 
 ## 影響
 
-- `scripts/verify-rls.mjs` は「`rls_guard` が外から読めないこと」を検査する。読めるようになったら落ちる
+- `scripts/loadtest/sharing.ts`（`pnpm loadtest:sharing`）が「`rls_guard` が外から読めないこと」を検査する。読めるようになったら落ちる。**2026-11-16 までは `scripts/verify-rls.mjs` にあった**
 - 点検は SQL Editor から。`select * from public.rls_guard;`
 - アプリからこのビューを読むコードは書けない。書く予定もない
-- 0002 を再適用したあとは、検証スクリプトを流して grant が戻っていないかを確かめること
+- 0002 を再適用したあとは、`pnpm loadtest:sharing` を流して grant が戻っていないかを確かめること
 
 関連：[[0013-利用イベントに金額を入れない]]

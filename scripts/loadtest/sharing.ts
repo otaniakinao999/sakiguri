@@ -29,11 +29,13 @@
 
 import {
   assertTwoAccounts,
+  env,
   fail,
   signInAsLoadtest,
   type LoadtestSession,
 } from "./client.ts";
 import { SELECT_COLUMNS } from "../../src/lib/supabase/rows.ts";
+import { createClient } from "@supabase/supabase-js";
 
 /* ========================= 対象の表 ========================= */
 
@@ -176,6 +178,107 @@ function reason(error: { code?: string; message: string } | null): string {
   return `${error.code ?? "(code無し)"} ${error.message.slice(0, 60)}`;
 }
 
+
+/* ========================= 土台 ========================= */
+
+/**
+ * 共有より手前の条項（`verify-rls.mjs` から畳んだ。2026-11-16）。
+ *
+ * **消すのではなく移した。** 畳む前のスクリプトは毎回 `signUp` で
+ * 使い捨てのアカウントを2つ作っており、**削除には secret キーが要るので
+ * 消せず、流すたびに増えていた。** 確認メールが有効になってからは
+ * セッションが返らず、そもそも動かない。
+ */
+async function foundation(a: LoadtestSession, b: LoadtestSession): Promise<void> {
+  const G = "土台";
+
+  /* 未サインイン。**anon キーだけで読めてはいけない** */
+  const anon = createClient(
+    env("NEXT_PUBLIC_SUPABASE_URL"),
+    env("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const probe = await anon.from("accounts").select("id").limit(1);
+  put(
+    G,
+    "未サインイン",
+    probe.error !== null || (probe.data ?? []).length === 0 ? "通過" : "**失敗**",
+    probe.error ? reason(probe.error) : `${(probe.data ?? []).length}件 読めた`,
+  );
+
+  /* B は A の行を書き換えられない・消せない（付与なし） */
+  const [col, value] = whereOf("accounts", a.userId);
+  const upd = await b.supabase
+    .from("accounts")
+    .update({ name: "B が書き換えた" })
+    .eq(col, value)
+    .select();
+  put(G, "他人の行を update できない", (upd.data ?? []).length === 0 ? "通過" : "**失敗**",
+      `${(upd.data ?? []).length}件 更新された`);
+
+  const del = await b.supabase.from("accounts").delete().eq(col, value).select();
+  put(G, "他人の行を delete できない", (del.data ?? []).length === 0 ? "通過" : "**失敗**",
+      `${(del.data ?? []).length}件 削除された`);
+
+  /* **`with check`。** 無いと他人の user_id を入れた行を作れる */
+  const spoof = await b.supabase.from("accounts").insert({
+    id: uuid(9),
+    user_id: a.userId,
+    name: "B が他人名義で作った行",
+    kind: "bank",
+    balance: 0,
+  });
+  put(G, "他人の user_id で作れない（with check）",
+      deniedByPermission(spoof.error) ? "通過" : "**失敗**", reason(spoof.error));
+
+  /* A の行が無事か。**壊されていないことを同じ実行で見る** */
+  const after = await a.supabase.from("accounts").select("name").eq(col, value);
+  const intact =
+    (after.data ?? []).length === 1 && after.data![0].name === "sharing 試験口座";
+  put(G, "A の行は書き換えも削除もされていない", intact ? "通過" : "**失敗**",
+      `${(after.data ?? []).length}件`);
+
+  /* usage_events（ADR-0013）。**ここだけは種を蒔く** ―― 書けることを
+     測らないと、残りの「読めない」「消せない」が0件で素通りする */
+  const ins = await b.supabase
+    .from("usage_events")
+    .insert({ user_id: b.userId, event: "signed_in", props: {} });
+  put(G, "usage_events 自分のは書ける", ins.error === null ? "通過" : "**失敗**",
+      reason(ins.error));
+
+  const read = await b.supabase.from("usage_events").select("*");
+  put(G, "usage_events 自分のも読めない", (read.data ?? []).length === 0 ? "通過" : "**失敗**",
+      read.error ? reason(read.error) : `${(read.data ?? []).length}件`);
+
+  const updEv = await b.supabase
+    .from("usage_events")
+    .update({ event: "tampered" })
+    .eq("user_id", b.userId)
+    .select();
+  put(G, "usage_events 書き換えられない", (updEv.data ?? []).length === 0 ? "通過" : "**失敗**",
+      `${(updEv.data ?? []).length}件`);
+
+  const delEv = await b.supabase
+    .from("usage_events")
+    .delete()
+    .eq("user_id", b.userId)
+    .select();
+  put(G, "usage_events 消せない", (delEv.data ?? []).length === 0 ? "通過" : "**失敗**",
+      `${(delEv.data ?? []).length}件`);
+
+  const spoofEv = await b.supabase
+    .from("usage_events")
+    .insert({ user_id: a.userId, event: "signed_in", props: {} });
+  put(G, "usage_events 他人の user_id で書けない",
+      deniedByPermission(spoofEv.error) ? "通過" : "**失敗**", reason(spoofEv.error));
+
+  /* **ADR-0014。** 検知の仕組みが、検知したい事故の手がかりを漏らさない */
+  const guard = await a.supabase.from("rls_guard").select("*");
+  put(G, "rls_guard は外から読めない",
+      guard.error !== null || (guard.data ?? []).length === 0 ? "通過" : "**失敗**",
+      guard.error ? reason(guard.error) : `${(guard.data ?? []).length}件 返った`);
+}
+
 /* ========================= 本体 ========================= */
 
 async function main(): Promise<void> {
@@ -221,6 +324,13 @@ async function main(): Promise<void> {
   if (seeded < shared.length) {
     fail("A の行を用意できませんでした。この先は測れません");
   }
+
+  /* ---------- 土台（`verify-rls.mjs` から畳んだ） ----------
+
+     **共有より手前の条項である。** 付与が1つも無い状態での読み書きと、
+     `usage_events` のポリシー、`rls_guard` が外から読めないこと
+     （ADR-0014）。使い捨てのアカウントを作らず、同じ2つを使い回す。 */
+  await foundation(a, b);
 
   /* ---------- 1 共有されていない他人の行が見えない ---------- */
   for (const table of shared) {

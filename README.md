@@ -53,15 +53,20 @@ CLI を使わない場合は、Supabase ダッシュボードの SQL Editor に2
 **テーブルを作ったら必ず RLS を有効化し、ポリシーを書く**（CLAUDE.md §2.5）。
 `using` だけでなく `with check` も書くこと。無いと他人の `user_id` を入れた行を作れてしまう。
 
-効いていることは実際に確かめる。2人のユーザーを作り、読み・更新・削除・
-他人名義での作成を試す。
+効いていることは実際に確かめる。**2人分のデータで**読み・更新・削除・
+他人名義での作成を試し、共有（`grants`）の付与と失効まで見る。
 
 ```bash
-node scripts/verify-rls.mjs
+pnpm loadtest:sharing
 ```
 
-検証には Authentication → Sign In / Providers の「Confirm email」を一時的に切る必要がある
-（登録直後にセッションが返らないと2人目を作れないため）。
+**使い捨てのアカウントは作らない。** 固定の負荷試験アカウントを2つ使う
+（`pnpm loadtest:account` と `--second`）。終わったら `pnpm loadtest:teardown`
+と `pnpm loadtest:teardown2` で消す。
+
+以前の `scripts/verify-rls.mjs` はこれに畳んだ（2026-11-16）。毎回 `signUp` で
+使い捨てを2つ作る形で、**削除には secret キーが要るので消せず、流すたびに
+増えていた。**
 
 ## 受入基準とテスト
 
