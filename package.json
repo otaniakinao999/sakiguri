@@ -12,6 +12,7 @@
     "test": "vitest run",
     "bench": "vitest run --config supabase/loadtest/bench.config.mts",
     "loadtest:account": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/ensure-account.ts",
+    "loadtest:auth": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/auth-settings.ts",
     "loadtest:account2": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/ensure-account.ts --second",
     "loadtest:seed": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/seed.ts",
     "loadtest:teardown": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/loadtest/teardown.ts",
