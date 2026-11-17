@@ -13,7 +13,7 @@
  */
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import type { AppData } from "@/lib/app-data";
 import { AppDataContext } from "@/components/app-shell/AppDataProvider";
@@ -84,7 +84,23 @@ const ROUTES: Array<[RegExp, string]> = [
   [/^\/dev\/screens\/settings/, "/settings"],
 ];
 
+/**
+ * **`useSearchParams()` を呼ぶので Suspense が要る。**
+ *
+ * これが無いと `pnpm build` が `/dev/screens/*` の生成で落ちる
+ * （prerender の途中で CSR へ退避できないため）。**ゲートは
+ * typecheck / test / lint だけなので、ここが外れても PR は通る** ――
+ * 実際に一度落とした。直すときは `pnpm build` まで流すこと。
+ */
 export function DevShell({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense>
+      <DevShellBody>{children}</DevShellBody>
+    </Suspense>
+  );
+}
+
+function DevShellBody({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [data, setState] = useState<AppData>(DEV_DATA);
 
