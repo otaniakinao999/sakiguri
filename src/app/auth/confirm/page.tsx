@@ -39,6 +39,8 @@ import { Notification } from "@/components/ui/legacy/Notification";
 import { resolveAuthLink } from "@/lib/auth-link";
 import {
   confirmFailure,
+  PASSWORD_HINT,
+  PASSWORD_MIN_LENGTH,
   confirmRejected,
   passwordUpdated,
   type AuthMessage,
@@ -168,13 +170,13 @@ export default function ConfirmPage() {
       <p className="text-object-base-high text-body-xs leading-normal">
         新しいパスワードを設定してください。
       </p>
-      <Field label="新しいパスワード" hint="6文字以上">
+      <Field label="新しいパスワード" hint={PASSWORD_HINT}>
         {(id) => (
           <input
             id={id}
             type="password"
             required
-            minLength={6}
+            minLength={PASSWORD_MIN_LENGTH}
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

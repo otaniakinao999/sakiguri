@@ -19,6 +19,8 @@ import { Field } from "@/components/ui/inputs";
 import { Notification } from "@/components/ui/legacy/Notification";
 import {
   ACTION_LABEL,
+  PASSWORD_HINT,
+  PASSWORD_MIN_LENGTH,
   resendNotice,
   signInFailure,
   signUpFailure,
@@ -196,14 +198,14 @@ export function SignInScreen() {
 
         <Field
           label="パスワード"
-          hint={mode === "signup" ? "6文字以上" : undefined}
+          hint={mode === "signup" ? PASSWORD_HINT : undefined}
         >
           {(id) => (
             <input
               id={id}
               type="password"
               required
-              minLength={6}
+              minLength={PASSWORD_MIN_LENGTH}
               autoComplete={
                 mode === "signup" ? "new-password" : "current-password"
               }

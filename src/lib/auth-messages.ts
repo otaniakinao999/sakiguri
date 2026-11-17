@@ -28,6 +28,33 @@
  * この層は純粋な変換。React を import しない。
  */
 
+/**
+ * **パスワードの最低文字数。ここが唯一の出どころ**（CLAUDE.md §2.8）
+ *
+ * `minLength` と画面の文言と失敗の文面が、**同じ1つの値を見る。**
+ * 5箇所に数字を書き写していたので、**次に変えるとき1つ残る**形だった。
+ *
+ * ## 画面を先に厳しくする
+ *
+ * 本番（Supabase の dashboard）の設定は**まだ6文字**である
+ * （`pnpm loadtest:auth` で測った。`docs/セキュリティの状況.md` §3）。
+ * **画面のほうが厳しいあいだ、誰も弾かれない** ―― 10文字未満の人は
+ * 画面で止まるだけで、通った人は本番でも通る。
+ *
+ * **逆順にすると窓が開く。** dashboard を先に10にすると、画面が
+ * 「6文字以上」と言いながら本番が弾く。**いちばん効くのは
+ * `/auth/confirm`** ―― パスワードを忘れた人が、直し方の画面で詰まる。
+ *
+ * ## 文字種の条件は付けない
+ *
+ * 必須にすると `Password1!` の形に寄る。**長さを取って組み合わせを
+ * 捨てた**（`docs/セキュリティの状況.md` §3）。
+ */
+export const PASSWORD_MIN_LENGTH = 10;
+
+/** 入力欄の脇に出す文言。**数字を書かない** */
+export const PASSWORD_HINT = `${PASSWORD_MIN_LENGTH}文字以上`;
+
 /** 画面に出す案内。`actions` は同じ場所に置く導線 */
 export interface AuthMessage {
   text: string;
@@ -108,7 +135,7 @@ export function signInFailure(code: string | undefined): AuthMessage {
 export function signUpFailure(code: string | undefined): AuthMessage {
   if (code === "weak_password") {
     return {
-      text: "パスワードが短すぎます。6文字以上にしてください。",
+      text: `パスワードが短すぎます。${PASSWORD_HINT}にしてください。`,
       actions: [],
     };
   }
