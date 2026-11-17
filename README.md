@@ -34,7 +34,9 @@ pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 ```
 
-PR を出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認する。
+PR を出す前に **`pnpm gate`** が通っていることを確認する（typecheck → test → lint → `audit --prod --audit-level=high` → build）。
+
+**3本だけ流すのをやめた理由。** 2026-11-17 に `pnpm build` だけが落ちる変更がtypecheck・test・lint を通り抜けて取り込まれ、**本番のデプロイが失敗し続けた。** 本番は最後に成功した版を配り続けるので画面も壊れず、**気づく経路が1つも無かった。** **誰も測っていない失敗は、静かに成功として通る**（CLAUDE.md §2.11）。
 
 ## データベース
 
