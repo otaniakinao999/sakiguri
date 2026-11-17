@@ -4,3 +4,15 @@
 # unrs-resolver: eslint-config-next が使うモジュール解決のネイティブバインディング
 allowBuilds:
   unrs-resolver: true
+
+# 本番の依存に出た勧告を塞ぐための上書き（docs/セキュリティの状況.md §3-7）
+#
+# どちらも next が内部で使う postcss の系統。**ビルド時にしか動かないので
+# 実害の経路は無い**が、`pnpm audit --prod --audit-level=high` をゲートに
+# 入れたので、赤のまま通さないために上げている。
+#
+# **next が postcss を上げたら、この上書きは外せる。** 外すときは
+# `pnpm audit --prod --audit-level=high` が通ることを見てから外すこと。
+overrides:
+  postcss: ^8.5.33
+  source-map-js: ^1.2.2

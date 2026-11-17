@@ -406,20 +406,48 @@ props に入れてよいのは件数・期間の長さ・種別・真偽値な�
 
 ## 6. コマンド
 
+**この一覧は `package.json` の `scripts` と全部そろっている。** 半分だけ
+載っている一覧は、無い一覧より悪い ―― 載っていないものが「無い」と読める。
+**足したら、ここにも足す**（`src/__tests__/claude-md-commands.test.ts` が
+食い違いで落ちる。§2.8）。
+
 ```bash
+pnpm gate           # ★PR の前に流す。typecheck → test → lint → audit → build
 pnpm dev            # 開発サーバー
+pnpm build          # 本番ビルド。**dev が動いていると .next を壊す**（先に止める）
+pnpm start          # 本番ビルドを配る。build を忘れると前回ぶんが配られる（§2.11）
+
+pnpm typecheck      # tsc --noEmit
 pnpm test           # Vitest（core のテスト）。前に check:node-import が走る
 pnpm test:watch
-pnpm typecheck      # tsc --noEmit
 pnpm lint
 pnpm bench          # 10万件のローカル再現（通常のテストには混ぜない）
-pnpm db:migrate     # Supabase マイグレーション（本番を指す。非対話で流すときは -- --yes）
+pnpm e2e            # Playwright。AC-28a / AC-28b だけ。**ゲートに含めない**（§2.7）
 
 pnpm check:node-import   # plain Node から本番の定数を読めるか（§2.8）
-pnpm loadtest:account    # 負荷試験アカウントを用意する（冪等）
-pnpm loadtest:seed       # 投入（--rows / --span）
-pnpm loadtest:ac34       # AC-34 重複・欠落・並びの逆転
-pnpm loadtest:teardown   # 行だけ消す。アカウントは残す
+
+pnpm db:migrate     # Supabase マイグレーション（本番を指す。非対話で流すときは -- --yes）
+pnpm db:diff        # 本番と migrations の差分
 ```
 
-PRを出す前に `pnpm typecheck && pnpm test && pnpm lint` が通っていることを確認してください。
+**負荷試験・本番の測定。どれも本番の Supabase に当たる**（§2.5.3）。
+**`+loadtest` のアカウントで行い、自分の実データのアカウントでは行わない。**
+
+```bash
+pnpm loadtest:account    # 負荷試験アカウントを用意する（冪等）
+pnpm loadtest:account2   # 2つめ（共有の相手役）。--second
+pnpm loadtest:seed       # 投入（--rows / --span）
+pnpm loadtest:ac34       # AC-34 重複・欠落・並びの逆転
+pnpm loadtest:roundtrip  # 書いて読み直し、同じ値が返るか
+pnpm loadtest:sharing    # 共有の条項。通過／失敗／**前提なし**の3つで出る（§2.11）
+pnpm loadtest:auth       # 本番の認証の設定を外から測る（寿命・最低文字数・漏洩照合）
+pnpm loadtest:teardown   # 行だけ消す。アカウントは残す
+pnpm loadtest:teardown2  # 2つめの行を消す
+```
+
+**ゲートは `pnpm gate` の1本にまとめてある。** 中身を増やすときは
+`package.json` の側を直す ―― ここに書き写すと、片方が古くなる（§2.8）。
+
+**`pnpm audit` をゲートに入れてある。** 水準は `--prod --audit-level=high`。
+本番の依存に high 以上が出たら落ちる。**下げるときは `docs/セキュリティの状況.md`
+§3-7 に理由と見直す時期を書くこと** ―― 黙って下げると、次に出たときに静かに通る。

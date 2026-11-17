@@ -85,12 +85,27 @@ const ROUTES: Array<[RegExp, string]> = [
 ];
 
 /**
- * **`useSearchParams()` を呼ぶので Suspense が要る。**
+ * **`useSearchParams()` を呼ぶので Suspense で包む。**
  *
- * これが無いと `pnpm build` が `/dev/screens/*` の生成で落ちる
- * （prerender の途中で CSR へ退避できないため）。**ゲートは
- * typecheck / test / lint だけなので、ここが外れても PR は通る** ――
- * 実際に一度落とした。直すときは `pnpm build` まで流すこと。
+ * ## 版によって、落ちるか落ちないかが変わる
+ *
+ * **15.5.25 ではこれが無いと `pnpm build` が `/dev/screens/*` の生成で
+ * 落ちた**（prerender の途中で CSR へ退避できない）。実際に一度落とし、
+ * **その間 Vercel のデプロイが失敗し続けた。**
+ *
+ * **15.5.29 では落ちない。** 外して確かめた（2026-11-17）── 包まなくても
+ * `/dev/screens/*` は静的に生成され、ビルドは通る。
+ *
+ * **それでも包んだままにする。** `useSearchParams()` を Suspense の外で
+ * 呼ぶのは React の側では依然として正しくない書き方で、**次の版で
+ * また落ちる側に戻りうる。** 落ちなくなったことは、要らなくなった
+ * ことではない。
+ *
+ * ## いまはゲートが見ている
+ *
+ * 当時のゲートは typecheck / test / lint だけで、**ビルドを誰も
+ * 測っていなかった。** いまは `pnpm gate` の最後が `pnpm build` なので、
+ * この種の失敗は PR の前に落ちる（CLAUDE.md §6）。
  */
 export function DevShell({ children }: { children: React.ReactNode }) {
   return (
