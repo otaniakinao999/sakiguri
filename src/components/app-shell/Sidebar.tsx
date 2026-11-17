@@ -29,6 +29,7 @@ import {
 
 import { Wordmark } from "@/components/sakiguri/Wordmark";
 import { useAppData } from "./AppDataProvider";
+import { activeBook, bookBadge } from "@/lib/sharing";
 import { formatYearMonthDay } from "@/lib/format";
 import { NAV_ITEMS } from "./navigation";
 
@@ -42,6 +43,40 @@ const ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> 
   "/import": ArrowUpTrayIcon,
   "/settings": Cog6ToothIcon,
 };
+
+/**
+ * いまどの帳にいるか（AC-84）。
+ *
+ * **切り替え器ではない。常時表示が守りである** ―― 防ぎたいのは
+ * 「代行者が別の顧客の帳に実績を入れてしまう」ことで、**入れたあとに
+ * 気づくのでは遅い。** 間違った相手を招待するのは取り消せるが（AC-83）、
+ * 間違った帳に入れた記帳は取り消しにくい。
+ *
+ * **自分の帳では何も出さない。** 付与が0件の利用者には、いまの画面と
+ * 同じに見える ―― 共有を使わない人に語を増やさない。
+ *
+ * **ワードマークの隣に置く。** 親が狭い幅では横並び、広い幅では縦積みに
+ * なるので、どちらの幅でも識別と一緒に動く。口座の切り替えの隣には
+ * 置かない ―― **口座は帳の中にあり、兄弟ではない。**
+ */
+function BookBadge() {
+  const { books, activeOwnerId } = useAppData();
+  if (!activeOwnerId) return null;
+
+  const label = bookBadge(activeBook(books, activeOwnerId));
+  if (!label) return null;
+
+  return (
+    <span
+      className="
+        min-w-0 truncate rounded-md bg-primary-foreground/15 px-8 py-4
+        t-label text-primary-foreground
+      "
+    >
+      {label} の帳
+    </span>
+  );
+}
 
 export function Sidebar({ currentHref }: { currentHref?: string } = {}) {
   const pathname = usePathname();
@@ -61,6 +96,7 @@ export function Sidebar({ currentHref }: { currentHref?: string } = {}) {
           色はここで渡す ―― ロゴ側は `currentColor`（§2.6） */}
       <div className="flex items-baseline gap-12 wide:flex-col wide:items-start wide:px-12">
         <Wordmark className="h-40 text-primary-foreground" />
+        <BookBadge />
       </div>
 
       <nav aria-label="画面">

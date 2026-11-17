@@ -428,7 +428,106 @@ async function main(): Promise<void> {
     );
   }
 
-  /* ========================= 出力 ========================= */
+  /* ---------- 7 受諾の経路を広げていない（AC-78） ----------
+
+     **権限を上げる経路は、上げた範囲が条項に書かれていないとあとから
+     広がる。** `accept_invite` は `security definer` で、客が自分の付与を
+     作れる唯一の道である。作れるのが「自分のアドレス宛・持ち主が出した・
+     未受諾」の1行だけであることを測る。 */
+  if (!hasGrants) {
+    for (const what of [
+      "受諾で作れるのは1行だけ",
+      "別のアドレス宛の招待では受諾できない",
+      "受諾済みの招待を再利用できない",
+    ]) {
+      put("7 受諾の経路を広げていない", what, "前提なし", "invites / accept_invite がまだ無い");
+    }
+  } else {
+    await acceptPath(a, b);
+  }
+
+
+/* ========================= 受諾の経路（AC-78） ========================= */
+
+/**
+ * `accept_invite` が広がっていないこと。
+ *
+ * **3つとも「できないこと」を測る条項である。** 同じ実行で「できること」
+ * （正しい招待なら受諾できて、付与が1行できる）を**先に**測る ――
+ * それを見ないと、関数名を間違えていても3つとも通る（§2.11）。
+ */
+async function acceptPath(a: LoadtestSession, b: LoadtestSession): Promise<void> {
+  const G = "7 受諾の経路を広げていない";
+
+  const before = await b.supabase
+    .from("grants")
+    .select("owner_id")
+    .eq("grantee_id", b.userId);
+  const had = (before.data ?? []).length;
+
+  /* A が B 宛に招待を出す */
+  const invite = await a.supabase
+    .from("invites")
+    .insert({
+      owner_id: a.userId,
+      email: b.email,
+      owner_email: a.email,
+      level: "view",
+    })
+    .select("id")
+    .single();
+  if (invite.error) {
+    put(G, "下ごしらえ", "**失敗**", `招待を作れない: ${reason(invite.error)}`);
+    return;
+  }
+  const inviteId = (invite.data as { id: string }).id;
+
+  /* **在ることを先に測る。** 正しい招待なら受諾できる */
+  const ok = await b.supabase.rpc("accept_invite", { invite_id: inviteId });
+  put(G, "正しい招待なら受諾できる", ok.error === null ? "通過" : "**失敗**",
+      reason(ok.error));
+
+  const after = await b.supabase
+    .from("grants")
+    .select("owner_id")
+    .eq("grantee_id", b.userId);
+  const made = (after.data ?? []).length - had;
+  put(G, "受諾で作れるのは1行だけ", made === 1 ? "通過" : "**失敗**",
+      `${made}行 増えた`);
+
+  /* **受諾済みを再利用できない。** できると、失効したあとに客が自分で
+     権限を取り戻せる */
+  const again = await b.supabase.rpc("accept_invite", { invite_id: inviteId });
+  put(G, "受諾済みの招待を再利用できない", again.error !== null ? "通過" : "**失敗**",
+      reason(again.error));
+
+  /* **別のアドレス宛では受諾できない。** id を当てても、自分宛でなければ
+     何も起きない */
+  const other = await a.supabase
+    .from("invites")
+    .insert({
+      owner_id: a.userId,
+      email: "someone-else@example.com",
+      owner_email: a.email,
+      level: "edit",
+    })
+    .select("id")
+    .single();
+  if (other.error) {
+    put(G, "別のアドレス宛の招待では受諾できない", "**失敗**",
+        `下ごしらえに失敗: ${reason(other.error)}`);
+  } else {
+    const stolen = await b.supabase.rpc("accept_invite", {
+      invite_id: (other.data as { id: string }).id,
+    });
+    put(G, "別のアドレス宛の招待では受諾できない",
+        stolen.error !== null ? "通過" : "**失敗**", reason(stolen.error));
+  }
+}
+
+/* ========================= 出力 ========================= */
+
+  /* 表を出す */
 
   console.log("場面                        表                件");
   let last = "";

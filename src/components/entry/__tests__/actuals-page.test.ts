@@ -47,6 +47,7 @@ import {
 import { buildActualList } from "@/lib/actual-list";
 import { formatYearMonthLabel } from "@/lib/format";
 import type { AppData } from "@/lib/app-data";
+import { makeStore } from "@/components/app-shell/store-fixture";
 
 vi.mock("@/lib/analytics/track", () => ({ track: vi.fn() }));
 
@@ -71,18 +72,11 @@ const UNMATCHED = ENTRY_ACTUALS.filter(
 
 function Harness({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(INITIAL);
-  const store: AppDataStore = {
+  const store: AppDataStore = makeStore({
     data,
     setData: (update) => setData((previous) => update(previous)),
     today: FIXTURE_TODAY,
-    session: null,
-    ready: true,
-    saveState: { status: "idle", seq: 0 },
-    retrySave: () => {},
-    loadError: null,
-    retryLoad: () => {},
-    signOut: async () => {},
-  };
+  });
   return createElement(AppDataContext.Provider, { value: store }, children);
 }
 

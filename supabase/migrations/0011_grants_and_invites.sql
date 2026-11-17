@@ -33,6 +33,10 @@ create table if not exists public.grants (
   owner_id uuid not null references auth.users (id) on delete cascade,
   grantee_id uuid not null references auth.users (id) on delete cascade,
   level text not null check (level in ('view', 'edit')),
+  -- **客の画面に出す帳の名前**（AC-84）。持ち主自身のアドレスで、
+  -- 渡す相手を持ち主が選んでいる以上、ここに持って差し支えない。
+  -- `auth.users` は RLS 越しに引けないので、引く代わりに持つ。
+  owner_email text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   -- 自分に自分を付与しない。意味が無いうえ、述語の1本目と二重になる
@@ -59,10 +63,16 @@ create table if not exists public.invites (
   owner_id uuid not null references auth.users (id) on delete cascade,
   -- この時点では利用者と紐づいていない。**紐づけてはいけない**（AC-79）
   email text not null check (btrim(email) <> ''),
+  -- 招待した側のアドレス。受諾のときに `grants` へ写す（AC-84）
+  owner_email text not null check (btrim(owner_email) <> ''),
   level text not null check (level in ('view', 'edit')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  accepted_at timestamptz
+  accepted_at timestamptz,
+  -- **受諾した相手。** `accept_invite` が入れる。持ち主の一覧（AC-83）から
+  -- 失効するには `grants` の主キー（owner_id, grantee_id）が要るが、
+  -- 一覧はアドレスで並ぶので、ここで結んでおく
+  grantee_id uuid references auth.users (id) on delete cascade
 );
 
 -- 同じ相手を二重に招待しない。大文字小文字は同じ相手として扱う
@@ -253,12 +263,16 @@ begin
     raise exception '自分の招待は受け取れません';
   end if;
 
-  insert into public.grants (owner_id, grantee_id, level)
-       values (inv.owner_id, me, inv.level)
+  insert into public.grants (owner_id, grantee_id, level, owner_email)
+       values (inv.owner_id, me, inv.level, inv.owner_email)
   on conflict (owner_id, grantee_id)
-    do update set level = excluded.level, updated_at = now();
+    do update set level = excluded.level,
+                  owner_email = excluded.owner_email,
+                  updated_at = now();
 
-  update public.invites set accepted_at = now() where id = inv.id;
+  update public.invites
+     set accepted_at = now(), grantee_id = me
+   where id = inv.id;
 end;
 $$;
 

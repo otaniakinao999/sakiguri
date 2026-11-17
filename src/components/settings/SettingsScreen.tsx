@@ -21,6 +21,8 @@ import { useAppData } from "@/components/app-shell/AppDataProvider";
 import { Callout } from "@/components/sakiguri/Callout";
 import { PageHeader } from "@/components/sakiguri/PageHeader";
 import { Panel } from "@/components/sakiguri/Panel";
+import { ReceivedBooksPanel } from "./ReceivedBooksPanel";
+import { SharingPanel } from "./SharingPanel";
 import {
   Table,
   TableCell,
@@ -232,6 +234,10 @@ export function SettingsScreen() {
             </Table>
           )}
         </Panel>
+
+        {/* 共有（FR-67・AC-83・AC-84）。**付与も招待も無ければ何も出ない** */}
+        <ReceivedBooksPanel />
+        <SharingPanel />
       </div>
 
       <AsOfDialog

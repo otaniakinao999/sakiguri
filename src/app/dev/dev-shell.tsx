@@ -12,11 +12,13 @@
  * 呼ぶので、文脈ごと差し替えないと Supabase 無しでは開けない。
  */
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import type { AppData } from "@/lib/app-data";
 import { AppDataContext } from "@/components/app-shell/AppDataProvider";
+import { makeStore, FIXTURE_USER_ID } from "@/components/app-shell/store-fixture";
+import { ownBookOnly } from "@/lib/sharing";
 import { Sidebar } from "@/components/app-shell/Sidebar";
 import {
   FIXTURE_ACCOUNTS,
@@ -88,20 +90,32 @@ export function DevShell({ children }: { children: React.ReactNode }) {
 
   const currentHref = ROUTES.find(([re]) => re.test(pathname))?.[1];
 
+  /* 検証用の口。本番には無い（/dev は本番で notFound） */
+  const search = useSearchParams();
+  const label = search.get("book");
+  const sharedBook = label
+    ? {
+        books: [
+          ...ownBookOnly(FIXTURE_USER_ID),
+          { ownerId: "dev-owner", label, own: false, level: "edit" as const },
+        ],
+        activeOwnerId: "dev-owner",
+      }
+    : {};
+
   return (
     <AppDataContext.Provider
-      value={{
+      value={makeStore({
         data,
-        setData: (update) => setState((d) => update(d)),
+        setData: (update: (previous: AppData) => AppData) =>
+          setState((d) => update(d)),
         today: FIXTURE_TODAY,
-        session: null,
-        ready: true,
         saveState: { status: "saved", seq: 0 },
-        retrySave: () => {},
-        loadError: null,
-        retryLoad: () => {},
-        signOut: async () => {},
-      }}
+        /* **`?book=渡された帳` で他人の帳にいる状態を出す**（AC-84）。
+           付与が0件だと「何も出ない」が正しいので、**実装していなくても
+           通る**（§2.11 の3つ目の形）。実機で見るにはこの口が要る */
+        ...sharedBook,
+      })}
     >
       <div className="flex min-h-screen flex-col bg-muted wide:flex-row">
         {/* Sidebar inset：8px。SideNav 224px と合わせて 240px の列 */}

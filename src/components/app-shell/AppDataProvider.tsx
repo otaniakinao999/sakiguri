@@ -28,6 +28,8 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { diffAppData } from "@/lib/supabase/diff";
 import { IncompleteLoadError } from "@/lib/supabase/fetch-all";
 import { loadAppData, saveDiff } from "@/lib/supabase/storage";
+import { fetchBooks } from "@/lib/supabase/sharing";
+import { ownBookOnly, type Book } from "@/lib/sharing";
 import { todayStr } from "@/lib/today";
 import { track } from "@/lib/analytics/track";
 
@@ -74,6 +76,14 @@ export interface AppDataStore {
   /** 読み込みをやり直す */
   retryLoad: () => void;
   signOut: () => Promise<void>;
+  /**
+   * 見られる帳の一覧（AC-84）。**自分の帳が必ず先頭にある。**
+   * 付与が0件なら長さ1で、画面はいまと同じに見える。
+   */
+  books: Book[];
+  /** いま見ている帳。**既定は自分の帳**（AC-84） */
+  activeOwnerId: string | null;
+  setActiveOwnerId: (ownerId: string) => void;
 }
 
 /**
@@ -135,6 +145,74 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    */
   const userId = session?.user.id ?? null;
 
+  /* ---------- 見られる帳（AC-84） ----------
+
+     **既定は自分の帳。** 付与が0件なら長さ1のままで、画面はいまと
+     同じに見える。共有を使わない人に語を増やさない。
+
+     **選んだ帳は利用者と対で持つ。** `activeOwnerId` だけを状態にすると、
+     **利用者が変わった瞬間に前の人の帳を指したまま1回読む**（検査が
+     3回目の読み込みとして捉えた）。対で持って、利用者が違えば自分の帳に
+     読み替えると、遅れが出ない。
+
+     **`grants` が無くても落ちない**（0011 が未適用のとき）。
+     `fetchBooks` が「テーブルが無い」だけを見分けて自分の帳を返す */
+  const [chosen, setChosen] = useState<{ userId: string; ownerId: string } | null>(
+    null,
+  );
+  const [bookState, setBookState] = useState<{ userId: string; list: Book[] } | null>(
+    null,
+  );
+
+  /* **`useMemo` で包む。** 毎回新しい配列を返すと、これを依存に持つ
+     効果が毎描画で走る */
+  const books = useMemo<Book[]>(
+    () =>
+      userId
+        ? bookState?.userId === userId
+          ? bookState.list
+          : ownBookOnly(userId)
+        : [],
+    [userId, bookState],
+  );
+
+  const activeOwnerId = userId
+    ? chosen?.userId === userId
+      ? chosen.ownerId
+      : userId
+    : null;
+
+  const setActiveOwnerId = useCallback(
+    (ownerId: string) => {
+      if (userId) setChosen({ userId, ownerId });
+    },
+    [userId],
+  );
+
+  useEffect(() => {
+    if (!userId || !isSupabaseConfigured()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const got = await fetchBooks(getSupabase(), userId);
+        if (!cancelled) setBookState({ userId, list: got });
+      } catch {
+        /* **共有の一覧が読めなくても、自分の帳は開ける。** ここで投げると
+           付与と関係の無い利用者まで画面を開けなくなる */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  /* **失効されたら自分の帳に戻す**（AC-82「失効したら見えなくなる」）。
+     指したままだと、読めない帳を見続けることになる */
+  useEffect(() => {
+    if (!userId || !chosen || chosen.userId !== userId) return;
+    if (!books.some((b) => b.ownerId === chosen.ownerId)) setChosen(null);
+  }, [books, chosen, userId]);
+
   const seqRef = useRef(0);
   const toState = useCallback(
     (next: SaveStatePayload) => setSaveState({ ...next, seq: ++seqRef.current }),
@@ -185,17 +263,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------- 読み込み ---------- */
   useEffect(() => {
-    if (!userId || !today) return;
+    if (!userId || !today || !activeOwnerId) return;
     let cancelled = false;
 
     setLoadError(null);
 
     void (async () => {
       try {
-        /* **いまは自分の帳だけ。** 共有（FR-23・FR-31）を入れると RLS は
-           渡された帳の行も返すので、どの帳を見るかは必ず呼ぶ側が決める
-           （AC-82）。客が持ち主の帳へ切り替える経路はまだ仕様が無い */
-        const loaded = await loadAppData(getSupabase(), today, userId);
+        /* **いま見ている帳を読む**（AC-84）。RLS は渡された帳の行も
+           返すので、どの帳を見るかは必ず呼ぶ側が決める（AC-82） */
+        const loaded = await loadAppData(getSupabase(), today, activeOwnerId);
         if (cancelled) return;
         setDataState(loaded);
         savedRef.current = loaded;
@@ -225,7 +302,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
     /* **`session` を入れない。** 上の `userId` のコメントを読むこと */
-  }, [userId, today, toState, loadAttempt]);
+  }, [userId, today, activeOwnerId, toState, loadAttempt]);
 
   const retryLoad = useCallback(() => setLoadAttempt((n) => n + 1), []);
 
@@ -290,6 +367,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       loadError,
       retryLoad,
       signOut,
+      books,
+      activeOwnerId,
+      setActiveOwnerId,
     }),
     [
       data,
@@ -302,6 +382,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       loadError,
       retryLoad,
       signOut,
+      books,
+      activeOwnerId,
+      setActiveOwnerId,
     ],
   );
 
