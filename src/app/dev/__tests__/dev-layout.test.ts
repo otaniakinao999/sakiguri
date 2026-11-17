@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import DevLayout from "../layout";
+import { devScreensOpen } from "../layout";
 
 /**
  * /dev が本番に出ないことを留め具で固定する
@@ -8,28 +8,37 @@ import DevLayout from "../layout";
  * 外れても**画面は普通に動く**ので、目視では気づけない。気づくのは
  * 本番の URL を誰かが踏んだときになる。構造上の不変条件として留める
  * （CLAUDE.md §2.7 の「再実行回数・導線のような構造的な不変条件」）。
+ *
+ * ## 退化させない（§2.11）
+ *
+ * **「塞がる」だけを測ると、常に塞ぐ実装でも通る。** 開発サーバーで
+ * 開けることと、明示的に開けられることを**同じ実行で測る。**
+ *
+ * **1以外の値で開かないことまで測る。** `"0"` や `"false"` で開くと、
+ * 「無効にしたつもり」が開いたままになる ―― 倒れる方向が元に戻る。
  */
 
-const original = process.env.VERCEL_ENV;
-
-afterEach(() => {
-  if (original === undefined) delete process.env.VERCEL_ENV;
-  else process.env.VERCEL_ENV = original;
-});
-
-describe("DevLayout", () => {
-  it("本番では 404 にする", () => {
-    process.env.VERCEL_ENV = "production";
-    expect(() => DevLayout({ children: null })).toThrow();
+describe("devScreensOpen", () => {
+  it("本番ビルドでは既定で塞ぐ", () => {
+    expect(devScreensOpen("production", undefined)).toBe(false);
   });
 
-  it("プレビューでは開ける", () => {
-    process.env.VERCEL_ENV = "preview";
-    expect(() => DevLayout({ children: null })).not.toThrow();
+  it("本番ビルドでも ALLOW_DEV_SCREENS=1 なら開く", () => {
+    expect(devScreensOpen("production", "1")).toBe(true);
   });
 
-  it("ローカル（VERCEL_ENV なし）では開ける", () => {
-    delete process.env.VERCEL_ENV;
-    expect(() => DevLayout({ children: null })).not.toThrow();
+  it("開発サーバーでは開く", () => {
+    expect(devScreensOpen("development", undefined)).toBe(true);
   });
+
+  it("テストでは開く（NODE_ENV が production でない）", () => {
+    expect(devScreensOpen("test", undefined)).toBe(true);
+  });
+
+  it.each(["0", "false", "", "true", "yes"])(
+    "本番ビルドで ALLOW_DEV_SCREENS=%o では開かない",
+    (value) => {
+      expect(devScreensOpen("production", value)).toBe(false);
+    },
+  );
 });
